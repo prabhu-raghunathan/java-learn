@@ -3,7 +3,7 @@ title: "Operators & Precedence"
 sidebar_position: 4
 ---
 
-:::tip TL;DR (30-Second Interview Pitch)
+:::tip[TL;DR (30-Second Interview Pitch)]
 Java has **14 precedence levels**, evaluated highest-to-lowest whenever an expression has no explicit parentheses, with **assignment and the ternary operator being right-associative** while almost everything else is left-associative. The parts that actually trip up production code aren't the table itself — it's **short-circuit vs. eager boolean evaluation** (`&&`/`||` vs `&`/`|`), **silent integer overflow**, and **implicit narrowing casts hidden inside compound assignment** (`byte b = 1; b += 200;` compiles and wraps silently).
 :::
 
@@ -84,18 +84,24 @@ flowchart LR
 
 ## ⚙️ Under the Hood (JVM Mechanics)
 
-- **Short-circuit evaluation is a branch, not a boolean op.** `a && b` compiles to a conditional jump (`ifeq`) that skips evaluating `b` entirely if `a` is already `false` — there's no `iand` bytecode instruction involved. `a & b` on booleans, by contrast, always evaluates both sides and then executes `iand`. This is *why* `&&`/`||` can't be used where both sides must always run (e.g., validation methods with required logging side effects), and why `&`/`|` exist for booleans at all despite looking redundant.
-- **Compound assignment hides a narrowing cast (JLS §15.26.2).** `E1 op= E2` is defined as `E1 = (T)((E1) op (E2))`, where `T` is `E1`'s declared type. So `byte b = 100; b += 50;` silently becomes `b = (byte)(b + 50);` — the `+` promotes both operands to `int`, computes `150`, then the compiler-inserted cast truncates it back to a `byte`, wrapping to `-106`. Plain `b = b + 50;` has no such implicit cast and fails to compile.
+- **Short-circuit evaluation is a branch, not a boolean op:**
+  - `a && b` compiles to a conditional jump (`ifeq`) that skips evaluating `b` entirely if `a` is already `false` — there's no `iand` bytecode instruction involved.
+  - `a & b` on booleans, by contrast, always evaluates both sides and then executes `iand`.
+  - This is *why* `&&`/`||` can't be used where both sides must always run (e.g., validation methods with required logging side effects) — and why `&`/`|` exist for booleans at all despite looking redundant.
+- **Compound assignment hides a narrowing cast (JLS §15.26.2):**
+  - `E1 op= E2` is defined as `E1 = (T)((E1) op (E2))`, where `T` is `E1`'s declared type.
+  - So `byte b = 100; b += 50;` silently becomes `b = (byte)(b + 50);` — the `+` promotes both operands to `int`, computes `150`, then the compiler-inserted cast truncates it back to a `byte`, wrapping to `-106`.
+  - Plain `b = b + 50;` has no such implicit cast, so it just fails to compile.
 - **`String + ` is the only overloaded operator in Java**, and it's compiler sugar: a chain like `"x=" + x + y` is rewritten (modern `javac`) into `StringBuilder` `append()` calls (historically `invokedynamic` with `StringConcatFactory` since Java 9), not real operator overloading — user-defined classes can never define their own `+`.
 - **Integer overflow is silent by design** — arithmetic bytecodes (`iadd`, `imul`, …) wrap using two's-complement modulo arithmetic with no overflow flag checked. `Math.addExact()`/`Math.multiplyExact()` exist specifically to opt into an `ArithmeticException` when this isn't acceptable.
 - **`%` implements *remainder*, not mathematical modulo** — the JVM's `irem`/`lrem` instructions satisfy `(a / b) * b + (a % b) == a`, which forces the result's sign to match the **dividend**, not the divisor. This is why `-7 % 3` is `-1` in Java, while Python's `%` (true modulo) gives `2` for the same inputs.
 - **`instanceof` pattern matching (Java 16+)** still sits at the same precedence tier as classic `instanceof`, but additionally performs a cast and binds a new local — `if (obj instanceof String s)` both tests the type *and* introduces `s` as a definitely-assigned `String` inside the `true` branch, eliminating the old "check-then-cast" boilerplate.
 
-:::danger Interview Trap
+:::danger[Interview Trap]
 **`&` and `|` on `boolean`s compile and run fine — they just don't short-circuit.** A very common production bug: `if (user != null & user.isActive())` looks almost identical to the safe `&&` version but will throw `NullPointerException` when `user` is `null`, because `&` unconditionally evaluates `user.isActive()` regardless of the left side.
 :::
 
-:::danger Interview Trap
+:::danger[Interview Trap]
 **The ternary operator's result type is computed by *binary numeric promotion* across both branches**, not just "whichever branch runs." `condition ? 1 : 2.0` has static type `double` even in the branch returning `1` — the compiler promotes the `int` literal to match the other branch's type *before* either branch is chosen, which can introduce unexpected boxing/unboxing or precision changes in mixed-type ternaries.
 :::
 
@@ -163,7 +169,7 @@ public class OperatorsDemo {
 
 ## 🚨 Interview Gotchas & Edge Cases
 
-:::warning The Most Common Question
+:::warning[The Most Common Question]
 **"What's the difference between `&&` and `&` (or `||` and `|`) in Java?"** `&&`/`||` short-circuit — the right operand is skipped once the result is already determined. `&`/`|` always evaluate both operands, even on `boolean`s. This matters whenever the right-hand expression has a side effect or can throw (most classically, a null-check guard) — using the bitwise form there is a direct path to `NullPointerException` or wasted work.
 :::
 

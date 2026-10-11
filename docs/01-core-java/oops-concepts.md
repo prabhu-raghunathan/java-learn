@@ -3,7 +3,7 @@ title: "OOPs Concepts in Java"
 sidebar_position: 1
 ---
 
-:::tip TL;DR (30-Second Interview Pitch)
+:::tip[TL;DR (30-Second Interview Pitch)]
 Object-Oriented Programming models a system as **objects** (state + behavior) built from **class** blueprints, instead of procedures operating on loosely coupled data. Java's OOP rests on four pillars — **Abstraction, Encapsulation, Inheritance, Polymorphism** — which together deliver data hiding, code reuse, and runtime extensibility. This is what makes layered architectures (controller → service → repository), plugin systems, and mock-friendly testing possible in production.
 :::
 
@@ -80,17 +80,25 @@ sequenceDiagram
 ## ⚙️ Under the Hood (JVM Mechanics)
 
 - **A `class` is just metadata until instantiated.** `javac` compiles `class Student {...}` into a `Student.class` file (constant pool, field descriptors, method bytecode). No memory is touched.
-- **`new Student()` at runtime**: (1) classloader loads/links/initializes `Student` if needed, (2) JVM allocates the instance on the **heap**, (3) fields are zero-initialized, (4) the constructor runs, (5) a **reference** to the heap block is returned.
+- **`new Student()` at runtime** — five steps, in order:
+  1. Classloader loads/links/initializes `Student` (if not already done).
+  2. JVM allocates the instance on the **heap**.
+  3. Fields are zero-initialized.
+  4. The constructor runs.
+  5. A **reference** to the heap block is returned.
 - **Metaspace vs. Heap**: class metadata (bytecode, static fields, method table) lives in **Metaspace** (native memory, shared across instances); instance fields live per-object on the **heap**. Getters/setters are cheap because they're just method calls reading/writing offsets into that block.
 - **Abstraction's bytecode cost**: calling through an `interface` reference uses `invokeinterface` (extra interface-table lookup); calling through a concrete/abstract class reference uses `invokevirtual`.
 - **Overloading** is baked in at compile time — the compiler resolves the exact method signature from declared argument types and emits a resolved symbolic reference (`invokestatic`/`invokespecial`/`invokevirtual`).
-- **Overriding** uses the **vtable**: every class has a virtual method table (an array of method pointers by slot). A subclass override replaces the pointer at the same slot. `invokevirtual` reads the object's *actual* class via its header → klass pointer, then jumps through *that* class's vtable slot. The JIT further optimizes repeat call sites with **inline caching** (monomorphic → polymorphic → megamorphic).
+- **Overriding uses the vtable** — a per-class array of method pointers, one slot per virtual method:
+  - A subclass override just replaces the pointer at the same slot; the slot index never changes.
+  - At the call site, `invokevirtual` reads the object's *actual* class (via its header → klass pointer), then jumps through *that* class's vtable slot.
+  - The JIT further speeds up repeat call sites with **inline caching** (monomorphic → polymorphic → megamorphic).
 
-:::danger Interview Trap
+:::danger[Interview Trap]
 `private`, `static`, and `final` methods are **never virtual** — they resolve via `invokestatic`/`invokespecial` at compile time, so there's no vtable indirection. You cannot *override* a static method, only **hide** it — calling it through a supertype reference always invokes the supertype's version, regardless of the object's actual runtime class.
 :::
 
-:::danger Interview Trap
+:::danger[Interview Trap]
 **Fields are not polymorphic.** If `Car` declares a field with the same name as one in `Vehicle`, accessing it through a `Vehicle` reference always reads `Vehicle`'s field — resolved by the *declared* type at compile time — even though the object is actually a `Car`. Only methods get dynamic dispatch; fields get **field hiding**.
 :::
 
@@ -203,7 +211,7 @@ public class OopsDemo {
 
 ## 🚨 Interview Gotchas & Edge Cases
 
-:::warning The Most Common Question
+:::warning[The Most Common Question]
 **"Overloading vs. Overriding — how does binding differ?"** Overloaded calls are resolved by the **compiler** using the *declared* type of the reference (**static binding**). Overridden calls are resolved by the **JVM at runtime** using the *actual* heap type of the object via the vtable (**dynamic binding**). This single distinction underlies almost every other gotcha below.
 :::
 

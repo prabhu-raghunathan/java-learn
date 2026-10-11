@@ -3,7 +3,7 @@ title: "JDK vs JRE vs JVM"
 sidebar_position: 2
 ---
 
-:::tip TL;DR (30-Second Interview Pitch)
+:::tip[TL;DR (30-Second Interview Pitch)]
 **JVM** is the abstract, platform-dependent engine that executes bytecode. **JRE** is the JVM plus the standard class libraries needed to *run* a Java program. **JDK** is the JRE plus the compiler (`javac`), debugger, and other tools needed to *develop* one. The relationship is nested: `JDK ⊃ JRE ⊃ JVM`. This trio is exactly what gives Java its **WORA** (Write Once, Run Anywhere) promise — the *bytecode* is platform-independent even though every JVM implementation itself is platform-dependent.
 :::
 
@@ -88,11 +88,11 @@ flowchart LR
   - **Tiered compilation**: **C1 ("client") compiler** produces quick, lightly-optimized native code for fast warm-up; **C2 ("server") compiler** kicks in for very hot code and applies aggressive optimizations (inlining, loop unrolling, escape analysis) at the cost of longer compile time.
   - **Garbage Collector** — reclaims heap memory for objects no longer reachable; runs as part of the execution engine, not a separate JVM component.
 
-:::danger Interview Trap
+:::danger[Interview Trap]
 **"Download the JRE" is outdated advice post-Java 9.** Oracle stopped shipping a standalone JRE distribution starting with Java 11 — the JDK now bundles everything, and `jlink` lets you assemble a custom, minimal runtime image containing only the modules your app needs. If a candidate says "install the JRE to run it, install the JDK to build it" as if they're separate downloads today, that's a stale mental model worth flagging.
 :::
 
-:::danger Interview Trap
+:::danger[Interview Trap]
 **WORA is a property of bytecode, not of the JVM.** The JVM itself is compiled native code and is *fully platform-dependent* — you need a different JVM binary for Windows vs. Linux vs. macOS. What's portable is the `.class` bytecode: any conformant JVM, regardless of OS, can interpret/JIT-compile the same bytecode file. Candidates who say "Java is platform-independent because the JVM runs everywhere" have the causality backwards.
 :::
 
@@ -136,7 +136,7 @@ java -XX:+PrintCompilation PlatformProbe   # Watch the JIT compile methods live
 
 ## 🚨 Interview Gotchas & Edge Cases
 
-:::warning The Most Common Question
+:::warning[The Most Common Question]
 **"If I give you only the JRE, can you compile a `.java` file?"** No — the JRE has the JVM and runtime libraries to *execute* bytecode, but not `javac`. Compiling requires the JDK. This single question is the fastest way interviewers probe whether you actually understand the containment relationship (`JDK ⊃ JRE ⊃ JVM`) instead of reciting the acronyms.
 :::
 
