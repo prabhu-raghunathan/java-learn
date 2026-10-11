@@ -1,0 +1,8 @@
+{
+  "label": "Machine Learning",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Regression, classification, model evaluation, and the core ML concepts interviewers probe."
+  }
+}

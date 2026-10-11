@@ -1,0 +1,8 @@
+{
+  "label": "AI / ML",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "Python for data work, classical machine learning, deep learning, and applied LLM/NLP projects."
+  }
+}

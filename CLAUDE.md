@@ -1,5 +1,5 @@
 # Project Context
-This is an interview preparation wiki built on Docusaurus v3. It covers deep-dive Java, JVM internals, multithreading, Spring Boot, databases, and system design. 
+This is an interview preparation wiki built on Docusaurus v3. It covers deep-dive Java, JVM internals, multithreading, Spring Boot, databases, system design, and AI/ML (Python for data exploration, classical machine learning, deep learning, and applied NLP/LLM projects). More subjects will be added over time, each as its own top-level numbered folder under `docs/`.
 
 # Note Enrichment Protocol
 When I provide raw, handwritten, or lecture notes, DO NOT just format them blindly. 

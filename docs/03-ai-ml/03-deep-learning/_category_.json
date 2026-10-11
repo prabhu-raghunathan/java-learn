@@ -1,0 +1,8 @@
+{
+  "label": "Deep Learning",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "ANNs, CNNs, RNNs, and Transformers — the full deep learning course arc."
+  }
+}

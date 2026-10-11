@@ -1,0 +1,8 @@
+{
+  "label": "Spring Boot",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Spring Boot internals, core annotations, dependency injection, and production patterns."
+  }
+}

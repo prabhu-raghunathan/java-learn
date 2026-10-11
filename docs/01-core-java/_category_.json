@@ -1,0 +1,8 @@
+{
+  "label": "Core Java",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "description": "Deep-dive Java fundamentals: OOPs, JDK/JRE/JVM, variables, operators, and more."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "label": "Python for Data Exploration",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "description": "NumPy, Pandas, Matplotlib/Seaborn — loading, cleaning, and visualizing data before modeling."
+  }
+}
