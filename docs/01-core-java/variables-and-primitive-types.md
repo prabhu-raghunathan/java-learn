@@ -19,7 +19,7 @@ A variable is a named, **statically and strongly typed** storage location. Java 
 - **Binary numeric promotion**: in any expression, `byte`/`short`/`char` operands are promoted to `int` *before* the operation runs — `byte + byte` yields an `int`, not a `byte`.
 - IEEE-754 `float` = 1 sign bit + 8 exponent bits (bias **127**) + 23 mantissa bits. `double` = 1 + 11 (bias **1023**) + 52.
 - Floating-point types **cannot exactly represent most decimal fractions** (e.g., `0.1f`, `0.7f`) — use `BigDecimal`, or scaled `long`/`int`, for money and exact arithmetic (Effective Java, Item 60).
-- Variable kinds by scope/lifetime: **instance** (per-object, heap), **static/class** (one copy, Metaspace), **local** (per-call, stack frame, destroyed on method return), **method/constructor parameters** (local variables initialized by the caller).
+- Variable kinds by scope/lifetime: **instance** (per-object, heap), **static/class** (one copy per class, stored in its `Class` object on the heap), **local** (per-call, stack frame, destroyed on method return), **method/constructor parameters** (local variables initialized by the caller).
 
 ## The Mental Model
 
@@ -86,7 +86,7 @@ flowchart LR
 | Kind | Scope | Lives in | Gets default value? |
 |---|---|---|---|
 | **Instance / member** | Per object | Heap (inside the object) | Yes |
-| **Static / class** | One copy, shared via class name | Metaspace | Yes |
+| **Static / class** | One copy, shared via class name | Heap (inside the `java.lang.Class` object) | Yes |
 | **Local** | Inside a method/block | JVM Stack (stack frame) | **No** — must be definitely assigned before use |
 | **Method parameter** | Inside the invoked method | JVM Stack | N/A — caller supplies the value |
 | **Constructor parameter** | Inside the constructor | JVM Stack | N/A — caller supplies the value |
@@ -106,7 +106,7 @@ flowchart LR
 - **Binary numeric promotion (JLS §5.6)**: the JVM has no arithmetic bytecode instructions for `byte`/`short`/`char` — only `iadd`, `isub`, etc. operate on `int` (or `ladd`/`fadd`/`dadd` for wider types). So the compiler is *forced* to promote narrower operands to `int` before emitting arithmetic bytecode; there's no way around it.
 - **Where each variable kind physically lives:**
   - Instance fields — slots inside the object's own memory block, on the **heap**.
-  - Static fields — one copy, living in **Metaspace** alongside the class's metadata.
+  - Static fields — one copy, stored on the **heap** inside the class's `java.lang.Class` object (HotSpot, Java 8+). Only the class *metadata* (bytecode, field layout, constant pool) is in **Metaspace**.
   - Local variables & parameters — slots in the current method's **stack frame**, gone the instant that frame is popped.
 
 :::danger[Interview Trap]
@@ -119,69 +119,101 @@ flowchart LR
 
 ## 💻 Java Implementation
 
-```java
+:::tip[Run it yourself]
+The snippets after the first class run as-is in **`jshell`** (shipped with the JDK since Java 9). Lines marked in **red** are the mistake: they fail to compile or give a surprising result.
+:::
+
+### Three kinds of variables, three sets of rules
+
+```java title="PrimitivesDemo.java" showLineNumbers
 public class PrimitivesDemo {
 
-    // Instance variable — one copy PER OBJECT, lives on the heap, auto-initialized.
-    private int instanceCounter; // defaults to 0
+    // instance: one copy PER OBJECT, inside the object on the heap
+    // highlight-next-line
+    private int instanceCounter;               // defaults to 0
 
-    // Static variable — ONE copy total, shared across all instances, lives in Metaspace.
-    private static int totalInstancesCreated; // defaults to 0
+    // static: ONE copy per class, held in its Class object on the heap
+    // highlight-next-line
+    private static int totalInstancesCreated;  // defaults to 0
 
     public PrimitivesDemo() {
         totalInstancesCreated++;
     }
 
     public static void main(String[] args) {
-
-        // highlight-start
-        byte byteVar = 127;              // 8 bits, signed 2's complement, range -128..127
-        short shortVar = 32_000;         // 16 bits, signed
-        char charVar = 'A';              // 16 bits, UNSIGNED — stores UTF-16 code unit
-        int intVar = 2_000_000_000;      // 32 bits, signed
-        long longVar = 100L;             // 64 bits — trailing 'L' marks it as long
-        float floatVar = 4.125f;         // 32-bit IEEE-754 — trailing 'f' required
-        double doubleVar = 4.125d;       // 64-bit IEEE-754 — 'd' optional, it's the default
-        boolean flag = false;            // default is false, NOT true
-        // highlight-end
-
-        // Local variable: NO default — must be assigned before use.
+        // local: a slot in the stack frame, NO default value
         int localSum;
-        // System.out.println(localSum); // Compile error: might not have been initialized
-        localSum = intVar + shortVar;    // now definitely assigned
-
-        // --- WIDENING (implicit, safe) ---
-        // highlight-next-line
-        long widened = intVar;           // int -> long, automatic, no data loss
-
-        // --- NARROWING (explicit, can overflow) ---
-        int overflowSource = 128;
-        // highlight-next-line
-        byte narrowed = (byte) overflowSource; // wraps to -128, NOT clamped
-        System.out.println(narrowed);          // -128
-
-        // --- PROMOTION DURING EXPRESSION ---
-        byte a = 1, b = 127;
-        // byte sum = a + b;             // Compile error: result of a+b is promoted to int
-        // highlight-next-line
-        int sum = a + b;                 // correct: byte+byte is promoted to int by the JVM
-
-        // --- FLOAT IMPRECISION ---
-        float imprecise = 0.1f + 0.2f;
-        System.out.println(imprecise == 0.3f); // false — classic IEEE-754 rounding gotcha
-
-        // Senior-level fix: use BigDecimal (or scaled long/int) for exact decimal arithmetic.
-        // highlight-next-line
-        java.math.BigDecimal exact = new java.math.BigDecimal("0.1").add(new java.math.BigDecimal("0.2"));
-        System.out.println(exact); // 0.3, exactly
+        // error-next-line
+        System.out.println(localSum);   // ❌ might not have been initialized
+        // success-next-line
+        localSum = 10;                  // ✅ definitely assigned → readable now
+        System.out.println(localSum);
     }
 }
+```
+
+### The 8 primitives and their literals
+
+```java showLineNumbers
+byte    byteVar   = 127;              // 8 bits,  signed: -128..127
+short   shortVar  = 32_000;           // 16 bits, signed
+char    charVar   = 'A';              // 16 bits, UNSIGNED (UTF-16 unit)
+int     intVar    = 2_000_000_000;    // 32 bits, signed
+// highlight-next-line
+long    longVar   = 3_000_000_000L;   // 64 bits: L REQUIRED beyond int range
+// highlight-next-line
+float   floatVar  = 4.125f;           // 32-bit IEEE-754: f REQUIRED
+double  doubleVar = 4.125;            // 64-bit IEEE-754: decimal default
+boolean flag      = false;            // true / false only
+
+// error-start
+long  tooBig = 3_000_000_000;         // ❌ integer number too large
+float noF    = 4.125;                 // ❌ lossy conversion double → float
+// error-end
+```
+
+### Widening vs narrowing
+
+```java showLineNumbers
+int intVar = 2_000_000_000;
+// success-next-line
+long widened = intVar;                   // ✅ int → long: implicit, no data loss
+
+int overflowSource = 128;
+// error-next-line
+byte narrowed = (byte) overflowSource;   // compiles, but wraps to -128 (no clamping)
+```
+
+### Promotion inside expressions
+
+```java showLineNumbers
+byte a = 1, b = 127;
+
+// error-next-line
+byte sum = a + b;     // ❌ compile error: byte + byte is promoted to int
+// success-next-line
+int total = a + b;    // ✅ 128
+```
+
+### Floating-point imprecision and the fix
+
+```java showLineNumbers
+import java.math.BigDecimal;
+
+// error-next-line
+System.out.println(0.1 + 0.2 == 0.3);     // false: sum is 0.30000000000000004
+System.out.println(0.1f + 0.2f == 0.3f);  // true, by luck: float rounding lands on 0.3f
+
+// success-start
+BigDecimal exact = new BigDecimal("0.1").add(new BigDecimal("0.2"));
+System.out.println(exact);                // 0.3, exactly
+// success-end
 ```
 
 ## 🚨 Interview Gotchas & Edge Cases
 
 :::warning[The Most Common Question]
-**"Why does `0.1f + 0.2f != 0.3f`?"** Because `0.1` and `0.2` are repeating binary fractions that get rounded to the nearest representable `float`, and the rounding errors don't cancel out when added. This is *not* a Java-specific bug — it's IEEE-754, shared by virtually every language. The senior-level follow-up: **never use `float`/`double` for currency** — use `BigDecimal` (exact but slower) or integer cents/`long` (fast and exact).
+**"Why is `0.1 + 0.2 == 0.3` false?"** Because `0.1` and `0.2` are repeating binary fractions that get rounded to the nearest representable `double`, and the rounding errors don't cancel out when added: the sum is `0.30000000000000004`. (With `float`, `0.1f + 0.2f == 0.3f` happens to be `true`, because the coarser rounding lands on the same value. Don't rely on that.) This is *not* a Java-specific bug — it's IEEE-754, shared by virtually every language. The senior-level follow-up: **never use `float`/`double` for currency** — use `BigDecimal` (exact but slower) or integer cents/`long` (fast and exact).
 :::
 
 - **Narrowing never throws — it silently corrupts data.** `(byte) 300` doesn't raise an exception; it truncates to `44` via modulo arithmetic. Any implicit narrowing bug (e.g., assigning a large computed `int` into a `short` field) fails silently in production.

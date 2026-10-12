@@ -86,7 +86,7 @@ sequenceDiagram
   3. Fields are zero-initialized.
   4. The constructor runs.
   5. A **reference** to the heap block is returned.
-- **Metaspace vs. Heap**: class metadata (bytecode, static fields, method table) lives in **Metaspace** (native memory, shared across instances); instance fields live per-object on the **heap**. Getters/setters are cheap because they're just method calls reading/writing offsets into that block.
+- **Metaspace vs. Heap**: class metadata (bytecode, field layout, method table/vtable) lives in **Metaspace** (native memory, shared across instances); instance fields live per-object on the **heap**, and static field values live on the heap too, inside the class's `java.lang.Class` object (HotSpot, Java 8+). Getters/setters are cheap because they're just method calls reading/writing offsets into that block.
 - **Abstraction's bytecode cost**: calling through an `interface` reference uses `invokeinterface` (extra interface-table lookup); calling through a concrete/abstract class reference uses `invokevirtual`.
 - **Overloading** is baked in at compile time — the compiler resolves the exact method signature from declared argument types and emits a resolved symbolic reference (`invokestatic`/`invokespecial`/`invokevirtual`).
 - **Overriding uses the vtable** — a per-class array of method pointers, one slot per virtual method:
@@ -104,109 +104,145 @@ sequenceDiagram
 
 ## 💻 Java Implementation
 
-A single worked example tying all four pillars together: a `Vehicle` hierarchy using abstraction (interface), encapsulation (private fields + accessors), inheritance (`Car extends Vehicle`), and polymorphism (overloading + overriding).
+One `Vehicle` hierarchy, built up one pillar at a time.
 
-```java
-// --- PILLAR 1: ABSTRACTION ---
-// The interface exposes WHAT a vehicle can do, not HOW it's done.
+| Pillar | File | What to look at |
+|---|---|---|
+| **Abstraction** | `Drivable.java` | Interface = *what*, never *how* |
+| **Encapsulation** | `Vehicle.java` | `private` fields, rules enforced inside methods |
+| **Inheritance** + **Overriding** | `Car.java` | `extends`, `@Override`, `super` |
+| **Overloading** | `SpeedCalculator.java` | Same name, different parameter list |
+| **Dynamic dispatch** | `OopsDemo.java` | `Vehicle ref = swift;` runs `Car`'s method |
+
+### Pillar 1: Abstraction
+
+The interface exposes **what** a vehicle can do and says nothing about **how**.
+
+```java title="Drivable.java" showLineNumbers
 interface Drivable {
     void applyBrake();
     void increaseSpeed(int delta);
 }
+```
 
-// --- PILLAR 2: ENCAPSULATION ---
-// Parent class. Fields are private; access is only through methods.
+### Pillar 2: Encapsulation
+
+State is `private`. The only way in or out is through methods that enforce the rules.
+
+```java title="Vehicle.java" showLineNumbers
 class Vehicle implements Drivable {
 
     // highlight-start
-    private boolean engineOn;   // hidden state — no direct external access
+    private boolean engineOn;   // hidden state: no direct access from outside
     private int speed;
     // highlight-end
 
-    public boolean isEngineOn() {
-        return this.engineOn;
-    }
-
-    public void startEngine() {
-        this.engineOn = true;
-    }
+    public void startEngine()   { this.engineOn = true; }
+    public boolean isEngineOn() { return engineOn; }
+    public int getSpeed()       { return speed; }
 
     @Override
     public void applyBrake() {
         // highlight-next-line
-        this.speed = Math.max(0, this.speed - 10); // internal mechanics hidden from caller
+        speed = Math.max(0, speed - 10);   // the rule lives HERE, not in callers
     }
 
     @Override
     public void increaseSpeed(int delta) {
         if (!engineOn) {
+            // highlight-next-line
             throw new IllegalStateException("Cannot accelerate: engine is off");
         }
-        this.speed += delta;
-    }
-
-    public int getSpeed() {
-        return speed;
+        speed += delta;
     }
 }
+```
 
-// --- PILLAR 3: INHERITANCE ---
-// Car IS-A Vehicle: it reuses Vehicle's fields/methods via `extends`
-// and only adds what's specific to a car.
+```java title="❌ What encapsulation prevents"
+Vehicle v = new Vehicle();
+// error-next-line
+v.speed = -50;      // ❌ compile error: speed has private access
+// success-next-line
+v.applyBrake();     // ✅ the only way in, and speed never goes below 0
+```
+
+### Pillar 3: Inheritance + Pillar 4a: Overriding (runtime polymorphism)
+
+`Car` **IS-A** `Vehicle`. It inherits everything and adds only what's car-specific.
+
+```java title="Car.java" showLineNumbers
+// highlight-next-line
 class Car extends Vehicle {
 
-    private final String type; // HAS-A composition: Car "has" descriptive attributes
+    private final String type;   // HAS-A: a Car has a descriptive attribute
 
     public Car(String type) {
         this.type = type;
     }
 
     public String getCarType() {
-        return this.type;
+        return type;
     }
 
-    // --- PILLAR 4a: RUNTIME POLYMORPHISM (Overriding) ---
-    // Same signature as Vehicle.applyBrake(), resolved at runtime via the vtable.
     // highlight-start
-    @Override
+    @Override                    // same signature as Vehicle.applyBrake()
     public void applyBrake() {
-        super.applyBrake();     // reuse parent logic
-        System.out.println("ABS engaged for " + type);
+        super.applyBrake();      // reuse the parent's logic…
+        System.out.println("ABS engaged for " + type);   // …then extend it
     }
     // highlight-end
 }
+```
 
-// --- PILLAR 4b: COMPILE-TIME POLYMORPHISM (Overloading) ---
+### Pillar 4b: Overloading (compile-time polymorphism)
+
+Same method name, **different parameter list**. The **compiler** picks the version from the arguments.
+
+```java title="SpeedCalculator.java" showLineNumbers
 class SpeedCalculator {
-    // highlight-start
-    int combine(int a, int b) {
-        return a + b;
-    }
 
-    int combine(int a, int b, int c) { // different parameter list -> resolved by compiler
-        return a + b + c;
-    }
-    // highlight-end
+    // highlight-next-line
+    int combine(int a, int b)        { return a + b; }
+
+    // highlight-next-line
+    int combine(int a, int b, int c) { return a + b + c; }
 }
+```
 
+### Putting it together: dynamic dispatch
+
+```java title="OopsDemo.java" showLineNumbers
 public class OopsDemo {
+
     public static void main(String[] args) {
         Car swift = new Car("Hatchback");
         swift.startEngine();
         swift.increaseSpeed(40);
 
-        // highlight-next-line
-        Vehicle ref = swift;       // declared type Vehicle, actual type Car
-        ref.applyBrake();          // dynamic dispatch -> runs Car.applyBrake(), not Vehicle's
-
-        // Vehicle v = new Vehicle();
-        // v.getCarType();         // Compile error: Vehicle has no getCarType() — IS-A is one-directional
+        // highlight-start
+        Vehicle ref = swift;   // declared type: Vehicle | actual object: Car
+        ref.applyBrake();      // dynamic dispatch → runs Car.applyBrake()
+        // highlight-end
+        // prints: ABS engaged for Hatchback
 
         SpeedCalculator calc = new SpeedCalculator();
-        System.out.println(calc.combine(2, 3));       // -> 5, binds to (int,int) at compile time
-        System.out.println(calc.combine(2, 3, 4));     // -> 9, binds to (int,int,int) at compile time
+        // overload chosen at COMPILE time from the argument list
+        System.out.println(calc.combine(2, 3));      // 5 → (int, int)
+        System.out.println(calc.combine(2, 3, 4));   // 9 → (int, int, int)
     }
 }
+```
+
+```java title="❌ IS-A only goes one way"
+Vehicle v = new Vehicle();
+// error-next-line
+v.getCarType();             // ❌ Vehicle has no getCarType()
+
+Vehicle ref = new Car("SUV");
+// error-next-line
+ref.getCarType();           // ❌ the DECLARED type (Vehicle) decides what you can call
+// success-next-line
+((Car) ref).getCarType();   // ✅ downcast first (safe: ref really is a Car)
 ```
 
 ## 🚨 Interview Gotchas & Edge Cases

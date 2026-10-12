@@ -163,6 +163,30 @@ const config = {
       prism: {
         theme: prismThemes.github,
         darkTheme: prismThemes.dracula,
+        // Java (and friends) are NOT in prism-react-renderer's default bundle —
+        // without this, every ```java block renders as plain uncoloured text.
+        additionalLanguages: ['java', 'bash', 'json', 'yaml', 'sql', 'properties', 'groovy', 'kotlin'],
+        // Line markers for code blocks (styled in src/css/custom.css):
+        //   // highlight-next-line | highlight-start … highlight-end  → amber  "look here"
+        //   // error-next-line     | error-start … error-end          → red    "wrong / won't compile / throws"
+        //   // success-next-line   | success-start … success-end      → green  "the correct fix"
+        magicComments: [
+          {
+            className: 'theme-code-block-highlighted-line',
+            line: 'highlight-next-line',
+            block: {start: 'highlight-start', end: 'highlight-end'},
+          },
+          {
+            className: 'code-block-error-line',
+            line: 'error-next-line',
+            block: {start: 'error-start', end: 'error-end'},
+          },
+          {
+            className: 'code-block-success-line',
+            line: 'success-next-line',
+            block: {start: 'success-start', end: 'success-end'},
+          },
+        ],
       },
     }),
 };

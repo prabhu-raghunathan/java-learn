@@ -77,7 +77,7 @@ flowchart LR
   - **Application Classloader** (often mislabeled "System" classloader) — loads your application's classpath, parented to Platform.
   - Each loader delegates *upward* first — a child only loads a class itself if none of its ancestors already have. This prevents core classes like `java.lang.String` from being silently shadowed by application code.
 - **Runtime Data Areas** — memory regions the JVM carves out at startup, split into **shared** (across threads) and **per-thread**:
-  - **Method Area / Metaspace** (shared) — class metadata, static variables, constant pool.
+  - **Method Area / Metaspace** (shared) — class metadata, method bytecode, runtime constant pool. *(Static field **values** live on the heap inside the class's `java.lang.Class` object in HotSpot Java 8+, not in Metaspace.)*
   - **Heap** (shared) — all object instances, divided by the GC into generations (Young: Eden + Survivor, Old/Tenured).
   - **JVM Stack** (per-thread) — stack frames for method calls, local variables, partial results.
   - **PC Register** (per-thread) — address of the currently executing bytecode instruction.
@@ -98,10 +98,13 @@ flowchart LR
 
 ## 💻 Java Implementation
 
-You don't "write" JDK/JRE/JVM — but inspecting them programmatically and understanding the compile → bytecode → execute pipeline is standard interview ground.
+You don't "write" a JDK, JRE or JVM, but inspecting them from code and knowing the compile → bytecode → execute pipeline is standard interview ground.
 
-```java
+### 1. Ask the JVM about itself
+
+```java title="PlatformProbe.java" showLineNumbers
 public class PlatformProbe {
+
     public static void main(String[] args) {
         // highlight-start
         System.out.println("Java version: " + System.getProperty("java.version"));
@@ -109,15 +112,9 @@ public class PlatformProbe {
         System.out.println("JVM vendor:   " + System.getProperty("java.vm.vendor"));
         // highlight-end
 
-        // The pipeline this single call triggers:
-        // 1. javac PlatformProbe.java  -> PlatformProbe.class (platform-independent bytecode)
-        // 2. java PlatformProbe        -> Application Classloader loads PlatformProbe.class
-        // 3. Bytecode is interpreted first; if main()'s loop/method gets hot, JIT compiles it natively
-        // 4. Execution Engine runs the (possibly JIT-compiled) code, GC manages the Heap behind the scenes
-
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 20_000; i++) {
             // highlight-next-line
-            doWork(i); // a tight loop here would eventually trigger C2 JIT compilation
+            doWork(i);   // called 20k times → "hot" → JIT compiles it natively
         }
     }
 
@@ -127,11 +124,24 @@ public class PlatformProbe {
 }
 ```
 
-```bash
-# Inspect what's actually installed/running
-java -version            # JRE/JVM version in use
-javac -version           # Compiler version (JDK only)
-java -XX:+PrintCompilation PlatformProbe   # Watch the JIT compile methods live
+### 2. What happens when you run it
+
+| # | Step | Who does it | Result |
+|---|---|---|---|
+| 1 | `javac PlatformProbe.java` | **JDK** compiler | `PlatformProbe.class`: platform-independent **bytecode** |
+| 2 | `java PlatformProbe` | **Application ClassLoader** | Class is loaded → linked → initialized |
+| 3 | `main()` starts | **Interpreter** | Bytecode runs instruction by instruction |
+| 4 | `doWork()` gets hot | **JIT** (C1, then C2) | Method compiled to **native machine code** |
+| 5 | Program keeps running | **Execution Engine** + **GC** | GC manages the heap in the background |
+
+### 3. Inspect it from the terminal
+
+```bash title="Terminal"
+java -version                               # JRE/JVM version in use
+javac -version                              # compiler version (JDK only)
+javac PlatformProbe.java                    # produces PlatformProbe.class
+# highlight-next-line
+java -XX:+PrintCompilation PlatformProbe    # watch the JIT compile doWork() live
 ```
 
 ## 🚨 Interview Gotchas & Edge Cases

@@ -107,63 +107,96 @@ flowchart LR
 
 ## 💻 Java Implementation
 
-```java
-public class OperatorsDemo {
-    public static void main(String[] args) {
+:::tip[Run it yourself]
+Every snippet below runs as-is in **`jshell`** (shipped with the JDK since Java 9). Lines marked in **red** are the mistake: they fail to compile, throw, or give a surprising result.
+:::
 
-        // --- PRECEDENCE: multiplicative binds tighter than additive ---
-        // highlight-next-line
-        int result = 2 + 3 * 4; // -> 14, not 20 — * evaluated before +
-        System.out.println(result);
+### Precedence: `*` binds tighter than `+`
 
-        // --- SHORT-CIRCUIT vs EAGER evaluation ---
-        String nullableText = null;
-        // highlight-start
-        if (nullableText != null && nullableText.length() > 0) { // safe: length() never called on null
-            System.out.println("non-empty");
-        }
-        // if (nullableText != null & nullableText.length() > 0) {} // UNSAFE: throws NPE
-        // highlight-end
+```java showLineNumbers
+// highlight-next-line
+int result = 2 + 3 * 4;     // 14, not 20: * is evaluated before +
+int forced = (2 + 3) * 4;   // 20: parentheses override precedence
+```
 
-        // --- COMPOUND ASSIGNMENT'S HIDDEN NARROWING CAST ---
-        byte b = 100;
-        // highlight-next-line
-        b += 50;                 // silently becomes b = (byte)(b + 50); wraps to -106
-        System.out.println(b);   // -106
+### Short-circuit `&&` vs eager `&`
 
-        // --- INTEGER OVERFLOW IS SILENT ---
-        int maxed = Integer.MAX_VALUE;
-        // highlight-next-line
-        System.out.println(maxed + 1); // wraps to Integer.MIN_VALUE, no exception
+```java showLineNumbers
+String text = null;
 
-        try {
-            Math.addExact(maxed, 1);   // opt-in overflow checking
-        } catch (ArithmeticException e) {
-            System.out.println("Overflow caught: " + e.getMessage());
-        }
+// success-next-line
+if (text != null && text.length() > 0) { }   // ✅ stops at first false: no NPE
 
-        // --- REMAINDER TAKES THE SIGN OF THE DIVIDEND ---
-        System.out.println(-7 % 3);  // -1, not 2
+// error-next-line
+if (text != null & text.length() > 0) { }    // ❌ evaluates BOTH sides → NPE
+```
 
-        // --- TERNARY IS RIGHT-ASSOCIATIVE ---
-        int score = 72;
-        // highlight-next-line
-        String grade = score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : "F";
-        System.out.println(grade); // "C" — chains like an if/else-if ladder
+### Compound assignment hides a narrowing cast
 
-        // --- PREFIX vs POSTFIX ---
-        int x = 5;
-        int postfix = x++; // postfix: evaluates to 5, THEN x becomes 6
-        int prefix = ++x;  // prefix: x becomes 7, THEN evaluates to 7
-        System.out.println(postfix + " " + prefix + " " + x); // 5 7 7
+```java showLineNumbers
+byte b = 100;
 
-        // --- instanceof PATTERN MATCHING (Java 16+) ---
-        Object obj = "hello";
-        // highlight-next-line
-        if (obj instanceof String s && s.length() > 3) { // s is bound AND usable in the && chain
-            System.out.println(s.toUpperCase());
-        }
-    }
+// error-next-line
+b = b + 50;    // ❌ compile error: b + 50 is promoted to int
+// highlight-next-line
+b += 50;       // compiles! silently becomes b = (byte)(b + 50) → wraps to -106
+```
+
+### Integer overflow is silent
+
+```java showLineNumbers
+int maxed = Integer.MAX_VALUE;
+
+// error-next-line
+System.out.println(maxed + 1);   // -2147483648: wraps to MIN_VALUE, no exception
+
+// success-start
+try {
+    Math.addExact(maxed, 1);     // ✅ opt-in overflow checking
+} catch (ArithmeticException e) {
+    System.out.println("Overflow caught: " + e.getMessage());   // integer overflow
+}
+// success-end
+```
+
+### `%` takes the sign of the dividend
+
+```java showLineNumbers
+// highlight-next-line
+System.out.println(-7 % 3);                // -1, not 2
+System.out.println(Math.floorMod(-7, 3));  // 2: floorMod for a non-negative result
+```
+
+### The ternary operator is right-associative
+
+```java showLineNumbers
+int score = 72;
+// highlight-next-line
+String grade = score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : "F";
+// parsed as: score >= 90 ? "A" : (score >= 80 ? "B" : (score >= 70 ? "C" : "F"))
+System.out.println(grade);   // C
+```
+
+### Prefix vs postfix
+
+```java showLineNumbers
+int x = 5;
+// highlight-start
+int postfix = x++;   // returns 5, THEN x becomes 6
+int prefix  = ++x;   // x becomes 7, THEN returns 7
+// highlight-end
+System.out.println(postfix + " " + prefix + " " + x);   // 5 7 7
+```
+
+### `instanceof` pattern matching (Java 16+)
+
+```java showLineNumbers
+Object obj = "hello";
+
+// s is bound by the pattern AND usable later in the same && chain
+// highlight-next-line
+if (obj instanceof String s && s.length() > 3) {
+    System.out.println(s.toUpperCase());           // HELLO
 }
 ```
 
