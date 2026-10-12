@@ -128,3 +128,44 @@
 .code-block-success-line [class*='codeLineNumber']::before {
   opacity: 0.9;
 }
+
+/* ==========================================================================
+   FORMULA SYMBOL COLOURS (KaTeX macros \data \param \pred \loss \hyper,
+   defined in docusaurus.config.js). Same role → same colour on every page.
+   ========================================================================== */
+:root {
+  --eq-data: #1971c2;   /* inputs & targets        (blue)   */
+  --eq-param: #d9480f;  /* learnable parameters    (orange) */
+  --eq-pred: #2b8a3e;   /* outputs & activations   (green)  */
+  --eq-loss: #c2255c;   /* loss & gradients        (pink)   */
+  --eq-hyper: #6741d9;  /* hyperparameters         (violet) */
+}
+
+[data-theme='dark'] {
+  --eq-data: #74c0fc;
+  --eq-param: #ffa94d;
+  --eq-pred: #8ce99a;
+  --eq-loss: #f783ac;
+  --eq-hyper: #b197fc;
+}
+
+.eq-data { color: var(--eq-data); }
+.eq-param { color: var(--eq-param); }
+.eq-pred { color: var(--eq-pred); }
+.eq-loss { color: var(--eq-loss); }
+.eq-hyper { color: var(--eq-hyper); }
+
+/* ==========================================================================
+   :::analogy admonition (src/theme/Admonition/Types.js)
+   ========================================================================== */
+.alert--analogy {
+  --ifm-alert-background-color: rgba(255, 212, 59, 0.10);
+  --ifm-alert-background-color-highlight: rgba(255, 212, 59, 0.18);
+  --ifm-alert-foreground-color: var(--ifm-font-color-base);
+  --ifm-alert-border-color: #f59f00;
+}
+
+[data-theme='dark'] .alert--analogy {
+  --ifm-alert-background-color: rgba(255, 212, 59, 0.07);
+  --ifm-alert-border-color: #ffd43b;
+}

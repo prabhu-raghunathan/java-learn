@@ -7,6 +7,8 @@ sidebar_position: 5
 A CNN classifier stacks **Conv → ReLU → Pool** blocks to turn an image into a small, deep stack of feature maps, then **flattens** them and lets **fully connected layers** output one **logit per class**. It trains exactly like an ANN: **cross-entropy on raw logits** → backprop → optimizer step. The only difference is that each shared kernel **sums its gradient over every position**. It still overfits, so **dropout** randomly zeroes activations during training (and is switched off at test time). **AlexNet (2012)** proved the recipe at scale: deep CNN + **ReLU** + **GPUs** + **data augmentation** + **dropout** cut ImageNet top-5 error from ~26% to ~15% and started the deep-learning era.
 :::
 
+<FormulaKey />
+
 :::info[This topic spans two pages]
 **Previous page:** [CNN Fundamentals](./03-cnn-fundamentals.md) covers convolution, stride, padding, filters and pooling (the output-size and parameter formulas live there).
 **This page** assembles those blocks into a full classifier, trains it, regularizes it, compares it with an ANN, and walks through AlexNet.
@@ -22,15 +24,15 @@ A CNN classifier stacks **Conv → ReLU → Pool** blocks to turn an image into 
 - Convolution = **linear transformation with structured sparsity + weight sharing** = a constrained FC layer.
 
 **Training**
-- Multi-class loss: **softmax** $p_i = e^{z_i}/\sum_j e^{z_j}$ + **cross-entropy** $\mathcal{L} = -\sum_i y_i \log p_i = -\log p_{\text{true}}$.
+- Multi-class loss: **softmax** $\pred{p_i} = e^{\pred{z_i}}/\sum_j e^{\pred{z_j}}$ + **cross-entropy** $\loss{\mathcal{L}} = -\sum_i \data{y_i} \log \pred{p_i} = -\log \pred{p_{\text{true}}}$.
 - `nn.CrossEntropyLoss` = **LogSoftmax + NLLLoss**. Feed it **raw logits** `(N, C)` and **integer class indices** `(N,)`. **Never softmax first.**
-- The CE gradient w.r.t. the logits is simply **$p - y$** (predicted probabilities − one-hot).
+- The CE gradient w.r.t. the logits is simply **$\pred{p} - \data{y}$** (predicted probabilities − one-hot).
 - Starting loss ≈ **$\ln C$** (2.30 for 10 classes) = a uniform guess. If it doesn't fall below that, the model is learning nothing.
 - Backprop is identical to an ANN. **Weight sharing ⇒ each kernel's gradient is summed over all spatial positions.**
 - Too-high LR blows up: Adam at **lr = 0.1** jumped the loss from 2.3 to **177** (the notebook saw 2333). Adam's sensible default is **1e-3**.
 
 **Dropout**
-- Training: each activation is zeroed with probability $p$ and the survivors are scaled by $\frac{1}{1-p}$ (**inverted dropout**). Eval: **identity**.
+- Training: each activation is zeroed with probability $\hyper{p}$ and the survivors are scaled by $\frac{1}{1-\hyper{p}}$ (**inverted dropout**). Eval: **identity**.
 - Prevents **co-adaptation** (no neuron can rely on a specific partner) ≈ training an **ensemble** of thinned sub-networks.
 - Placed mostly **around the FC layers** (where the parameters are). `model.train()` turns it ON, `model.eval()` turns it OFF.
 - Higher $p$ → stronger regularization, noisier and slower training, and eventual underfitting. Typical: **0.5 for FC**, 0.1–0.3 for conv.
@@ -45,6 +47,24 @@ A CNN classifier stacks **Conv → ReLU → Pool** blocks to turn an image into 
 - Innovations: **ReLU**, **depth** (5 conv + 3 FC = 8 learnable layers), **2 GPUs**, **data augmentation** (crops, flips, colour), **dropout** (FC layers).
 - Input 227×227×3 → conv/pool → **6×6×256 = 9,216** features → FC 4096 → 4096 → 1000. **~60 M** params, **~94% in the FC layers**.
 - Hierarchy: **edges → textures → parts → objects**. Successors: **VGG (2014), GoogLeNet (2014), ResNet (2015)**.
+
+## 📐 Formula Sheet
+
+Every equation on this page in one place. Each one is explained in a card further down.
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Conv output size | $\left\lfloor \frac{\hyper{H} + 2\hyper{P} - \hyper{K}}{\hyper{S}} \right\rfloor + 1$ | Positions the kernel fits into |
+| Conv parameters | $\hyper{C_{out}}(\hyper{C_{in}}\hyper{K}^2 + 1)$ | Independent of image size |
+| FC parameters | $d_{out}(d_{in} + 1)$ | Grows with the flattened size |
+| Global average pooling | $\pred{g_c} = \frac{1}{HW}\sum_{i,j}\pred{A_{c,i,j}}$ | One average per feature map |
+| Softmax | $\pred{p_i} = \dfrac{e^{\pred{z_i}}}{\sum_j e^{\pred{z_j}}}$ | Scores → probabilities that sum to 1 |
+| Cross-entropy | $\loss{\mathcal{L}} = -\log \pred{p_{\text{true}}}$ | Surprise at the right answer |
+| Starting loss | $\loss{\mathcal{L}_0} \approx \ln C$ | Uniform guessing over $C$ classes |
+| CE gradient | $\partial\loss{\mathcal{L}}/\partial\pred{z} = \pred{p} - \data{y}$ | Predicted minus true |
+| Shared-kernel gradient | $\dfrac{\partial\loss{\mathcal{L}}}{\partial\param{K}} = \sum_{i,j}\dfrac{\partial\loss{\mathcal{L}}}{\partial\pred{Y_{i,j}}}\,\data{X_{\text{patch}(i,j)}}$ | Every position adds its vote |
+| Dropout (train) | $\pred{\tilde h} = \dfrac{\data{m}\odot\pred{h}}{1-\hyper{p}},\; \data{m_i} \sim \text{Bernoulli}(1-\hyper{p})$ | Zero some, boost the rest |
+| Dropout expectation | $\mathbb{E}[\pred{\tilde h}] = \pred{h}$ | Same scale in train and eval |
 
 ## The Mental Model
 
@@ -113,17 +133,32 @@ flowchart TB
 The convolutions (the part that "sees" the image) cost only **5 K** parameters; the **first FC layer** costs **131 K**, because it connects every one of the 2,048 flattened values to every hidden unit. That's why the FC head is where CNNs overfit, why **dropout goes there**, and why modern architectures (ResNet etc.) use **global average pooling**: each of the 32 maps is averaged to one number, and the head becomes `Linear(32, 10)`. The same network then has **5.4 K** params in total and accepts **any** input size.
 :::
 
+<Formula name="Global average pooling" tag="Modern classifier head" words="Instead of flattening every pixel of every feature map, average each feature map down to a single number. With 32 maps you get 32 numbers, whatever the image size." remember="One average per channel.">
+
+$$
+\pred{g_c} \;=\; \frac{1}{H\,W}\sum_{i=1}^{H}\sum_{j=1}^{W} \pred{A_{c,\,i,\,j}}
+\qquad\qquad (N, C, H, W) \;\longrightarrow\; (N, C)
+$$
+
+**Example:** SmallCNN's `(N, 32, 8, 8)` becomes `(N, 32)`, so the head is `Linear(32, 10)` = 330 params instead of 131,136.
+
+</Formula>
+
 **Convolution as a structured linear operation.** An ANN layer computes $y = Wx + b$ with a dense $W$. A conv layer is **also linear in its input**, but its $W$ is constrained: weights live in **small kernels** (local connectivity = **structured sparsity**) that are **reused across space** (**weight sharing**). Same mathematics, far fewer free numbers.
 
-**Formulas** (full derivations on the [fundamentals page](./03-cnn-fundamentals.md)):
+<Formula name="Shape and parameter formulas" tag="Recap" words="The first line tells you the size of every feature map. The second and third count parameters: a conv layer's count never depends on the image size, an FC layer's grows with the flattened input." remember="Conv cost is fixed by the kernel; FC cost is fixed by the input size.">
 
 $$
-H_{out} = \left\lfloor \frac{H + 2P - K}{S} \right\rfloor + 1
-\qquad
-\#\text{params}_{\text{conv}} = C_{out}\,(C_{in}K^2 + 1)
-\qquad
-\#\text{params}_{\text{FC}} = d_{out}\,(d_{in} + 1)
+\begin{aligned}
+H_{out} &= \left\lfloor \frac{\hyper{H} + 2\hyper{P} - \hyper{K}}{\hyper{S}} \right\rfloor + 1 \\[6pt]
+\#\text{params}_{\text{conv}} &= \hyper{C_{out}}\,\big(\hyper{C_{in}}\hyper{K}^2 + 1\big) \\[6pt]
+\#\text{params}_{\text{FC}} &= d_{out}\,\big(d_{in} + 1\big)
+\end{aligned}
 $$
+
+**Example (SmallCNN):** conv1 $= 16(3 \cdot 9 + 1) = 448$; fc1 $= 64(2048 + 1) = 131{,}136$, nearly 300× more. Full derivations are on the [fundamentals page](./03-cnn-fundamentals.md).
+
+</Formula>
 
 A **stride-2 first conv** (K=3, P=1) on 32×32 gives $\lfloor 31/2 \rfloor + 1 = 16$: it **halves** the spatial size, and every later shape (including the flatten size) changes with it.
 
@@ -133,11 +168,35 @@ A **stride-2 first conv** (K=3, P=1) on 32×32 gives $\lfloor 31/2 \rfloor + 1 =
 
 The network outputs **logits** $z \in \mathbb{R}^{N \times C}$: unbounded raw scores, one per class.
 
+<Formula name="Softmax" tag="Logits → probabilities" words="Exponentiate every score so all are positive and bigger scores pull further ahead, then divide by the total so they add up to 1." remember="Exponentiate, then share out of 100%.">
+
 $$
-p_i = \frac{e^{z_i}}{\sum_{j=1}^{C} e^{z_j}}
+\pred{p_i} \;=\; \frac{e^{\pred{z_i}}}{\displaystyle\sum_{j=1}^{C} e^{\pred{z_j}}}
+\qquad\qquad 0 < \pred{p_i} < 1, \quad \sum_i \pred{p_i} = 1
+$$
+
+- $\pred{z_i}$: raw score (logit) for class $i$, any real number
+- $C$: number of classes
+- $\pred{p_i}$: predicted probability of class $i$
+
+</Formula>
+
+<Formula name="Cross-entropy loss" tag="Multi-class loss" words="Look only at the probability the model gave to the correct class and take minus its log. 0.9 costs little (0.105); 0.01 costs a lot (4.6). Its gradient with respect to each logit is simply predicted minus true." remember="Loss = surprise at the right answer; gradient = predicted − true.">
+
+$$
+\loss{\mathcal{L}} \;=\; -\sum_{i=1}^{C} \data{y_i}\,\log \pred{p_i} \;=\; -\log \pred{p_{\text{true class}}}
 \qquad\qquad
-\mathcal{L} = -\sum_{i=1}^{C} y_i \log p_i = -\log p_{\text{true class}}
+\frac{\partial \loss{\mathcal{L}}}{\partial \pred{z_i}} \;=\; \pred{p_i} - \data{y_i}
 $$
+
+- $\data{y}$: one-hot target (1 for the true class, 0 elsewhere)
+- Before training, $\pred{p_{\text{true}}} \approx 1/C$, so $\loss{\mathcal{L}} \approx \ln C$ ($2.30$ for 10 classes)
+
+</Formula>
+
+:::analogy[Softmax turns votes into percentages; cross-entropy measures surprise]
+The logits are raw vote counts for each class. Softmax converts them into a share of 100%, giving extra weight to the leaders. Cross-entropy then asks: **how surprised was the model by the right answer?** If it gave the true class 90%, it's barely surprised (low loss). If it gave it 1%, it's very surprised (high loss).
+:::
 
 **Worked example:** logits $z = [2.0,\ 1.0,\ 0.1]$, true class 0.
 
@@ -166,6 +225,18 @@ The gradient pushes the true class's logit **up** and the others **down**, in pr
 - Convolution is linear in both its input and its kernel, so the chain rule passes straight through it.
 - **Weight sharing** ⇒ a kernel weight was used at **every** spatial position, so its gradient is the **sum of the contributions from all positions** (proved numerically on the fundamentals page).
 - **CNN optimization is not a new algorithm.** The difference is the **structure of the parameters**, not the learning rule.
+
+<Formula name="Gradient of a shared kernel" tag="Weight sharing in backprop" words="The same kernel produced every output pixel. So its gradient collects a contribution from every position: how much that output pixel affected the loss, times the input patch it was computed from." remember="One kernel, many uses, so add up all the votes.">
+
+$$
+\frac{\partial \loss{\mathcal{L}}}{\partial \param{K}} \;=\; \sum_{i}\sum_{j} \frac{\partial \loss{\mathcal{L}}}{\partial \pred{Y_{i,j}}} \;\cdot\; \data{X}_{\text{patch}(i,\,j)}
+$$
+
+- $\partial\loss{\mathcal{L}}/\partial\pred{Y_{i,j}}$: error signal at output pixel $(i, j)$
+- $\data{X}_{\text{patch}(i,j)}$: the input patch the kernel saw there
+- The sum over $(i, j)$ is weight sharing showing up in the gradient
+
+</Formula>
 
 #### What a training step shows (notebook, one batch of 8)
 
@@ -200,11 +271,27 @@ The gradient pushes the true class's logit **up** and the others **down**, in pr
 
 During training, sample a random mask for each activation and scale the survivors:
 
+<Formula name="Inverted dropout" tag="Regularization" words="For every activation, flip a biased coin: with probability p it is zeroed, otherwise it is kept and scaled up by 1/(1 − p). The scaling makes the average output the same as without dropout, so nothing needs to change at test time." remember="Drop some, boost the rest, the average stays the same.">
+
 $$
-m_i \sim \text{Bernoulli}(1-p),
+\data{m_i} \sim \text{Bernoulli}(1-\hyper{p}),
 \qquad
-\tilde h = \frac{m \odot h}{1-p}
+\pred{\tilde h} \;=\; \frac{\data{m} \odot \pred{h}}{1-\hyper{p}}
+\qquad\Longrightarrow\qquad
+\mathbb{E}\big[\pred{\tilde h_i}\big] = (1-\hyper{p})\cdot\frac{\pred{h_i}}{1-\hyper{p}} = \pred{h_i}
 $$
+
+- $\hyper{p}$: drop probability (e.g. 0.5), chosen by you
+- $\data{m}$: random 0/1 mask, re-drawn every forward pass
+- $\pred{h}$: the activations; $\pred{\tilde h}$: after dropout
+
+**Example:** $\hyper{p} = 0.5$, $\pred{h} = [1, 1, 1, 1]$ → one draw gives $[2, 0, 2, 0]$; average over many draws $= [1, 1, 1, 1]$.
+
+</Formula>
+
+:::analogy[Dropout is team practice with random players sitting out]
+If the same star player is always on the field, everyone else learns to just pass to them. Make a random half of the team sit out every drill and each player has to become useful on their own. On match day (eval mode) everyone plays together, and the team is stronger and less fragile.
+:::
 
 | | **Training** (`model.train()`) | **Evaluation** (`model.eval()`) |
 |---|---|---|
@@ -246,6 +333,10 @@ $$
 - **(Approximate) translation invariance**, added by **pooling**: the final answer shouldn't change much if the object shifts.
 
 These assumptions are **true for natural images**, so the CNN doesn't have to learn them from data. It generalizes better with fewer parameters and fewer examples. (The flip side: when the assumptions don't hold, e.g. position matters absolutely, a CNN needs extra machinery such as positional inputs.)
+
+:::analogy[Inductive bias is a sensible starting rulebook]
+A new hire who is told "most problems come from nearby components, and the same fault looks the same in every room" learns the job much faster than one who must work all of that out alone. A CNN starts with exactly those two rules (locality and weight sharing), so it needs far fewer examples than an ANN that starts with no assumptions.
+:::
 
 ### Part E: AlexNet: the breakthrough CNN
 
@@ -317,6 +408,10 @@ It learns its own filters (edges, corners, textures, object parts) instead of re
 | Middle layers | Combinations of edges | Textures, corners, simple shapes | Receptive field grows with each conv/pool |
 | Deep layers | Semantic parts | Eyes, wheels, faces | Each neuron sees a large part of the image |
 | FC head | Whole objects | "cat", "car" | Combines all parts |
+
+:::analogy[The feature hierarchy is learning to read]
+You first learn strokes (edges), then letters (textures and corners), then words (object parts), then sentences (whole objects). Each stage only works because the one before it exists, and each layer of a CNN builds on the patterns found by the layer below.
+:::
 
 In the notebook's `HierarchyCNN` (conv → pool → conv → pool → conv on 32×32), the shapes go `(16, 32, 32)` → `(16, 16, 16)` → `(32, 16, 16)` → `(32, 8, 8)` → `(64, 8, 8)`, and a single neuron of the third conv layer "sees" an **18×18** pixel region of the input.
 

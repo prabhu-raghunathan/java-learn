@@ -8,6 +8,23 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
+// KaTeX: colour-coded symbol macros used in every AI/ML formula.
+// Each wraps its argument in a CSS class (colours defined per theme in src/css/custom.css):
+//   \data{x}   inputs & targets        \param{W}  learnable parameters
+//   \pred{a}   outputs / activations   \loss{L}   loss & gradients
+//   \hyper{η}  hyperparameters (you choose them)
+const katexOptions = {
+  trust: (context) => context.command === '\\htmlClass',
+  strict: (errorCode) => (errorCode === 'htmlExtension' ? 'ignore' : 'warn'),
+  macros: {
+    '\\data': '\\htmlClass{eq-data}{#1}',
+    '\\param': '\\htmlClass{eq-param}{#1}',
+    '\\pred': '\\htmlClass{eq-pred}{#1}',
+    '\\loss': '\\htmlClass{eq-loss}{#1}',
+    '\\hyper': '\\htmlClass{eq-hyper}{#1}',
+  },
+};
+
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 /** @type {import('@docusaurus/types').Config} */
@@ -73,7 +90,9 @@ const config = {
           sidebarPath: './sidebars.js',
           editUrl: 'https://github.com/prabhu-raghunathan/java-learn/tree/main/',
           remarkPlugins: [remarkMath],
-          rehypePlugins: [rehypeKatex],
+          rehypePlugins: [[rehypeKatex, katexOptions]],
+          // custom :::analogy box (styled in src/theme/Admonition/Types.js + custom.css)
+          admonitions: {keywords: ['analogy'], extendDefaults: true},
         },
         blog: {
           showReadingTime: true,
@@ -83,7 +102,7 @@ const config = {
           },
           editUrl: 'https://github.com/prabhu-raghunathan/java-learn/tree/main/',
           remarkPlugins: [remarkMath],
-          rehypePlugins: [rehypeKatex],
+          rehypePlugins: [[rehypeKatex, katexOptions]],
           // Useful options to enforce blogging best practices
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',

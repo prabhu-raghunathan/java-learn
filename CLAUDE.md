@@ -27,6 +27,35 @@ Every page under `docs/03-ai-ml/` gets **2–4 Manim animations** for the concep
 - **Layout rules:** 16:9 at 720p. Keep everything inside the frame; `title()` and `caption_bar()` auto-shrink long text, but grids and diagrams don't. Don't let labels sit on top of lines; use `add_background_rectangle` or move them.
 - **Always verify before embedding:** extract frames (`ffmpeg -i clip.mp4 -vf "fps=6/<duration>,scale=640:-1,tile=2x3" -frames:v 1 sheet.png`) and check for overlaps, cut-off text and wrong numbers. Then build the site and confirm the clip plays.
 
+# Math & Memorability (REQUIRED for every AI/ML page)
+Equations are the most important part of the AI/ML notes. Every page under `docs/03-ai-ml/` uses these devices (components live in `src/components/Formula/`, registered globally, so no imports needed):
+- **`<FormulaKey />`** directly after the TL;DR box: the colour legend.
+- **Colour-coded symbols**, the same role and colour on every page. Use these KaTeX macros (defined in `docusaurus.config.js`, colours in `src/css/custom.css`) in all display equations, formula sheets and recall bullets:
+  - `\data{X}`: inputs and targets ($X, x, y, N$, input patches, masks)
+  - `\param{W}`: learnable parameters ($W, b, \theta$, kernels $K$)
+  - `\pred{Z}`: outputs and activations ($z, a, \hat y, p, Y$)
+  - `\loss{L}`: loss and gradients ($L, \nabla, \delta, \partial L$, `.grad`)
+  - `\hyper{\eta}`: things you choose ($\eta$, dropout $p$, stride $S$, padding $P$, kernel size $F$, channel counts)
+- **`## 📐 Formula Sheet`** right after Essential Interview Recall: a table `| Concept | Formula | In plain words |` with **every** equation on the page.
+- **`<Formula>` cards** for every important equation in the body (replace bare `$$` blocks):
+  ```mdx
+  <Formula name="Mean Squared Error (MSE)" tag="Regression loss" words="One or two plain-English sentences." remember="A 3–7 word memory hook.">
+
+  $$
+  \loss{L} = \frac{1}{N}\sum_i (\pred{\hat y_i} - \data{y_i})^2
+  $$
+
+  - $\pred{\hat y_i}$: what each symbol means (one bullet per symbol)
+
+  **Example:** a tiny worked example with real numbers.
+
+  </Formula>
+  ```
+  Blank lines inside the card are **required** (MDX only parses the math between blank lines). Props are plain text: no double quotes, curly braces or `<` inside them. Every number in an example must be checked (numpy/PyTorch) before publishing.
+- **`:::analogy[Title]`** boxes (custom admonition): an everyday picture for each hard idea, 3–7 per page, placed right after the concept, card or animation it explains. Concrete and physical (kitchens, sports, flashlights, receipts), 2–4 sentences, no jargon.
+- Multi-line derivations use `\begin{aligned} ... \end{aligned}`; step numbers use `\text{\textcircled{1}}` (bare `\textcircled` in math mode triggers KaTeX warnings).
+- Verify after editing: the build log must contain **no** `LaTeX-incompatible` warnings, and the built page must contain **zero** `katex-error` elements.
+
 # Page Structure Specification
 Every generated `.md` page MUST strictly follow this layout:
 

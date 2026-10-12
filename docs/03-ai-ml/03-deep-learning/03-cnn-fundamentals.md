@@ -7,6 +7,8 @@ sidebar_position: 4
 A **Convolutional Neural Network (CNN)** processes an image **without flattening it**. A small learnable **kernel** (e.g. 3×3) slides over the image and computes a **dot product** at every position, producing a **feature map** that lights up wherever its pattern (an edge, a texture) appears. Because the **same kernel is reused everywhere** (**weight sharing**) and each output only looks at a **small neighbourhood** (**local connectivity**), a conv layer needs a few hundred parameters where a fully connected layer needs hundreds of thousands, and it **keeps the spatial structure** that flattening destroys. Stack **Conv → ReLU → Pool** blocks and the network learns edges → textures → parts → objects.
 :::
 
+<FormulaKey />
+
 :::info[This topic spans two pages]
 **This page** covers the building blocks: why FC layers fail on images, image tensors, convolution, stride, padding, filters and pooling.
 **Next page:** [CNN Architecture, Training, Dropout & AlexNet](./04-cnn-architecture-training-alexnet.md) assembles them into a full classifier, trains it, regularizes it, and walks through AlexNet.
@@ -31,14 +33,14 @@ A **Convolutional Neural Network (CNN)** processes an image **without flattening
 - PyTorch's "convolution" is mathematically **cross-correlation** (the kernel is not flipped). It makes no difference for learning.
 
 **Stride, padding, output size**
-- $$\text{Out} = \left\lfloor \frac{W - F + 2P}{S} \right\rfloor + 1$$ applied to height and width separately.
+- $\text{Out} = \left\lfloor \frac{\hyper{W} - \hyper{F} + 2\hyper{P}}{\hyper{S}} \right\rfloor + 1$, applied to height and width separately.
 - **Stride** $S$ = step size. Larger stride → smaller output, cheaper, acts like **downsampling**. Stride does **not** change the parameter count.
 - **Padding** $P$ = zeros around the border. It keeps the size and protects border pixels. **$F=3, P=1, S=1$ → output size = input size** ("same" padding).
 
 **Filters & feature maps**
 - Each filter spans **all input channels**: shape $(C_{in}, F, F)$. **One filter → one feature map**. $K$ filters → output depth $K$.
 - PyTorch weight shape: **`(out_channels, in_channels, kH, kW)`**.
-- **Params = $C_{out}(C_{in}F^2 + 1)$**. It is independent of image size. `Conv2d(3, 5, 3)` = 5 × (27 + 1) = **140**.
+- **Params = $\hyper{C_{out}}(\hyper{C_{in}}\hyper{F}^2 + 1)$**. It is independent of image size. `Conv2d(3, 5, 3)` = 5 × (27 + 1) = **140**.
 
 **Pooling**
 - **Max pool 2×2, stride 2** → H and W halve, **channels unchanged**, **zero parameters**.
@@ -48,6 +50,22 @@ A **Convolutional Neural Network (CNN)** processes an image **without flattening
 - **Conv → ReLU → Pool**: extract features → add non-linearity → shrink space. Depth goes **up** (3 → 8), space goes **down** (32 → 16).
 - What makes a CNN special: **locality**, **weight sharing**, **parameter efficiency**, **hierarchical features**. It's still linear + non-linear layers trained by gradient descent: a **structured ANN**.
 - A conv layer is **translation-equivariant** (shift the input → the feature map shifts the same way). **Pooling** adds a little **invariance**.
+
+## 📐 Formula Sheet
+
+Every equation on this page in one place. Each one is explained in a card further down. Sizes and counts you choose ($\hyper{F}, \hyper{S}, \hyper{P}, \hyper{C}$) are violet.
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| FC layer parameters | $d_{in}\cdot d_{out} + d_{out}, \quad d_{in} = H\cdot W\cdot C$ | Every pixel connects to every neuron |
+| One conv output pixel | $\pred{Y}_{i,j} = \sum_{c,u,v} \param{K}_{c,u,v}\,\data{X}_{c,\,i\hyper{S}+u,\,j\hyper{S}+v} + \param{b}$ | Dot product of the kernel with one patch |
+| Convolution is linear | $\text{conv}(a\data{x_1} + b\data{x_2}) = a\,\text{conv}(\data{x_1}) + b\,\text{conv}(\data{x_2})$ | It's a dot product, so it's linear |
+| Output size | $\left\lfloor \frac{\hyper{W} - \hyper{F} + 2\hyper{P}}{\hyper{S}} \right\rfloor + 1$ | Positions that fit, per dimension |
+| "Same" padding | $\hyper{P} = (\hyper{F} - 1)/2$ with $\hyper{S} = 1$ | Keeps output size = input size |
+| Conv parameters | $\hyper{C_{out}}\,(\hyper{C_{in}}\hyper{F}^2 + 1)$ | Kernel weights + one bias, per filter |
+| Max pooling | $\pred{Y}_{i,j} = \max_{u,v \in \lbrace 0,1 \rbrace} \data{X}_{2i+u,\,2j+v}$ | Keep the biggest value in each 2×2 block |
+| Receptive field | $r_\ell = r_{\ell-1} + (\hyper{F_\ell} - 1)\prod_{i<\ell}\hyper{S_i}$ | How much of the image one neuron sees |
+| Compute (MACs) | $H_{out} W_{out}\,\hyper{C_{out}}\,\hyper{C_{in}}\hyper{F}^2$ | Few params, but they run at every position |
 
 ## The Mental Model
 
@@ -92,6 +110,17 @@ The ANN recipe is **Flatten → Linear → Activation → repeat**. Apply it to 
 | 64 × 64 × 3 | 12,288 | **1,228,900** (4× more) |
 | 128 × 128 × 3 | 49,152 | **4,915,300** (≈ 5 M, in one layer) |
 
+<Formula name="Fully connected layer parameters" tag="Why FC fails on images" words="Every input pixel gets its own weight to every neuron, plus one bias per neuron. The count grows with the image area, so bigger images explode the parameter count." remember="Pixels × neurons, plus a bias each.">
+
+$$
+\#\text{params}_{FC} \;=\; \underbrace{d_{in}\cdot d_{out}}_{\text{weights}} \;+\; \underbrace{d_{out}}_{\text{biases}}
+\qquad\text{with}\qquad d_{in} = \hyper{H}\cdot\hyper{W}\cdot\hyper{C}
+$$
+
+**Example:** $32 \times 32 \times 3 = 3{,}072$ inputs to 100 neurons → $3{,}072 \times 100 + 100 = 307{,}300$. Double $\hyper{H}$ and $\hyper{W}$ → $\times 4$.
+
+</Formula>
+
 Doubling height **and** width multiplies the input size, and therefore the FC parameter count, by **4**. More parameters means:
 - **Computational** cost: more memory, slower forward and backward passes.
 - **Statistical** cost: more freedom to **memorize** the training set, so a higher **overfitting** risk and a need for far more data.
@@ -100,6 +129,10 @@ Doubling height **and** width multiplies the input size, and therefore the FC pa
 **Problem 2: loss of spatial structure**
 - Flattening $(H, W, C) \rightarrow (H \cdot W \cdot C)$ turns a grid into a list. Two pixels that are **vertical neighbours** end up **W positions apart** in the vector.
 - The FC layer has no idea which pixels were adjacent, so it can't easily learn edges or shapes. It must learn every pattern **separately at every position**.
+
+:::analogy[Flattening an image is shredding a photo into a strip]
+Imagine cutting a photo into rows and taping them end to end into one long strip. Every pixel is still there, but a pixel's neighbour above it is now hundreds of pixels away on the strip. A fully connected layer only ever sees that strip, so it has to rediscover from scratch that nearby pixels belong together.
+:::
 
 **Key insight.** Images have **local patterns** (edges, corners), **repeated structures** (the same texture in many places) and a **spatial hierarchy** (edges → shapes → objects). We want a layer that **preserves locality**, **reuses patterns**, and **uses far fewer parameters**. That layer is the convolution.
 
@@ -127,13 +160,32 @@ Doubling height **and** width multiplies the input size, and therefore the FC pa
 3. **Sum** the 9 products → **one** number = one pixel of the output.
 4. **Slide** the window and repeat. The grid of outputs is a new image: a **feature map**.
 
+<Formula name="Convolution: one output pixel" tag="Core operation" words="Lay the kernel over one patch of the image (all channels), multiply each pair of overlapping numbers, add everything up plus the bias. That single number is one pixel of the feature map. Move by the stride and repeat." remember="Overlay, multiply, sum, slide.">
+
+$$
+\pred{Y}_{i,j} \;=\; \sum_{c=1}^{\hyper{C_{in}}} \; \sum_{u=0}^{\hyper{F}-1} \; \sum_{v=0}^{\hyper{F}-1} \param{K}_{c,u,v}\;\data{X}_{c,\; i\hyper{S}+u,\; j\hyper{S}+v} \;+\; \param{b}
+$$
+
+- $\data{X}$: the (padded) input, $\hyper{C_{in}}$ channels
+- $\param{K}$: the kernel, shape $(\hyper{C_{in}}, \hyper{F}, \hyper{F})$, learned
+- $\param{b}$: one bias per filter
+- $\pred{Y}_{i,j}$: output pixel at row $i$, column $j$
+- $\hyper{S}$: stride, how far the window jumps
+- $u, v$: position inside the window
+
 **Worked example** (notebook): a vertical-edge kernel on a patch with no left/right contrast.
 
 $$
-\underbrace{\begin{bmatrix}1&2&1\\0&1&0\\2&1&2\end{bmatrix}}_{\text{patch}} \odot
-\underbrace{\begin{bmatrix}1&0&-1\\1&0&-1\\1&0&-1\end{bmatrix}}_{\text{kernel}}
-\;\Rightarrow\; \underbrace{(1+0+2)}_{\text{left column}} - \underbrace{(1+0+2)}_{\text{right column}} = 0
+\underbrace{\begin{bmatrix}1&2&1\\0&1&0\\2&1&2\end{bmatrix}}_{\data{\text{patch}}} \odot
+\underbrace{\begin{bmatrix}1&0&-1\\1&0&-1\\1&0&-1\end{bmatrix}}_{\param{\text{kernel}}}
+\;\Rightarrow\; \underbrace{(1+0+2)}_{\text{left column}} - \underbrace{(1+0+2)}_{\text{right column}} = \pred{0}
 $$
+
+</Formula>
+
+:::analogy[A kernel is a stencil under a flashlight]
+Picture a small stencil with a pattern cut into it (say, "bright on the left, dark on the right"). You slide it across a dark photo with a flashlight behind it. Wherever the photo underneath matches the stencil's pattern, a lot of light gets through (a big output). Where it doesn't match, little gets through. The feature map is a record of how bright it was at every stop.
+:::
 
 **Why that kernel detects vertical edges.** Its left column is $+1$ and its right column is $-1$, so it computes *left brightness − right brightness*:
 
@@ -155,9 +207,15 @@ The kernel is a **pattern detector**: a large output means "my pattern is here".
 
 Flatten the 3×3 patch into $x \in \mathbb{R}^9$ and the kernel into $w \in \mathbb{R}^9$:
 
+<Formula name="Convolution is a dot product" tag="Linear operation" words="Unroll the patch and the kernel into two lists of 9 numbers. Multiplying them element by element and summing is exactly a dot product, the same operation a fully connected neuron does. The only difference is which inputs it looks at and that the weights are shared." remember="A conv is a tiny neuron that slides.">
+
 $$
-\text{output at one location} = \sum_{i,j} \text{patch}_{ij}\,\text{kernel}_{ij} = w^\top x \;(+\,b)
+\text{output} \;=\; \sum_{i,j} \data{\text{patch}}_{ij}\,\param{\text{kernel}}_{ij} \;=\; \param{w}^\top \data{x} \;+\; \param{b}
+\qquad\Longrightarrow\qquad
+\text{conv}(a\data{x_1} + b\data{x_2}) = a\,\text{conv}(\data{x_1}) + b\,\text{conv}(\data{x_2})
 $$
+
+</Formula>
 
 A dot product is linear, so the whole convolution is linear: $\text{conv}(a x_1 + b x_2) = a\,\text{conv}(x_1) + b\,\text{conv}(x_2)$ (the notebook verifies it numerically: difference ≈ $4 \times 10^{-6}$, just float rounding).
 
@@ -186,6 +244,10 @@ Only for a **single-channel** input. A filter always spans **all** input channel
 
 **How weight sharing reduces overfitting:** far fewer free parameters means less capacity to memorize. And since every position trains the same kernel, each kernel effectively learns from **every patch of every image**, which is a lot of data per parameter.
 
+:::analogy[Weight sharing is training one security guard instead of 900]
+A fully connected layer hires a separate guard for every spot in the building, and each must learn on their own what a burglar looks like. A convolution trains **one** guard and walks them through every room. They learn faster (they see every room's examples) and there's only one salary to pay (far fewer parameters).
+:::
+
 ### Part E: Stride and padding
 
 | | **Stride $S$** | **Padding $P$** |
@@ -196,10 +258,25 @@ Only for a **single-channel** input. A filter always spans **all** input channel
 | Changes params? | ❌ No | ❌ No |
 | Typical use | `stride=2` to halve resolution instead of pooling | `padding=1` with a 3×3 kernel to keep the size |
 
+<Formula name="Convolution output size" tag="Most asked" words="Add the padding to both sides, see how much room the kernel has to move, divide by how far it jumps each time (rounding down), and add 1 for the starting position." remember="(Room to move ÷ jump), rounded down, plus one.">
+
 $$
-\boxed{\;\text{Out} = \left\lfloor \frac{W - F + 2P}{S} \right\rfloor + 1\;}
-\qquad W=\text{input size},\; F=\text{kernel},\; P=\text{padding},\; S=\text{stride}
+\text{Out} \;=\; \left\lfloor \frac{\hyper{W} - \hyper{F} + 2\hyper{P}}{\hyper{S}} \right\rfloor + 1
 $$
+
+- $\hyper{W}$: input width (or height)
+- $\hyper{F}$: kernel size
+- $\hyper{P}$: padding on each side
+- $\hyper{S}$: stride
+- $\lfloor\cdot\rfloor$: round down (partial windows are dropped)
+
+**Example:** $\hyper{W} = 32$, $\hyper{F} = 3$, $\hyper{P} = 1$, $\hyper{S} = 2$ → $\lfloor (32 - 3 + 2)/2 \rfloor + 1 = \lfloor 15.5 \rfloor + 1 = 16$. The image is halved.
+
+</Formula>
+
+:::analogy[Stride is your step length, padding is a blank frame]
+Scanning a wall with a flashlight: **stride** is how far you move the beam each time (bigger steps, fewer stops, coarser picture). **Padding** is like taping a border of blank paper around the poster so the beam can be centred on the edge pixels too.
+:::
 
 Applied separately to height and width. The **floor** matters: when the stride doesn't divide evenly, the last partial window is **dropped**.
 
@@ -235,11 +312,28 @@ One filter detects **one** pattern. Images contain edges at many angles, corners
 | `conv.bias` | $(K)$, one per filter |
 | Parameters | $K \cdot (C_{in} F^2 + 1)$ |
 
+<Formula name="Convolution layer parameters" tag="Size-independent" words="Each filter has one F×F slice of weights for every input channel, plus one bias. Multiply by the number of filters. Image height, width, stride and padding never appear." remember="Filters × (channels × kernel area + 1).">
+
+$$
+\#\text{params}_{conv} \;=\; \hyper{C_{out}} \cdot \big(\, \hyper{C_{in}} \cdot \hyper{F}^2 \;+\; 1 \,\big)
+$$
+
+- $\hyper{C_{out}}$: number of filters = number of output feature maps
+- $\hyper{C_{in}}$: input channels (3 for RGB)
+- $\hyper{F}^2$: kernel area (9 for 3×3)
+- $+1$: the bias of each filter
+
+</Formula>
+
 **Worked example:** `Conv2d(3, 5, kernel_size=3, padding=1)` on `(2, 3, 32, 32)` → output `(2, 5, 32, 32)`. Params = 5 × (3·3·3 + 1) = **140** (135 weights + 5 biases).
 
 - **Output depth is set by the number of filters**, not by the input. `(10, 3, 64, 64)` through 16 filters → depth **16**.
 - **Doubling the filters doubles the parameters** (and the compute).
 - The input channels mix inside each filter: an RGB filter can respond to "a red-to-green edge", which no single-channel filter could.
+
+:::analogy[A multi-channel filter is a judge using three senses]
+Tasting a dish, a judge uses taste, smell and look (three channels) at the same moment and gives **one** score. A filter does the same: it looks at the red, green and blue values of a patch together and outputs one number. Hire 16 judges, each with different priorities, and you get 16 feature maps.
+:::
 
 <Animation src="cnn/multichannel-filter" caption="One filter has one 3×3 slice per input channel. At each position the R, G and B dot products plus one bias are summed into a single number, so one filter makes one feature map." />
 
@@ -249,11 +343,21 @@ After convolutions the depth grows, and if H and W stay large, every later layer
 
 **Max pooling (2×2, stride 2):** split each feature map into 2×2 blocks and keep the **maximum** of each.
 
+<Formula name="Max pooling (2×2, stride 2)" tag="Downsampling" words="Split every feature map into non-overlapping 2×2 blocks and keep only the largest value of each block. Each channel is handled separately, so the number of channels never changes." remember="Each 2×2 block sends up its loudest value.">
+
 $$
-\begin{bmatrix}1 & 5\\ 2 & 3\end{bmatrix} \xrightarrow{\text{max}} 5
+\pred{Y}_{c,\,i,\,j} \;=\; \max_{u,\,v \,\in\, \lbrace 0,1 \rbrace} \; \data{X}_{c,\; 2i+u,\; 2j+v}
 \qquad\qquad
-(N, C, H, W) \xrightarrow{\text{MaxPool2d}(2,2)} (N, C, \tfrac{H}{2}, \tfrac{W}{2})
+(N, C, H, W) \;\longrightarrow\; \big(N,\, C,\, \lfloor H/2 \rfloor,\, \lfloor W/2 \rfloor\big)
 $$
+
+**Example:** $\begin{bmatrix}1 & 5\\ 2 & 3\end{bmatrix} \xrightarrow{\;\max\;} \pred{5}$. Zero learnable parameters.
+
+</Formula>
+
+:::analogy[Max pooling is each group's loudest voice]
+Split a classroom into groups of four and ask each group "did anyone spot a cat?". Only the most confident answer from each group is reported up. You lose who exactly said it and what the other three thought, but you keep the strongest signal and have a quarter as many reports to read.
+:::
 
 | | **Max pooling** | **Average pooling** | **Global average pooling** |
 |---|---|---|---|
@@ -316,6 +420,21 @@ A CNN is still **linear operations + non-linear activations + gradient-based lea
 - Strides, borders and pooling windows make real CNNs only **approximately** shift-invariant: a 1-pixel shift can change the prediction.
 
 **Receptive field: why depth builds a hierarchy**
+
+<Formula name="Receptive field growth" tag="Why depth builds hierarchy" words="Each conv layer lets a neuron see F−1 more pixels of the layer below. Earlier strides and pools multiply that growth, so deep neurons see large regions of the original image." remember="Each layer adds (kernel − 1) × all the strides so far.">
+
+$$
+r_\ell \;=\; r_{\ell-1} \;+\; (\hyper{F_\ell} - 1)\,\prod_{i<\ell} \hyper{S_i}
+\qquad\qquad r_0 = 1
+$$
+
+**Example:** conv 3×3 → $r = 3$; pool 2×2 (stride 2) → $r = 4$; conv 3×3 → $r = 4 + 2\cdot 2 = 8$; pool → $10$; conv 3×3 → $10 + 2 \cdot 4 = 18$ pixels.
+
+</Formula>
+
+:::analogy[Receptive field is stepping back from a mosaic]
+Standing nose-to-wall at a mosaic you see only a few tiles (edges and colours). Step back and each glance takes in more tiles, so you start seeing shapes; step back further and you see the whole face. Deeper layers are standing further back.
+:::
 - The **receptive field** of a neuron is the region of the *input image* that can influence it. One 3×3 conv: **3×3**. Two stacked 3×3 convs: **5×5**. Three: **7×7**.
 - General rule: $r_\ell = r_{\ell-1} + (F_\ell - 1)\prod_{i<\ell} S_i$. **Stride and pooling multiply** the growth, so after a 2×2 pool every later 3×3 conv widens the view by 4 input pixels instead of 2.
 - Early neurons see tiny patches (they can only encode edges). Deep neurons see most of the image (they can encode object parts). That's the **mechanism** behind hierarchical feature learning.

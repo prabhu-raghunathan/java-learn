@@ -7,11 +7,13 @@ sidebar_position: 3
 An **Artificial Neural Network (ANN)** is a stack of layers. Each layer does a **matrix multiplication** ($Z = XW^\top + b$) followed by a **non-linear activation** ($A = \phi(Z)$). Without the activation, any number of layers **collapses into one linear layer**. With it, the network can approximate curved functions like $y = x^2$. Training means **minimizing a loss** $L(W, b)$: **backpropagation** (the chain rule applied layer by layer) computes $\partial L/\partial W$, **gradient descent** moves the weights downhill, and the real goal is low loss on **unseen** data, not just training data.
 :::
 
+<FormulaKey />
+
 ## ⚡ Essential Interview Recall
 
 **Architecture**
-- **Neuron** = linear score + activation: $z = w^\top x + b$, then $a = \phi(z)$. Geometrically: *project the input onto $w$, shift by $b$, bend with $\phi$*.
-- **Layer of $m$ neurons**: $Z = XW^\top + b$ with $X:(N,d)$, $W:(m,d)$, $b:(m)$ → $Z:(N,m)$. $b$ is **broadcast across the batch dimension $N$**.
+- **Neuron** = linear score + activation: $\pred{z} = \param{w}^\top \data{x} + \param{b}$, then $\pred{a} = \phi(\pred{z})$. Geometrically: *project the input onto $w$, shift by $b$, bend with $\phi$*.
+- **Layer of $m$ neurons**: $\pred{Z} = \data{X}\param{W}^\top + \param{b}$ with $X:(N,d)$, $W:(m,d)$, $b:(m)$ → $Z:(N,m)$. $b$ is **broadcast across the batch dimension $N$**.
 - `nn.Linear(in, out)` stores `weight` as **`(out, in)`**: row $j$ is neuron $j$'s weight vector.
 - 2-layer flow: $(N,d) \rightarrow (N,h) \rightarrow (N,o)$. **Track shapes at every step.**
 - **Hidden layer = feature creator**: each neuron defines a **hyperplane** $w_j^\top x + b_j = 0$, and the activation turns it into a new non-linear feature. The **output layer linearly mixes** those features.
@@ -29,14 +31,14 @@ An **Artificial Neural Network (ANN)** is a stack of layers. Each layer does a *
 
 **Loss**
 - Loss is a function of **all** parameters: $L = L(W_1, b_1, W_2, b_2)$, a surface in parameter space. **Training = walking downhill on that surface.**
-- **MSE** $= \frac{1}{N}\sum(\hat y - y)^2$ → **regression**. It squares the error, so **large errors are penalized much more**.
-- **Binary Cross-Entropy** $= -\frac{1}{N}\sum[y\log\hat y + (1-y)\log(1-\hat y)]$ → **classification**. It **punishes confident wrong predictions very heavily** ($-\log$ of a probability near 0 → ∞).
+- **MSE** $\loss{L} = \frac{1}{N}\sum(\pred{\hat y} - \data{y})^2$ → **regression**. It squares the error, so **large errors are penalized much more**.
+- **Binary Cross-Entropy** $\loss{L} = -\frac{1}{N}\sum[\data{y}\log\pred{\hat y} + (1-\data{y})\log(1-\pred{\hat y})]$ → **classification**. It **punishes confident wrong predictions very heavily** ($-\log$ of a probability near 0 → ∞).
 - Output layer ↔ loss pairing: **identity + MSE** (regression), **sigmoid + BCE** (binary), **softmax + Cross-Entropy** (multi-class).
 
 **Backprop & training**
-- **Backpropagation** = the chain rule applied from loss → output → hidden → parameters. It **computes** gradients. **Gradient descent** **uses** them: $W \leftarrow W - \eta\,\partial L/\partial W$.
+- **Backpropagation** = the chain rule applied from loss → output → hidden → parameters. It **computes** gradients. **Gradient descent** **uses** them: $\param{W} \leftarrow \param{W} - \hyper{\eta}\,\partial \loss{L}/\partial \param{W}$.
 - The gradient points to the **steepest increase**, so we step in the **negative** direction.
-- Key backprop results: $\frac{\partial L}{\partial W_2} = \delta_2^\top A^{(1)}$, $\frac{\partial L}{\partial W_1} = \delta_1^\top X$, $\delta_1 = (\delta_2 W_2) \odot \phi'(Z^{(1)})$. **The gradient of a weight always involves that layer's input.**
+- Key backprop results: $\frac{\partial \loss{L}}{\partial \param{W_2}} = \loss{\delta_2}^\top \pred{A^{(1)}}$, $\frac{\partial \loss{L}}{\partial \param{W_1}} = \loss{\delta_1}^\top \data{X}$, $\loss{\delta_1} = (\loss{\delta_2} \param{W_2}) \odot \phi'(\pred{Z^{(1)}})$. **The gradient of a weight always involves that layer's input.**
 - **Bias gradient = sum over the batch**: the bias was broadcast in the forward pass, so its gradient is summed in the backward pass.
 - **Learning rate** = step size, gradient = direction. **Update = gradient × learning rate.** Too small → slow. Too big → oscillation or divergence.
 - Failure modes: **divergence** (loss explodes), **oscillation** (loss zig-zags), **plateau** (loss stops falling). Monitor the **gradient norm** $\|\nabla L\|$ to diagnose them.
@@ -45,6 +47,29 @@ An **Artificial Neural Network (ANN)** is a stack of layers. Each layer does a *
 - **Underfitting** = high bias = train ↑ and val ↑ (model too simple). **Overfitting** = high variance = train ↓ but val ↑ (model memorizes noise).
 - **Capacity** (layers × neurons) ↑ → bias ↓, variance ↑. **Low training loss does not guarantee good generalization.**
 - **Deep learning = linear algebra (matrix multiplication) + calculus (chain rule)**, repeated.
+
+## 📐 Formula Sheet
+
+Every equation on this page in one place. Each one is explained in a card further down.
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| One neuron | $\pred{z} = \param{w}^\top\data{x} + \param{b}, \quad \pred{a} = \phi(\pred{z})$ | Weighted sum, shift, then bend |
+| One layer (batch) | $\pred{Z} = \data{X}\param{W}^\top + \param{b}$ | Every neuron, every sample, one matmul |
+| 2-layer forward pass | $\pred{\hat y} = \phi(\data{X}\param{W_1}^\top + \param{b_1})\,\param{W_2}^\top + \param{b_2}$ | Linear → bend → linear |
+| Linear layers collapse | $\param{W_2}(\param{W_1}\data{x}+\param{b_1})+\param{b_2} = \param{W'}\data{x} + \param{b'}$ | No activation = still one straight line |
+| Sigmoid | $\sigma(z) = \frac{1}{1+e^{-z}}, \quad \sigma' = \sigma(1-\sigma) \le 0.25$ | Squash to (0, 1); slope never above 0.25 |
+| Tanh | $\tanh'(z) = 1 - \tanh^2(z) \le 1$ | Squash to (−1, 1), zero-centred |
+| ReLU | $\text{ReLU}(z) = \max(0, z), \quad \text{ReLU}' \in \lbrace 0, 1 \rbrace$ | Keep positives, zero the rest |
+| MSE | $\loss{L} = \frac{1}{N}\sum(\pred{\hat y} - \data{y})^2$ | Average squared miss (regression) |
+| Binary cross-entropy | $\loss{L} = -\frac{1}{N}\sum[\data{y}\log\pred{\hat y} + (1-\data{y})\log(1-\pred{\hat y})]$ | Punish confident wrong answers (classification) |
+| Output error | $\loss{\delta_2} = \frac{2}{N}(\pred{\hat y} - \data{y})$ | How wrong, and in which direction |
+| Weight gradient | $\partial\loss{L}/\partial\param{W} = \loss{\delta}^\top \cdot (\text{layer input})$ | Error × what came in |
+| Pass error back | $\loss{\delta_1} = (\loss{\delta_2}\param{W_2}) \odot \phi'(\pred{Z^{(1)}})$ | Back through weights, gated by the slope |
+| Bias gradient | $\partial\loss{L}/\partial\param{b} = \sum_i \loss{\delta_i}$ | Broadcast forward ⇒ sum backward |
+| Gradient descent | $\param{W} \leftarrow \param{W} - \hyper{\eta}\,\partial\loss{L}/\partial\param{W}$ | Small step downhill |
+| Vanishing gradient bound | $\prod_{\ell=1}^{L} \sigma'(z_\ell) \le 0.25^{L}$ | Sigmoid slopes shrink the signal every layer |
+| Gradient norm | $\lVert\loss{\nabla L}\rVert = \sqrt{\sum \lVert\loss{\nabla_\theta L}\rVert^2}$ | One number for training health |
 
 ## The Mental Model
 
@@ -115,6 +140,29 @@ flowchart TB
 
 In plain English: the neuron asks **"how aligned is this input with my weight vector?"** ($w^\top x$), shifts that score ($+b$), then **squashes or bends** it ($\phi$). Biologically: receive signals → combine them → fire. The artificial neuron keeps only this mathematical skeleton.
 
+<Formula name="A single neuron" tag="Atom of every network" words="Multiply each input by how much it matters, add them up, shift by the bias, then pass the result through an activation that bends it." remember="Weigh, sum, shift, bend.">
+
+$$
+\pred{z} \;=\; \param{w}^\top \data{x} + \param{b} \;=\; \sum_{j=1}^{d} \param{w_j}\,\data{x_j} + \param{b}
+\qquad\qquad
+\pred{a} \;=\; \phi(\pred{z})
+$$
+
+- $\data{x}$: the input features ($d$ numbers)
+- $\param{w}$: one weight per feature (learned)
+- $\param{b}$: the bias, a learned shift
+- $\pred{z}$: pre-activation (raw score)
+- $\phi$: activation function, e.g. ReLU
+- $\pred{a}$: the neuron's output
+
+**Example:** $\data{x} = [1, 2]$, $\param{w} = [0.5, -1]$, $\param{b} = 1$ → $\pred{z} = 0.5 - 2 + 1 = -0.5$ → $\text{ReLU}(-0.5) = \pred{0}$. This neuron stays silent for this input.
+
+</Formula>
+
+:::analogy[A neuron is a judge at a cooking contest]
+Each input is a criterion (taste, look, smell). The **weights** say how much this judge cares about each one. The **bias** is the judge's baseline mood. The weighted total is the raw score $z$. The **activation** is the judge's rule for speaking up: ReLU means "if the total is negative, say nothing (0); otherwise announce the score".
+:::
+
 #### A full layer and a 2-layer network
 
 | Quantity | Formula | Shape |
@@ -127,6 +175,23 @@ In plain English: the neuron asks **"how aligned is this input with my weight ve
 | Output | $\hat y = Z^{(2)} = A^{(1)}W_2^\top + b_2$ | $(N,h)(h,o) \rightarrow (N, o)$ |
 
 For **regression** the output layer has **no activation** (identity), so $\hat y = Z^{(2)}$ can be any real number.
+
+<Formula name="Forward pass of a 2-layer network" tag="Inference" words="Turn the inputs into hidden features with a linear layer and an activation, then combine those features linearly into the prediction." remember="Linear → bend → linear.">
+
+$$
+\begin{aligned}
+\pred{Z^{(1)}} &= \data{X}\,\param{W_1}^\top + \param{b_1} && (N, h) \\
+\pred{A^{(1)}} &= \phi\big(\pred{Z^{(1)}}\big) && (N, h) \\
+\pred{\hat y} &= \pred{A^{(1)}}\,\param{W_2}^\top + \param{b_2} && (N, o)
+\end{aligned}
+$$
+
+- $\data{X}$: batch of $N$ inputs with $d$ features
+- $\param{W_1}, \param{b_1}$: hidden layer, shapes $(h, d)$, $(h)$
+- $\pred{A^{(1)}}$: the $h$ new features per sample
+- $\param{W_2}, \param{b_2}$: output layer, shapes $(o, h)$, $(o)$
+
+</Formula>
 
 :::info[Shape rule you can use in every interview]
 For `nn.Linear(in, out)`: **weight = `(out, in)`**, **bias = `(out,)`**, **input `(N, in)` → output `(N, out)`**. The batch dimension $N$ passes through untouched. To find a weight's shape, ask *"how many neurons (out) × how many inputs each (in)?"*
@@ -141,9 +206,21 @@ For `nn.Linear(in, out)`: **weight = `(out, in)`**, **bias = `(out,)`**, **input
 
 ### Part B: Why non-linearity is non-negotiable
 
+<Formula name="Stacked linear layers collapse" tag="Why activations exist" words="Two linear layers in a row are still one linear layer, just with a combined weight matrix and bias. So depth alone adds nothing unless something non-linear sits between the layers." remember="Linear of linear is linear.">
+
 $$
-f_2(f_1(x)) = W_2(W_1x + b_1) + b_2 = \underbrace{(W_2W_1)}_{W'}\,x + \underbrace{(W_2b_1 + b_2)}_{b'}
+f_2(f_1(\data{x})) \;=\; \param{W_2}(\param{W_1}\data{x} + \param{b_1}) + \param{b_2} \;=\; \underbrace{(\param{W_2W_1})}_{\param{W'}}\,\data{x} \;+\; \underbrace{(\param{W_2b_1} + \param{b_2})}_{\param{b'}}
 $$
+
+- $\param{W'}$: one combined weight matrix
+- $\param{b'}$: one combined bias
+- Result: a single straight-line (affine) map, whatever the depth
+
+</Formula>
+
+:::analogy[Linear layers stretch paper; ReLU folds it]
+A linear layer can only stretch, rotate and shift a sheet of paper: a straight line drawn on it stays straight, however many times you do it. ReLU adds a **fold**. Each fold creates a corner, and enough folds can shape the paper into a curve like $x^2$.
+:::
 
 - A composition of affine maps is **affine**. 2, 3 or 100 linear layers equal **one** linear layer (the notebook confirms numerically: max difference **0.00**).
 - A linear model has $\frac{d^2}{dx^2}(wx+b) = 0$, so it can never represent curvature. $\frac{d^2}{dx^2}x^2 = 2$.
@@ -175,6 +252,20 @@ flowchart LR
     Q -->|"Output: multi-class"| M["Softmax → distribution"]
 ```
 
+<Formula name="Activations and their slopes" tag="Gradient flow" words="During backprop every layer multiplies the gradient by the activation's slope. Sigmoid's slope is at most 0.25, tanh's at most 1, and ReLU's is exactly 1 for positive inputs. That one fact explains vanishing gradients and why ReLU won." remember="Sigmoid quarters the signal; ReLU passes it untouched.">
+
+$$
+\begin{aligned}
+\sigma(z) &= \frac{1}{1 + e^{-z}} &\qquad \sigma'(z) &= \sigma(z)\,\big(1 - \sigma(z)\big) \;\le\; 0.25 \\[4pt]
+\tanh(z) &= \frac{e^{z} - e^{-z}}{e^{z} + e^{-z}} &\qquad \tanh'(z) &= 1 - \tanh^2(z) \;\le\; 1 \\[4pt]
+\text{ReLU}(z) &= \max(0, z) &\qquad \text{ReLU}'(z) &= \begin{cases} 1 & z > 0 \\ 0 & z < 0 \end{cases}
+\end{aligned}
+$$
+
+**Example:** at $z = 0$, $\sigma = 0.5$ so $\sigma' = 0.5 \times 0.5 = 0.25$, the largest it ever gets. At $z = 5$, $\sigma' \approx 0.0066$: the neuron is **saturated** and almost no gradient passes.
+
+</Formula>
+
 #### How a ReLU network bends a straight line into a curve
 
 - Each hidden ReLU neuron outputs $\max(0, w_jx + b_j)$: flat, then a straight ramp. The bend is at $x = -b_j/w_j$.
@@ -195,13 +286,25 @@ flowchart LR
 | Gradient w.r.t. $\hat y$ | $\frac{2}{N}(\hat y - y)$ | With sigmoid: $\frac{1}{N}(\hat y - y)$ w.r.t. the logit (clean, no saturation) |
 | PyTorch | `nn.MSELoss()` | `nn.BCELoss()` on probabilities, **`nn.BCEWithLogitsLoss()` on raw logits (preferred)** |
 
-**Worked BCE example** (notebook): $y = [1, 0, 1]$, $\hat y = [0.9, 0.2, 0.6]$
+<Formula name="Binary Cross-Entropy (BCE)" tag="Classification loss" words="Look only at the probability the model gave to the correct answer and take minus its log. Saying 0.9 for the right class costs little; saying 0.01 for the right class costs a lot." remember="Minus log of the probability you gave the truth.">
 
 $$
-L = -\tfrac{1}{3}\big[\log 0.9 + \log(1-0.2) + \log 0.6\big] = \tfrac{1}{3}(0.105 + 0.223 + 0.511) = 0.280
+\loss{L} \;=\; -\frac{1}{N}\sum_{i=1}^{N} \Big[\, \data{y_i}\,\log \pred{\hat y_i} \;+\; (1 - \data{y_i})\,\log\big(1 - \pred{\hat y_i}\big) \Big]
 $$
 
-The least confident correct prediction (0.6) contributes the most loss.
+- $\data{y_i} \in \lbrace 0, 1 \rbrace$: the true label
+- $\pred{\hat y_i}$: predicted probability of class 1 (after sigmoid)
+- When $\data{y}=1$ only the first term counts; when $\data{y}=0$ only the second
+
+**Example** (notebook): $\data{y} = [1, 0, 1]$, $\pred{\hat y} = [0.9, 0.2, 0.6]$
+
+$$
+\loss{L} = -\tfrac{1}{3}\big[\log 0.9 + \log(1-0.2) + \log 0.6\big] = \tfrac{1}{3}(0.105 + 0.223 + 0.511) = \loss{0.280}
+$$
+
+The least confident correct prediction (0.6) contributes the most loss. A confident wrong one ($0.01$ for a true 1) would cost $-\log 0.01 = 4.6$ on its own.
+
+</Formula>
 
 **Loss as a surface.** Because $\hat y = f(X; W_1, b_1, W_2, b_2)$, the loss is a function of **every** parameter. With $W_1: 16 \times 1$, $b_1: 16$, $W_2: 1 \times 16$, $b_2: 1$, that is $16+16+16+1 = $ **49 dimensions**. Training = moving downhill on a 49-D surface.
 
@@ -210,6 +313,26 @@ The least confident correct prediction (0.6) contributes the most loss.
 **Chain rule:** if $y = f(u)$ and $u = g(x)$, then $\dfrac{dy}{dx} = \dfrac{dy}{du}\cdot\dfrac{du}{dx}$. In a network the dependency chain is **Loss → Output → Hidden → Parameters**, so gradients must flow **backwards** along it.
 
 Notation: $\delta_2 = \partial L/\partial Z^{(2)}$, $\delta_1 = \partial L/\partial Z^{(1)}$ (the "error signal" at each layer).
+
+<Formula name="Backpropagation: the four equations" tag="The heart of training" words="Start with how wrong the output is. A weight's gradient is that error times whatever flowed into the weight. To go one layer back, send the error backwards through the weights and multiply by the activation's slope." remember="Error × input gives the weight's gradient; error × weights × slope gives the previous layer's error.">
+
+$$
+\begin{aligned}
+\text{\textcircled{1}}\;\; \loss{\delta_2} &= \frac{\partial \loss{L}}{\partial \pred{\hat y}} = \frac{2}{N}\big(\pred{\hat y} - \data{y}\big) \\[4pt]
+\text{\textcircled{2}}\;\; \frac{\partial \loss{L}}{\partial \param{W_2}} &= \loss{\delta_2}^{\top}\,\pred{A^{(1)}}
+\qquad\quad \frac{\partial \loss{L}}{\partial \param{b_2}} = \textstyle\sum_i \loss{\delta_{2,i}} \\[4pt]
+\text{\textcircled{3}}\;\; \loss{\delta_1} &= \big(\loss{\delta_2}\,\param{W_2}\big) \odot \phi'\big(\pred{Z^{(1)}}\big) \\[4pt]
+\text{\textcircled{4}}\;\; \frac{\partial \loss{L}}{\partial \param{W_1}} &= \loss{\delta_1}^{\top}\,\data{X}
+\qquad\quad \frac{\partial \loss{L}}{\partial \param{b_1}} = \textstyle\sum_i \loss{\delta_{1,i}}
+\end{aligned}
+$$
+
+- $\loss{\delta}$: error signal of a layer (same shape as its output)
+- $\odot$: element-wise multiply
+- $\phi'$: the activation's slope; 0 for a dead ReLU, so the error stops there
+- Every gradient has the **same shape as its parameter**
+
+</Formula>
 
 | Step | Gradient | Formula | Shape check |
 |---|---|---|---|
@@ -229,12 +352,26 @@ What to notice:
 
 **How layers share responsibility.** The output layer compares directly with the target. Hidden layers are **indirectly** responsible: they adjust their features so the final prediction improves. The **gradient magnitude** says *how strongly* each parameter should change. In the notebook's 2-layer net, output-layer gradients (`2.bias` ≈ 1.83) are much larger than first-layer ones (`0.weight` ≈ 0.04).
 
+:::analogy[Backprop is a kitchen tracing blame for a bad dish]
+A customer sends back a dish (the loss). The head chef (output layer) hears the complaint first and works out how much each line cook's ingredient was to blame (multiply by the weights). Each cook passes their share of the blame to the suppliers who sent their ingredients (the layer's inputs). A cook who didn't touch the dish (a dead ReLU, slope 0) gets **no** blame and changes nothing.
+:::
+
 ### Part F: Training dynamics
 
+<Formula name="Gradient descent" tag="Update rule" words="The gradient says which way is uphill and how steep it is. Step the opposite way, scaled by the learning rate." remember="New = old − step size × slope.">
+
 $$
-W \leftarrow W - \eta\,\frac{\partial L}{\partial W}
-\qquad\text{gradient = direction,}\quad \eta = \text{step size}
+\param{W} \;\leftarrow\; \param{W} \;-\; \hyper{\eta}\,\frac{\partial \loss{L}}{\partial \param{W}}
+\qquad\quad \text{gradient = direction,}\;\; \hyper{\eta} = \text{step size}
 $$
+
+**Example** (the animation below): $\loss{L}(w) = (w - 3)^2$, so $\partial L/\partial w = 2(w-3)$. One step multiplies the distance to the minimum by $(1 - 2\hyper{\eta})$: $0.9$ for $\hyper{\eta}=0.05$ (slow), $0.2$ for $\hyper{\eta}=0.4$ (fast), $-1.1$ for $\hyper{\eta}=1.05$ (overshoots and diverges).
+
+</Formula>
+
+:::analogy[Gradient descent is walking downhill in fog]
+You can't see the valley, but you can feel the slope under your feet. Take a step downhill, feel again, repeat. The **learning rate is your stride length**: too short and you never arrive, too long and you leap over the valley and land higher up the other side.
+:::
 
 | Learning rate $\eta$ | Behaviour | Loss curve |
 |---|---|---|
@@ -269,6 +406,10 @@ The "right" learning rate is problem-specific (it depends on the data scale and 
 - **Capacity** = how complex a function the model *can* represent. More layers/neurons → capacity ↑ → bias ↓ but variance ↑. The goal is the **balance**: capacity + good optimization + a sensible learning rate + enough data.
 - **Generalization** = performance on unseen data, the real objective. Always judge a model by its **validation** loss, never by training loss alone.
 
+:::analogy[Overfitting is memorizing last year's exam paper]
+An underfit student hasn't studied enough to answer anything. An overfit student memorized last year's paper word for word: perfect on those exact questions (training loss ≈ 0), lost on new ones (validation loss high). A well-fit student understood the method, so they do well on questions they have never seen.
+:::
+
 ### Part H: Where ANNs are used
 
 | Use case | Type | Output layer + loss | Why an ANN |
@@ -293,6 +434,21 @@ ANNs are worth using when the input→output relationship is **non-linear**, the
 - One parameter was used $N$ times, so by the chain rule its gradient is the **sum** of the $N$ per-row gradients. That's why $\partial L/\partial b = \sum_i \delta_i$, and why autograd's backward for a broadcast is a **reduction**.
 
 **Vanishing gradients, quantified**
+
+<Formula name="Vanishing gradient bound" tag="Deep sigmoid nets" words="Backprop multiplies one activation slope per layer. If every slope is at most 0.25, the signal reaching the first layer shrinks geometrically with depth." remember="Each sigmoid layer keeps at most a quarter of the signal.">
+
+$$
+\Big|\frac{\partial \loss{L}}{\partial \pred{z^{(1)}}}\Big| \;\propto\; \prod_{\ell=1}^{L} \sigma'\big(\pred{z^{(\ell)}}\big)\,\lVert \param{W_\ell} \rVert \qquad\text{with}\qquad \sigma' \le 0.25 \;\Rightarrow\; \prod_{\ell=1}^{L}\sigma' \le 0.25^{L}
+$$
+
+**Example:** 10 sigmoid layers → $0.25^{10} \approx 9.5 \times 10^{-7}$. The first layer receives less than a millionth of the signal.
+
+</Formula>
+
+:::analogy[Vanishing gradients are a game of whispers]
+The loss whispers a correction to the last layer, which whispers it to the layer before, and so on. With sigmoid, each person only passes on a quarter of what they heard. After 10 people the first one hears almost nothing, so the early layers barely learn. ReLU passes the message on at full volume.
+:::
+
 - Backprop multiplies one $\phi'$ per layer. With sigmoid, each factor is **at most 0.25**, so through $L$ layers the signal shrinks to at most $0.25^L$: **10 layers → below $10^{-6}$**. Early layers barely learn.
 - Saturation makes it worse: at $z = 5$, $\sigma'(5) \approx 0.0066$.
 - Tanh's max of 1 is better, but it saturates too. **ReLU's derivative is exactly 1 on active units**, so it passes gradients through unchanged. That is the main reason ReLU replaced sigmoid in hidden layers.

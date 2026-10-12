@@ -7,6 +7,8 @@ sidebar_position: 2
 A **PyTorch tensor** is a multi-dimensional array that stores numbers **plus** the history of how it was computed, and it can live on a **CPU or a GPU**. **Autograd** records every operation on tensors with `requires_grad=True` in a **dynamic computational graph** and applies the **chain rule in reverse** (`loss.backward()`) to fill each parameter's `.grad`. Training is always the same five-beat loop: **zero_grad → forward → loss → backward → step**. `backward()` *computes* gradients, the **optimizer** *uses* them, and gradients **accumulate** unless you clear them.
 :::
 
+<FormulaKey />
+
 ## ⚡ Essential Interview Recall
 
 - **Tensor** = scalar (0-D) → vector (1-D) → matrix (2-D) → n-D. What sets it apart is its **behavior**, not its shape: **vectorized math + gradient tracking + device mobility**.
@@ -23,13 +25,27 @@ A **PyTorch tensor** is a multi-dimensional array that stores numbers **plus** t
 - **Leaf tensors** (created by you, e.g. weights) get `.grad` filled in. **Intermediate (non-leaf) tensors** don't, unless you call `.retain_grad()`.
 - **`loss.backward()` computes gradients. It does NOT update weights.** `optimizer.step()` updates them. The optimizer never computes gradients.
 - PyTorch **accumulates (adds) gradients** into `.grad` by default → call **`optimizer.zero_grad()` once per iteration**.
-- **Loss function rules:** it must be **differentiable**, return a **scalar**, and connect the model output to the target. **MSE** $= \frac{1}{n}\sum (\hat{y} - y)^2$ for regression.
-- **SGD update:** $\theta \leftarrow \theta - \eta \nabla_\theta L$ ($\eta$ = learning rate).
-- `nn.Linear(in, out)` stores **`weight` of shape `(out, in)`** and **`bias` of shape `(out,)`**, and computes $Y = XW^\top + b$.
+- **Loss function rules:** it must be **differentiable**, return a **scalar**, and connect the model output to the target. **MSE** $\loss{L} = \frac{1}{n}\sum (\pred{\hat{y}} - \data{y})^2$ for regression.
+- **SGD update:** $\param{\theta} \leftarrow \param{\theta} - \hyper{\eta}\, \loss{\nabla_\theta L}$ ($\hyper{\eta}$ = learning rate).
+- `nn.Linear(in, out)` stores **`weight` of shape `(out, in)`** and **`bias` of shape `(out,)`**, and computes $\pred{Y} = \data{X}\param{W}^\top + \param{b}$.
 - Stacking linear layers **without activations** collapses into a **single linear layer**. Non-linearity (e.g. **ReLU**) is where the network gets its expressive power.
 - **`nn.Module`**: `__init__()` = *what layers exist*; `forward()` = *how data flows*. Call `model(x)`, never `model.forward(x)`.
 - Conversion idiom: **`x.detach().cpu().numpy()`**. `.item()` turns a 1-element tensor into a Python number.
 - **`model.eval()`** changes layer behavior (Dropout/BatchNorm). **`torch.no_grad()`** disables gradient tracking. At inference you use **both**.
+
+## 📐 Formula Sheet
+
+Every equation on this page in one place. Each one is explained in a card further down.
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Linear layer | $\pred{Y} = \data{X}\param{W}^\top + \param{b}$ | Weighted sum of the inputs, plus a shift |
+| Mean squared error | $\loss{L} = \frac{1}{n}\sum_i (\pred{\hat y_i} - \data{y_i})^2$ | Average of the squared misses |
+| Gradient descent step | $\param{\theta} \leftarrow \param{\theta} - \hyper{\eta}\,\loss{\nabla_\theta L}$ | Take a small step downhill |
+| Chain rule | $\dfrac{\partial z}{\partial x} = \dfrac{\partial z}{\partial y}\cdot\dfrac{\partial y}{\partial x}$ | Multiply the local slopes along the path |
+| Gradient accumulation | $\loss{\text{.grad}} \mathrel{+}= \loss{\nabla_\theta L_t}$ | `backward()` adds; `zero_grad()` resets |
+| Linear layers collapse | $\param{W_2}(\param{W_1}\data{x} + \param{b_1}) + \param{b_2} = \param{W'}\data{x} + \param{b'}$ | Without activations, depth adds nothing |
+| Broadcasting rule | dims match if **equal**, or one is **1** or **missing** | Compare shapes from the right |
 
 ## The Mental Model
 
@@ -45,6 +61,12 @@ flowchart LR
 ```
 
 <Animation src="pytorch/zero-grad" caption="Three iterations side by side. With zero_grad() .grad holds only the current gradient (4, 3, 2.5). Without it, backward() keeps ADDING: 4 → 7 → 9.5, so every step() overshoots more." />
+
+:::analogy[The training loop is free-throw practice]
+**zero_grad**: forget the coach's notes from the last throw. **Forward**: take the shot. **Loss**: measure how far you missed. **backward**: the coach works out which part of your technique caused the miss, and by how much. **step**: adjust your technique a little. Repeat thousands of times.
+
+And forgetting `zero_grad()`? It's like a kitchen scale you never press **TARE** on: each new weighing is added on top of the last one, so every reading is wrong.
+:::
 
 ### 2. What autograd actually builds
 
@@ -62,6 +84,10 @@ flowchart LR
 ```
 
 <Animation src="pytorch/autograd-backward" caption="Forward: autograd records each op and its value. Backward: each node multiplies the upstream gradient by its local derivative; x feeds two branches, so its gradients add: 4 + 3 = 7." />
+
+:::analogy[Autograd is a shop receipt]
+During the forward pass PyTorch writes every operation on a receipt (the graph): "squared x, multiplied x by 3, added them, added 1". `backward()` reads the receipt **from the bottom up** and, for each line, asks "if this input changed a little, how much would the total change?". Multiplying those answers along the way is the chain rule.
+:::
 
 ### 3. A tensor's three properties
 
@@ -86,6 +112,10 @@ flowchart LR
 | Interop | `torch.from_numpy(a)` **shares memory** | `t.numpy()` **shares memory** (CPU tensors only) |
 | Copying constructor | — | `torch.tensor(a)` **always copies** |
 | Role in DL | Data prep, analysis, plotting | Inputs, weights, activations, gradients |
+
+:::analogy[NumPy array vs tensor = pasted values vs a live spreadsheet]
+A NumPy array is like a spreadsheet where someone pasted **values only**: you see the numbers, but not how they were produced. A tensor with `requires_grad=True` is a spreadsheet that **keeps its formulas**, so you can always trace any cell back to the inputs that made it. That trace is exactly what you need for gradients.
+:::
 
 ### The four building-block operations
 
@@ -112,6 +142,10 @@ The textbook example is adding the **bias**: in $Y = XW^\top + b$, `b` of shape 
 :::
 
 <Animation src="pytorch/broadcasting" caption="Shapes are aligned from the right; the missing dimension of b becomes 1 and is stretched to 4 rows as a stride-0 view (no copy). (4, 3) + (4,) fails because 3 vs 4 and neither is 1." />
+
+:::analogy[Broadcasting is a rubber stamp]
+`b = [10, 20, 30]` is a stamp. To add it to each of the 4 rows of `A`, PyTorch doesn't carve 4 stamps (copies). It presses the **same** stamp on every row. That's why it costs no extra memory, and why the stamp must be exactly as wide as the rows (3 vs 4 won't fit).
+:::
 
 ### Tensor properties at a glance
 
@@ -143,15 +177,53 @@ The textbook example is adding the **bias**: in $Y = XW^\top + b$, `b` of shape 
 | **Autograd** | Applies the chain rule through the recorded graph | ✅ **Yes** | `loss.backward()` |
 | **Optimizer** | Uses `.grad` to move parameters downhill | ❌ **No**, it only reads `.grad` | `optim.SGD(model.parameters(), lr=0.02)` |
 
-The update rules you need to know:
+The two equations every training loop runs:
+
+<Formula name="Mean Squared Error (MSE)" tag="Regression loss" words="For each sample, take how far the prediction missed, square it so big misses count much more, then average over all samples. The result is one number: smaller is better." remember="Square the miss, then average it.">
 
 $$
-\text{MSE} = \frac{1}{n}\sum_{i=1}^{n}\left(\hat{y}_i - y_i\right)^2
-\qquad\qquad
-\theta \leftarrow \theta - \eta\,\nabla_{\theta} L
+\loss{L} \;=\; \frac{1}{\data{n}} \sum_{i=1}^{\data{n}} \big(\pred{\hat y_i} - \data{y_i}\big)^2
 $$
+
+- $\pred{\hat y_i}$: the model's prediction for sample $i$
+- $\data{y_i}$: the true target for sample $i$
+- $\data{n}$: number of samples
+- $\loss{L}$: the loss, a single scalar
+
+**Example:** predictions $[3, 5]$, targets $[2, 2]$ → misses $1$ and $3$ → $(1 + 9)/2 = 5$. The bigger miss contributes 9 of the 10.
+
+</Formula>
+
+<Formula name="Gradient descent update" tag="Optimizer step" words="The gradient points uphill (where the loss grows fastest). Subtract a small multiple of it from every parameter to move downhill. The learning rate decides how big that step is." remember="New = old − step size × slope.">
+
+$$
+\param{\theta} \;\leftarrow\; \param{\theta} \;-\; \hyper{\eta}\,\loss{\nabla_{\theta} L}
+$$
+
+- $\param{\theta}$: any learnable parameter (a weight or a bias)
+- $\hyper{\eta}$: learning rate, chosen by you (e.g. 0.02)
+- $\loss{\nabla_\theta L}$: the gradient that `loss.backward()` stored in `.grad`
+
+**Example:** $\param{w} = 1.0$, gradient $= 4$, $\hyper{\eta} = 0.1$ → $\param{w} = 1.0 - 0.1 \times 4 = 0.6$.
+
+</Formula>
 
 ### From `y = wx + b` to a neural network
+
+<Formula name="Linear layer (nn.Linear)" tag="Building block" words="Every output is a weighted sum of all the inputs, plus its own bias. Doing it as one matrix multiply processes the whole batch at once." remember="Inputs times weights, plus bias.">
+
+$$
+\underbrace{\pred{Y}}_{(N,\,k)} \;=\; \underbrace{\data{X}}_{(N,\,d)}\; \underbrace{\param{W}^\top}_{(d,\,k)} \;+\; \underbrace{\param{b}}_{(k)}
+$$
+
+- $\data{X}$: a batch of $N$ samples with $d$ features each
+- $\param{W}$: weights stored as `(out, in)` = $(k, d)$
+- $\param{b}$: one bias per output, broadcast over all $N$ rows
+- $\pred{Y}$: $k$ outputs for every sample
+
+**Shape check:** the inner dimensions must match: $(N, d)\,(d, k) \to (N, k)$.
+
+</Formula>
 
 | Model | Equation | Shapes |
 |---|---|---|
@@ -171,7 +243,7 @@ Worked shapes for the notebook's `SimpleNN` with $X \in \mathbb{R}^{100 \times 1
 Total learnable parameters: $8 + 8 + 8 + 1 = 25$.
 
 :::danger[Interview Trap: "Deeper = more powerful", even without activations?]
-No. $W_2(W_1x + b_1) + b_2 = (W_2W_1)x + (W_2b_1 + b_2) = W'x + b'$. Any stack of purely linear layers **collapses into one linear layer**. It can never fit $y = x^2$. The **non-linear activation between layers** is what lets the network approximate curves. As the notebook says: *"This is NOT deep learning magic. It is matrix multiplication + non-linearity."*
+No. $\param{W_2}(\param{W_1}\data{x} + \param{b_1}) + \param{b_2} = (\param{W_2W_1})\data{x} + (\param{W_2b_1} + \param{b_2}) = \param{W'}\data{x} + \param{b'}$. Any stack of purely linear layers **collapses into one linear layer**. It can never fit $y = x^2$. The **non-linear activation between layers** is what lets the network approximate curves. As the notebook says: *"This is NOT deep learning magic. It is matrix multiplication + non-linearity."*
 :::
 
 ### What `nn.Module` gives you
@@ -214,19 +286,41 @@ No. $W_2(W_1x + b_1) + b_2 = (W_2W_1)x + (W_2b_1 + b_2) = W'x + b'$. Any stack o
 - After `backward()` the graph's saved buffers are **freed**. A second `backward()` on the same graph raises an error unless you passed `retain_graph=True`.
 - `backward()` only works implicitly on a **scalar**. For a non-scalar `y` you must pass `y.backward(gradient=...)` or reduce first (`y.sum()`, `y.mean()`). That's why losses return scalars.
 - Gradients are **added** (`+=`) into `.grad`. That is accumulation. It's useful on purpose for simulating big batches, and a bug when you forget to clear it.
+
+<Formula name="Gradient accumulation" tag="Why zero_grad exists" words="Each backward() call adds its gradient on top of whatever is already in .grad. After k calls without clearing, .grad holds the sum of all k gradients." remember="backward() adds, zero_grad() resets.">
+
+$$
+\loss{\text{.grad}} \;\leftarrow\; \loss{\text{.grad}} + \loss{\nabla_\theta L_t}
+\qquad\Longrightarrow\qquad
+\loss{\text{.grad}} = \sum_{t=1}^{k} \loss{\nabla_\theta L_t}
+$$
+
+**Example:** per-step gradients $4, 3, 2.5$ → `.grad` reads $4,\ 7,\ 9.5$ without `zero_grad()`, but $4,\ 3,\ 2.5$ with it.
+
+</Formula>
+
 - Since PyTorch 2.0, `zero_grad()` defaults to **`set_to_none=True`**: `.grad` becomes `None` instead of a zero tensor, which saves memory and a kernel launch.
 - `x.grad.zero_()`: the trailing **underscore** marks an **in-place** op. In-place ops on a **leaf that requires grad** are forbidden outside `torch.no_grad()`, which is why optimizers update weights inside a no-grad context.
 
 **Worked chain rule (notebook example)**
 
-$x = 3,\; y = x^2 = 9,\; z = y^2 = 81$
+<Formula name="Chain rule" tag="Engine of backprop" words="If x changes y, and y changes z, then the effect of x on z is the two effects multiplied together. Autograd applies this one link at a time, starting from the loss." remember="Multiply the slopes along the path.">
 
 $$
-\frac{\partial z}{\partial y} = 2y = 18 \qquad
-\frac{\partial z}{\partial x} = \frac{\partial z}{\partial y}\cdot\frac{\partial y}{\partial x} = 18 \cdot 2x = 18 \cdot 6 = 108
+\frac{\partial \pred{z}}{\partial \data{x}} \;=\; \frac{\partial \pred{z}}{\partial \pred{y}} \cdot \frac{\partial \pred{y}}{\partial \data{x}}
 $$
 
-`x.grad == 108` (leaf, automatic). `y.grad == 18` **only because** `y.retain_grad()` was called.
+**Example** ($\data{x} = 3$, $\pred{y} = x^2 = 9$, $\pred{z} = y^2 = 81$):
+
+$$
+\frac{\partial z}{\partial y} = 2y = 18
+\qquad
+\frac{\partial z}{\partial x} = 18 \cdot 2x = 18 \cdot 6 = \loss{108}
+$$
+
+`x.grad == 108` (leaf, filled automatically). `y.grad == 18` **only because** `y.retain_grad()` was called.
+
+</Formula>
 
 **Optimizer step**
 - `optim.SGD(model.parameters(), lr)` keeps **references** to the parameter tensors. `step()` does `p -= lr * p.grad` for each one under `no_grad`.
