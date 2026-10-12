@@ -107,6 +107,8 @@ flowchart TB
 | fc2: 64→10 | `(4, 10)` | **650** | 10 × (64 + 1) |
 | **Total** | | **136,874** | **fc1 ≈ 96%** |
 
+<Animation src="cnn/shape-funnel" caption="SmallCNN end to end: conv and pool blocks shrink H and W while channels grow, then flatten gives 2,048 features. Box height is spatial size, width is channels. fc1 alone holds 131 K of the 137 K parameters." />
+
 :::info[Where the parameters really live]
 The convolutions (the part that "sees" the image) cost only **5 K** parameters; the **first FC layer** costs **131 K**, because it connects every one of the 2,048 flattened values to every hidden unit. That's why the FC head is where CNNs overfit, why **dropout goes there**, and why modern architectures (ResNet etc.) use **global average pooling**: each of the 32 maps is averaged to one number, and the head becomes `Linear(32, 10)`. The same network then has **5.4 K** params in total and accepts **any** input size.
 :::
@@ -210,6 +212,8 @@ $$
 | Output for the same input | **Different every call** (random mask) | **Deterministic** |
 | Expected activation | $(1-p)\cdot\frac{h}{1-p} = h$ ✅ | $h$ ✅, the same scale, so nothing to fix at test time |
 | Example, $p = 0.5$, input of ones | `[2, 0, 2, 2, 0, …]` | `[1, 1, 1, 1, 1, …]` |
+
+<Animation src="cnn/dropout" caption="Training mode: each forward pass draws a new random mask, zeroing half the activations and doubling the survivors. Eval mode: every unit is kept and nothing is scaled, so the output is deterministic." />
 
 **Why it reduces overfitting**
 - No neuron can rely on a specific partner being present (**prevents co-adaptation**), so each feature must be **useful on its own**, which builds redundancy and robustness.

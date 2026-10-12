@@ -145,6 +145,8 @@ $$
 
 The kernel is a **pattern detector**: a large output means "my pattern is here". In a CNN the kernel values are **not hand-designed**. They are **learned** by backprop, and the network discovers its own edge, colour and texture detectors.
 
+<Animation src="cnn/convolution" caption="The vertical-edge kernel visits all 12 positions of a 5×6 image. Each output is left column minus right column: 0 on flat regions, 30 wherever the window straddles the bright-to-dark edge." />
+
 **Why the output shrinks.** The kernel can't hang over the border, so a $W$-wide input fits only $W - F + 1$ positions: **5×5 input, 3×3 kernel → 3×3 output** (5 − 3 + 1). A **bigger kernel → a smaller output** (4×4 kernel on 5×5 → 2×2).
 
 **Convolution is local, not global**: each output pixel depends only on the $F \times F$ patch under it. Spatial structure survives because the output is still a grid in which **position $(i, j)$ describes the neighbourhood of input position $(i, j)$**.
@@ -217,6 +219,8 @@ Applied separately to height and width. The **floor** matters: when the stride d
 
 **Too much padding:** the output becomes **larger than the input** and its border is computed mostly from **artificial zeros**. That wastes compute and can create edge artifacts, because the network "sees" a fake dark frame.
 
+<Animation src="cnn/stride-padding" caption="Same 5×5 input and 3×3 kernel. Stride 2 skips positions (3×3 → 2×2 output); padding 1 adds a ring of zeros so the output stays 5×5." />
+
 ### Part F: Multiple filters and feature maps
 
 One filter detects **one** pattern. Images contain edges at many angles, corners, textures and colour transitions, so a layer uses **many** filters.
@@ -236,6 +240,8 @@ One filter detects **one** pattern. Images contain edges at many angles, corners
 - **Output depth is set by the number of filters**, not by the input. `(10, 3, 64, 64)` through 16 filters → depth **16**.
 - **Doubling the filters doubles the parameters** (and the compute).
 - The input channels mix inside each filter: an RGB filter can respond to "a red-to-green edge", which no single-channel filter could.
+
+<Animation src="cnn/multichannel-filter" caption="One filter has one 3×3 slice per input channel. At each position the R, G and B dot products plus one bias are summed into a single number, so one filter makes one feature map." />
 
 ### Part G: Pooling
 
@@ -260,6 +266,8 @@ $$
 - **Translation tolerance:** if an edge moves by one pixel but stays inside the same 2×2 window, the max is unchanged. This gives a small degree of invariance.
 - **What it discards:** the **exact position** of the feature within the window and the 3 non-max values. For tasks that need precise location (segmentation, keypoints) this is a real loss, which is why such networks pool less or upsample back.
 - Odd sizes are **floored**: 7×7 → 3×3 (the last row and column are dropped).
+
+<Animation src="cnn/max-pooling" caption="Each 2×2 block keeps only its maximum: 4×4 → 2×2, channels unchanged, no parameters. Moving the 8 one pixel inside its window leaves the output unchanged (translation tolerance)." />
 
 ### Part H: The minimal CNN block
 

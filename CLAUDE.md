@@ -18,6 +18,15 @@ When I provide raw, handwritten, or lecture notes, DO NOT just format them blind
 - **Mermaid rendering:** `src/theme/Mermaid/index.js` is a swizzled copy of the theme component that **queues diagram renders one at a time**. The stock component races (several diagrams per page + the dark-mode re-render) and leaves diagrams blank. **Do not delete it.** All diagram types (flowchart, decision diamonds, mindmap) render with it. Layout tips: if a `subgraph` sets its own `direction`, don't draw edges that cross between subgraphs (Mermaid ignores the direction and squashes the layout); split into separate diagrams instead. Prefer `flowchart TB` for chains of 4+ nodes, because long `LR` chains render too small to read.
 - The site has **local full-text search** built in — no action needed when writing pages, just keep headings and titles descriptive since search ranks on them.
 
+# Animations (Manim) — REQUIRED for every AI/ML page
+Every page under `docs/03-ai-ml/` gets **2–4 Manim animations** for the concepts that involve motion or change: something sliding, flowing, accumulating, converging or being built up step by step. Static structure stays in Mermaid diagrams and tables. Full workflow: `animations/README.md`.
+- **Where the code lives:** scenes in `animations/<topic>_scenes.py`, one `Scene` class per animation, subclassing `WikiScene` and using only the helpers and palette in `animations/style.py` (`title`, `caption_bar`, `label`, `math`, `grid_of_numbers`; colours `INFO` = data/forward, `GRAD` = gradients/backward, `HIGHLIGHT` = look here, `ERROR`, `SUCCESS`). Register each scene in `MANIFEST` in `animations/render.py` under a key like `"cnn/convolution"`.
+- **Render:** `python animations/render.py <key>` writes `static/animations/<key>.mp4` (H.264), `.webm` (VP9 fallback) and `.jpg` (poster = final frame). Commit all three.
+- **Embed:** `<Animation src="<key>" caption="..." />` directly under the paragraph or table it illustrates (no import needed). The caption is 1–2 sentences saying what to watch for. **No double quotes, curly braces or `<` inside the caption.**
+- **Content rules:** numbers shown in an animation must come from real computation (numpy or the page's verified results), never invented. Keep clips **8–20 s** and quiet at the end (2–3 s hold) so the final frame works as the poster. One idea per clip.
+- **Layout rules:** 16:9 at 720p. Keep everything inside the frame; `title()` and `caption_bar()` auto-shrink long text, but grids and diagrams don't. Don't let labels sit on top of lines; use `add_background_rectangle` or move them.
+- **Always verify before embedding:** extract frames (`ffmpeg -i clip.mp4 -vf "fps=6/<duration>,scale=640:-1,tile=2x3" -frames:v 1 sheet.png`) and check for overlaps, cut-off text and wrong numbers. Then build the site and confirm the clip plays.
+
 # Page Structure Specification
 Every generated `.md` page MUST strictly follow this layout:
 

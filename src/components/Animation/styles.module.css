@@ -1,0 +1,66 @@
+.figure {
+  margin: 1.5rem 0;
+}
+
+.frame {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  background: #1b1b1d; /* same as the animation background, avoids a flash */
+  line-height: 0;
+}
+
+[data-theme='dark'] .frame {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.video {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  display: block;
+  cursor: pointer;
+}
+
+.controls {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 6px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.frame:hover .controls,
+.controls:focus-within {
+  opacity: 1;
+}
+
+.controls button {
+  font: 600 0.75rem/1 var(--ifm-font-family-monospace);
+  color: #e3e3e3;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 6px 9px;
+  cursor: pointer;
+}
+
+.controls button:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.controls button.active {
+  color: #1b1b1d;
+  background: #f1fa8c;
+  border-color: #f1fa8c;
+}
+
+.caption {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-700);
+  text-align: center;
+}

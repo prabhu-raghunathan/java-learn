@@ -44,6 +44,8 @@ flowchart LR
     S -->|next batch / epoch| Z
 ```
 
+<Animation src="pytorch/zero-grad" caption="Three iterations side by side. With zero_grad() .grad holds only the current gradient (4, 3, 2.5). Without it, backward() keeps ADDING: 4 → 7 → 9.5, so every step() overshoots more." />
+
 ### 2. What autograd actually builds
 
 For $y = x^2 + 3x + 1$ with $x = 2$:
@@ -58,6 +60,8 @@ flowchart LR
     a2 --> y(["y = 11.0<br/>grad_fn = AddBackward0"])
     y -. "y.backward()" .-> g["x.grad = 2x + 3 = 7.0"]
 ```
+
+<Animation src="pytorch/autograd-backward" caption="Forward: autograd records each op and its value. Backward: each node multiplies the upstream gradient by its local derivative; x feeds two branches, so its gradients add: 4 + 3 = 7." />
 
 ### 3. A tensor's three properties
 
@@ -106,6 +110,8 @@ c      :     4   ❌  (3 vs 4 — neither is 1)  → RuntimeError
 ```
 The textbook example is adding the **bias**: in $Y = XW^\top + b$, `b` of shape `(out,)` is broadcast across every row (sample) of the batch.
 :::
+
+<Animation src="pytorch/broadcasting" caption="Shapes are aligned from the right; the missing dimension of b becomes 1 and is stretched to 4 rows as a stride-0 view (no copy). (4, 3) + (4,) fails because 3 vs 4 and neither is 1." />
 
 ### Tensor properties at a glance
 

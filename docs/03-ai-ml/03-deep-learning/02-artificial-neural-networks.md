@@ -85,6 +85,8 @@ flowchart TB
     D1 --> G1["⑤ ∂L/∂W₁ = δ₁ᵀ · X   (h, d)<br/>∂L/∂b₁ = Σ δ₁ over batch"]
 ```
 
+<Animation src="ann/forward-backward" caption="Forward pass computes ŷ and the loss; the backward pass sends δ from the loss towards the inputs. Unit 3 has z < 0, so ReLU′ = 0 blocks its gradient and its incoming weights do not change." />
+
 ### 4. The complete ANN learning pipeline
 
 ```mermaid
@@ -180,6 +182,8 @@ flowchart LR
 - 32 hidden neurons → up to 32 slope changes → a smooth-looking approximation of $x^2$ (notebook: MSE **2.93 → 0.0083** in 300 epochs).
 - This is the intuition behind the **Universal Approximation Theorem**: one wide-enough hidden layer with a non-linear activation can approximate any continuous function on a bounded range.
 
+<Animation src="ann/relu-kinks" caption="Best least-squares fit of x² using 0 to 7 ReLU units. Zero units can only give a straight line (MSE 1.44); every unit adds one kink, and 7 kinks reach MSE 0.0004." />
+
 ### Part D: Loss functions
 
 | | **Mean Squared Error (MSE)** | **Binary Cross-Entropy (BCE)** |
@@ -240,6 +244,8 @@ $$
 | **Far too large** (≥ 1.5 here) | Every step overshoots further | **Divergence**: loss → ∞ → `nan` within a few epochs |
 
 The "right" learning rate is problem-specific (it depends on the data scale and network). Numbers above are from the section 7 experiment.
+
+<Animation src="ann/learning-rate" caption="Ten gradient-descent steps on L(w) = (w − 3)² from w = 0. Each step multiplies the distance to the minimum by (1 − 2η): 0.9 creeps, 0.2 converges in ~4 steps, −1.1 overshoots further every time." />
 
 | Failure mode | Symptom | Usual causes | First things to try |
 |---|---|---|---|
