@@ -169,3 +169,59 @@
   --ifm-alert-background-color: rgba(255, 212, 59, 0.07);
   --ifm-alert-border-color: #ffd43b;
 }
+
+/* ==========================================================================
+   :::speak (60-second answer) and :::incident (production scenario)
+   ========================================================================== */
+.alert--speak {
+  --ifm-alert-background-color: rgba(112, 72, 232, 0.07);
+  --ifm-alert-background-color-highlight: rgba(112, 72, 232, 0.14);
+  --ifm-alert-foreground-color: var(--ifm-font-color-base);
+  --ifm-alert-border-color: #7048e8;
+}
+
+[data-theme='dark'] .alert--speak {
+  --ifm-alert-background-color: rgba(177, 151, 252, 0.08);
+  --ifm-alert-border-color: #b197fc;
+}
+
+.alert--incident {
+  --ifm-alert-background-color: rgba(232, 89, 12, 0.07);
+  --ifm-alert-background-color-highlight: rgba(232, 89, 12, 0.14);
+  --ifm-alert-foreground-color: var(--ifm-font-color-base);
+  --ifm-alert-border-color: #e8590c;
+}
+
+[data-theme='dark'] .alert--incident {
+  --ifm-alert-background-color: rgba(255, 146, 43, 0.07);
+  --ifm-alert-border-color: #ff922b;
+}
+
+/* ==========================================================================
+   Tables: on desktop, text tables fill the content column and wrap instead of
+   scrolling sideways. Tables containing KaTeX (formula sheets) keep the default
+   scrollable behaviour, because equations can't wrap.
+   ========================================================================== */
+@media (min-width: 997px) {
+  .markdown table:not(:has(.katex)) {
+    display: table;
+    width: 100%;
+  }
+}
+
+.markdown table:not(:has(.katex)) td {
+  overflow-wrap: break-word;
+}
+
+.markdown table:not(:has(.katex)) td code {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Display equations scroll inside themselves on narrow screens instead of
+   widening the whole page (Formula cards already do this for their own maths). */
+.markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.15rem 0;
+}

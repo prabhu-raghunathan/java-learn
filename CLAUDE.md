@@ -56,6 +56,53 @@ Equations are the most important part of the AI/ML notes. Every page under `docs
 - Multi-line derivations use `\begin{aligned} ... \end{aligned}`; step numbers use `\text{\textcircled{1}}` (bare `\textcircled` in math mode triggers KaTeX warnings).
 - Verify after editing: the build log must contain **no** `LaTeX-incompatible` warnings, and the built page must contain **zero** `katex-error` elements.
 
+# Java & Spring pages — Top-company quality bar (REQUIRED)
+Every page under `docs/01-core-java/` and `docs/02-spring-boot/` (and future Java-ecosystem folders) must pass this checklist before it counts as done. The target is the interview depth of top Indian product companies and banks (Google, Microsoft, Amazon, Atlassian, Uber, Flipkart, Walmart, Goldman Sachs, JPMorgan).
+1. **Coverage:** every 🔴 topic for the subject is present. Research the commonly asked questions *before* writing. If a topic would make a page too long, split it into a sibling page (e.g. `garbage-collection.md` next to `jdk-jre-jvm.md`) and cross-link them.
+2. **Priority badges:** every `##`/`###` section heading and every Essential Recall bullet starts with 🔴 (asked almost always), 🟠 (frequent) or 🟡 (senior differentiator). `<PriorityKey />` goes right after the TL;DR box.
+3. **60-second answer:** one `:::speak[The page's most-asked question]` box right after Essential Interview Recall, written as the spoken answer (first person, ~120–170 words).
+4. **Rule cards:** every hard rule (a contract, a set of compiler rules, a recipe) goes in a `<RuleCard>` — the Java counterpart of the Formula card.
+5. **Predict the Output:** a `## 🧪 Predict the Output` section with **at least 5** `<Predict>` drills; each answer explains *why*.
+6. **Follow-up ladder:** a `## 🪜 Follow-up Ladder` with one `<Ladder>` of 4–5 `<Rung>`s, going from the basic question to a senior/production-level one.
+7. **Production scenario:** a `## 🚑 Production Scenario(s)` section with at least one `:::incident[...]` box (symptom → why → fix → prevention).
+8. **Java version notes:** mark version-dependent features with `<Since v="17" />` (inline, never inside a heading) and say what changed across 8 / 11 / 17 / 21 / 25 where it matters.
+9. **Trade-offs:** complexity / performance / memory trade-offs wherever there is a choice (a table is best).
+10. **Analogies & animations:** 2–4 `:::analogy` boxes; 1–2 Manim animations for anything involving memory or motion (stack/heap, GC, bytecode, request flow). Scenes live in `animations/java_scenes.py`.
+11. **Correctness:** every snippet compiled and every output comment taken from a real run (JDK 21+); compiler errors quoted from `javac`. No unverified numbers.
+12. **Senior signals:** at least one 🟡 section per page (internals, tuning, or modern Java).
+
+**Java page layout:** frontmatter → TL;DR → `<PriorityKey />` → ⚡ Essential Interview Recall → `:::speak` → The Mental Model → The Paradigm / Core Concepts → ⚙️ Under the Hood → 💻 Java Implementation → 🧪 Predict the Output → 🪜 Follow-up Ladder → 🚑 Production Scenario(s) → 🚨 Interview Gotchas & Edge Cases.
+
+**Interview components** (`src/components/Interview/`, registered globally, no imports):
+````mdx
+<Predict n="1" title="Short title" output="the exact output">
+
+```java
+// the question code (MUST be the first child)
+```
+
+Explanation markdown: hidden until the reader clicks "reveal".
+
+</Predict>
+
+<RuleCard name="Rule name" tag="Short tag" why="Why the rule exists, one sentence." remember="3–7 word memory hook.">
+
+The rule in one or two lines, then optionally a small code block.
+
+</RuleCard>
+
+<Ladder title="Topic">
+<Rung q="First question?">
+
+Answer markdown.
+
+</Rung>
+</Ladder>
+````
+Same prop rules as the Formula card: blank lines around inner markdown, and no double quotes, curly braces or `<` inside props. Custom admonitions: `:::analogy[...]` 💡, `:::speak[...]` 🎤, `:::incident[...]` 🚑.
+
+**Escapes:** write Java unicode escapes (`'\u0000'`, `'\uFFFF'`, `'\u0041'`) as literal backslash text, and check afterwards that the file contains no NUL or U+FFFF characters (some file writers convert the escape into the real character, which breaks the build's HTML minifier).
+
 # Page Structure Specification
 Every generated `.md` page MUST strictly follow this layout:
 

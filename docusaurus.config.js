@@ -92,7 +92,7 @@ const config = {
           remarkPlugins: [remarkMath],
           rehypePlugins: [[rehypeKatex, katexOptions]],
           // custom :::analogy box (styled in src/theme/Admonition/Types.js + custom.css)
-          admonitions: {keywords: ['analogy'], extendDefaults: true},
+          admonitions: {keywords: ['analogy', 'speak', 'incident'], extendDefaults: true},
         },
         blog: {
           showReadingTime: true,

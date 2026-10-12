@@ -32,3 +32,7 @@ No import needed: the component is registered in `src/theme/MDXComponents.js`.
 2. Add a `"topic/name": ("file.py", "SceneClass")` entry to `MANIFEST` in `render.py`.
 3. `python animations/render.py topic/name`, then check the frames (see CLAUDE.md).
 4. Embed it with `<Animation src="topic/name" caption="..." />`.
+
+## Core Java scenes
+
+`java_scenes.py` holds the Java memory/bytecode animations (`jvm/gc-generations`, `oop/init-order`, `variables/pass-by-value`, `operators/postfix-trap`). They use the same `WikiScene` helpers; values shown must match what the page's verified code prints.

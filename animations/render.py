@@ -46,6 +46,11 @@ MANIFEST = {
     # CNN Architecture, Training, Dropout & AlexNet
     "cnn/shape-funnel":            ("cnn_scenes.py", "ShapeFunnel"),
     "cnn/dropout":                 ("cnn_scenes.py", "DropoutTrainEval"),
+    # Core Java
+    "jvm/gc-generations":          ("java_scenes.py", "GcGenerations"),
+    "oop/init-order":              ("java_scenes.py", "InitOrder"),
+    "variables/pass-by-value":     ("java_scenes.py", "PassByValue"),
+    "operators/postfix-trap":      ("java_scenes.py", "PostfixTrap"),
 }
 
 QUALITY = "-qm"   # 1280x720 @ 30 fps: crisp text, small files (~0.2–0.6 MB each)
