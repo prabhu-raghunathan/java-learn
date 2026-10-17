@@ -30,6 +30,25 @@ MEDIA = ROOT / ".media"                         # manim's scratch output (git-ig
 
 # key -> (scene file inside animations/, Scene class name)
 MANIFEST = {
+    # Python for Data Exploration
+    "numpy/list-vs-array":         ("data_scenes.py", "ListVsArray"),
+    "numpy/strides-views":         ("data_scenes.py", "StridesViews"),
+    "numpy/broadcasting":          ("data_scenes.py", "Broadcasting"),
+    "numpy/axis-aggregation":      ("data_scenes.py", "AxisAggregation"),
+    "pandas/index-alignment":      ("data_scenes.py", "IndexAlignment"),
+    "pandas/loc-vs-iloc":          ("data_scenes.py", "LocVsIloc"),
+    "pandas/ffill-bfill":          ("data_scenes.py", "FfillBfill"),
+    "pandas/category-codes":       ("data_scenes.py", "CategoryCodes"),
+    "pandas/split-apply-combine":  ("data_scenes.py", "SplitApplyCombine"),
+    "pandas/agg-vs-transform":     ("data_scenes.py", "AggVsTransform"),
+    "pandas/melt-pivot":           ("data_scenes.py", "MeltPivot"),
+    "pandas/merge-joins":          ("data_scenes.py", "MergeJoins"),
+    "matplotlib/anatomy":          ("data_scenes.py", "MplAnatomy"),
+    "matplotlib/histogram-binning": ("data_scenes.py", "HistogramBinning"),
+    "seaborn/kde-bumps":           ("data_scenes.py", "KdeBumps"),
+    "seaborn/boxplot-quartiles":   ("data_scenes.py", "BoxplotQuartiles"),
+    "capstone/cleaning-funnel":    ("data_scenes.py", "CleaningFunnel"),
+    "capstone/gridspec-assembly":  ("data_scenes.py", "GridspecAssembly"),
     # PyTorch Fundamentals
     "pytorch/broadcasting":        ("pytorch_scenes.py", "Broadcasting"),
     "pytorch/autograd-backward":   ("pytorch_scenes.py", "AutogradBackward"),

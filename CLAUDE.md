@@ -112,6 +112,13 @@ Core-language Python for AI-engineer interviews. These pages use the **Java qual
 - **Code blocks:** `python` blocks use `# highlight-next-line`, `# error-next-line`, `# success-next-line` (and the `-start`/`-end` forms).
 - **Cross-links** between these pages use file links (`./05-functions-scope-closures.md`) so the build validates them.
 
+# Python for Data Exploration pages (docs/03-ai-ml/01-python-for-data-exploration/)
+NumPy, pandas, Matplotlib and Seaborn for EDA, all on one running dataset, **ShopStream** (a seeded, deliberately messy e-commerce dataset).
+- **Layout:** frontmatter → TL;DR → `<PriorityKey lang="pandas" v="3.0" />` (library and version per page) → `<FormulaKey />` (if the page has equations) → `## 🧭 Start Here` (plain-language explainer, a "New concept | One-line meaning" table, an analogy) → ⚡ Essential Interview Recall → 📐 Formula Sheet (if equations) → `:::speak` → The Mental Model (Mermaid + 2 `<Animation>`) → The Paradigm / Core Concepts (tables, `<RuleCard>`, `<Formula>`) → ⚙️ Under the Hood → 💻 Implementation on ShopStream → 🧪 Predict the Output (5+) → 🪜 Follow-up Ladder → 🚑 Production Scenarios → 🚨 Interview Gotchas. 3 analogies per page.
+- **Shared code** lives in `scripts/data_exploration/`: `shopstream.py` (generator, `make_shopstream()`), `clean.py` (`clean_orders()`, used from the GroupBy page on), `site_style.py` (house chart style: validated palette + rcParams), `figures_matplotlib.py` and `figures_seaborn.py` (render every image on those pages into `static/img/data-exploration/`), `capstone_eda.py` (the full capstone script, embedded verbatim on page 9). CSVs for download are in `static/data/` and linked with `pathname:///data/...`.
+- **Correctness:** outputs verified on Python 3.14, NumPy 2.5.4, pandas 3.0.6 (Copy-on-Write always on, `str` dtype default, `applymap` removed), Matplotlib 3.11.2, Seaborn 0.13.2, PyTorch 2.14 (CPU). Re-run the scripts and update the quoted numbers if the generator or cleaning changes.
+- **Charts:** follow the house style (one y-axis per chart: teach `twinx` only with a warning and the two-panel alternative), direct labels where possible, PNG at 150 dpi.
+
 # Page Structure Specification
 Every generated `.md` page MUST strictly follow this layout:
 
