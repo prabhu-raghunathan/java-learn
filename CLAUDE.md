@@ -103,6 +103,15 @@ Same prop rules as the Formula card: blank lines around inner markdown, and no d
 
 **Escapes:** write Java unicode escapes (`'\u0000'`, `'\uFFFF'`, `'\u0041'`) as literal backslash text, and check afterwards that the file contains no NUL or U+FFFF characters (some file writers convert the escape into the real character, which breaks the build's HTML minifier).
 
+# Python Fundamentals pages (docs/03-ai-ml/00-python-fundamentals/)
+Core-language Python for AI-engineer interviews. These pages use the **Java quality bar and layout** above (priority badges, `:::speak`, rule cards, 5+ `<Predict>` drills, one `<Ladder>`, `:::incident` scenarios, analogies), adapted to Python, plus the AI/ML animation rule (2 Manim clips per page, scenes in `animations/python_scenes.py`, keys `python/...`).
+- **Layout:** frontmatter → TL;DR → `<PriorityKey lang="Python" v="3.10" />` → ⚡ Essential Interview Recall → `:::speak` → The Mental Model → The Paradigm / Core Concepts → ⚙️ Under the Hood (CPython Internals) → 💻 Python Implementation → 🧪 Predict the Output → 🪜 Follow-up Ladder → 🚑 Production Scenario(s) → 🚨 Interview Gotchas & Edge Cases.
+- **Version pills:** `<Since v="3.10" lang="Python" />` renders "Python 3.10+" (the `lang` prop defaults to Java).
+- **AI angle:** keep the course notes' AI/ML tips as `:::info[AI Engineering: ...]` boxes, and prefer AI examples (training loops, tokenizers, LLM API calls, PyTorch `Dataset`/`nn.Module`) in code and incidents.
+- **Correctness:** run every snippet on a current CPython (the existing pages were verified on 3.14.6, the free-threaded build on 3.14.6t) and copy outputs into the trailing comments; quote error messages exactly as that version prints them.
+- **Code blocks:** `python` blocks use `# highlight-next-line`, `# error-next-line`, `# success-next-line` (and the `-start`/`-end` forms).
+- **Cross-links** between these pages use file links (`./05-functions-scope-closures.md`) so the build validates them.
+
 # Page Structure Specification
 Every generated `.md` page MUST strictly follow this layout:
 

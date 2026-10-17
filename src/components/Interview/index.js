@@ -4,6 +4,7 @@
  *
  *  <PriorityKey />                       legend for the 🔴 🟠 🟡 heading badges (once, after the TL;DR)
  *  <Since v="17" />                      inline "Java 17+" version pill
+ *  <Since v="3.10" lang="Python" />      inline "Python 3.10+" pill (PriorityKey takes the same lang/v props)
  *
  *  <Predict n="1" title="Integer cache" output="true false">
  *
@@ -37,7 +38,7 @@ import styles from './styles.module.css';
 /* Priority legend + version pill                                      */
 /* ------------------------------------------------------------------ */
 
-export function PriorityKey() {
+export function PriorityKey({lang = 'Java', v = '17'}) {
   return (
     <div className={styles.key}>
       <span className={styles.keyTitle}>Section badges</span>
@@ -51,16 +52,16 @@ export function PriorityKey() {
         🟡 <span>senior-level differentiator</span>
       </span>
       <span className={styles.keyItem}>
-        <Since v="17" /> <span>needs that Java version or newer</span>
+        <Since v={v} lang={lang} /> <span>needs that {lang} version or newer</span>
       </span>
     </div>
   );
 }
 
-export function Since({v}) {
+export function Since({v, lang = 'Java'}) {
   return (
-    <span className={styles.since} title={`Available since Java ${v}`}>
-      Java {v}+
+    <span className={styles.since} title={`Available since ${lang} ${v}`}>
+      {lang} {v}+
     </span>
   );
 }

@@ -36,3 +36,7 @@ No import needed: the component is registered in `src/theme/MDXComponents.js`.
 ## Core Java scenes
 
 `java_scenes.py` holds the Java memory/bytecode animations (`jvm/gc-generations`, `oop/init-order`, `variables/pass-by-value`, `operators/postfix-trap`). They use the same `WikiScene` helpers; values shown must match what the page's verified code prints.
+
+## Python Fundamentals scenes
+
+`python_scenes.py` holds the 18 animations for `docs/03-ai-ml/00-python-fundamentals/` (keys `python/...`). They subclass `PyScene` (a `WikiScene` with `say()` / `code()` helpers that cross-fade captions and code lines) and use `box()`, `code_block()` (keeps indentation, which `Text` strips) and `arrow()`. Numbers shown (list capacities, dict probe slots, GIL and asyncio timings) come from the verified runs quoted on the pages. Avoid `NumberLine(include_numbers=True)`: it needs LaTeX/dvisvgm; draw tick labels with `label()` instead.

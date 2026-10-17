@@ -51,6 +51,25 @@ MANIFEST = {
     "oop/init-order":              ("java_scenes.py", "InitOrder"),
     "variables/pass-by-value":     ("java_scenes.py", "PassByValue"),
     "operators/postfix-trap":      ("java_scenes.py", "PostfixTrap"),
+    # Python Fundamentals
+    "python/names-objects":        ("python_scenes.py", "NamesObjects"),
+    "python/refcount":             ("python_scenes.py", "RefCount"),
+    "python/short-circuit":        ("python_scenes.py", "ShortCircuit"),
+    "python/floor-division":       ("python_scenes.py", "FloorDivision"),
+    "python/list-growth":          ("python_scenes.py", "ListGrowth"),
+    "python/shallow-deep-copy":    ("python_scenes.py", "ShallowDeepCopy"),
+    "python/dict-hash-table":      ("python_scenes.py", "DictHashTable"),
+    "python/set-vs-list-lookup":   ("python_scenes.py", "SetVsListLookup"),
+    "python/mutable-default":      ("python_scenes.py", "MutableDefault"),
+    "python/late-binding":         ("python_scenes.py", "LateBinding"),
+    "python/generator-pause":      ("python_scenes.py", "GeneratorPause"),
+    "python/decorator-wrap":       ("python_scenes.py", "DecoratorWrap"),
+    "python/attribute-lookup":     ("python_scenes.py", "AttributeLookup"),
+    "python/mro-c3":               ("python_scenes.py", "MroC3"),
+    "python/try-flow":             ("python_scenes.py", "TryFlow"),
+    "python/exception-propagation":("python_scenes.py", "ExceptionPropagation"),
+    "python/gil-threads-vs-processes": ("python_scenes.py", "GilThreadsVsProcesses"),
+    "python/asyncio-event-loop":   ("python_scenes.py", "AsyncioEventLoop"),
 }
 
 QUALITY = "-qm"   # 1280x720 @ 30 fps: crisp text, small files (~0.2–0.6 MB each)

@@ -1,0 +1,8 @@
+{
+  "label": "Python Fundamentals",
+  "position": 0,
+  "link": {
+    "type": "generated-index",
+    "description": "Core Python for AI-engineer interviews: how the interpreter runs your code, data structures and their Big-O, functions and closures, generators and decorators, OOP and the data model, exceptions, and concurrency (GIL, multiprocessing, asyncio)."
+  }
+}
