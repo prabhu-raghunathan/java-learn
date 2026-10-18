@@ -367,3 +367,186 @@ class DropoutTrainEval(WikiScene):
         self.play(*anims, run_time=1)
         self.play(FadeIn(caption_bar("Same expected value in both modes: 0.5 × 2.0 = 1.0, so nothing to rescale at test time")))
         self.wait(2.5)
+
+
+# ============================================================================
+# CNN in Practice: Cats vs Dogs (05-cnn-practical-cats-vs-dogs)
+# ============================================================================
+CAT_C, DOG_C = INFO, PURPLE
+SCALE = 12.0 / 25000          # scene units per image, shared by every bar
+
+
+def class_bar(n_cat, n_dog, height=0.55):
+    """A horizontal bar split into a cat part and a dog part, widths proportional to counts."""
+    cat = Rectangle(width=n_cat * SCALE, height=height, stroke_width=0).set_fill(CAT_C, 0.85)
+    dog = Rectangle(width=n_dog * SCALE, height=height, stroke_width=0).set_fill(DOG_C, 0.85)
+    dog.next_to(cat, RIGHT, buff=0)
+    return VGroup(cat, dog)
+
+
+class StratifiedSplit(WikiScene):
+    """25,000 files → balanced 12,000 → stratified 8,400 / 1,800 / 1,800 (numbers from sklearn)."""
+
+    def construct(self):
+        head = title("Balanced sample, then two stratified splits")
+        self.add(head)
+        legend = VGroup(
+            Square(0.25, stroke_width=0).set_fill(CAT_C, 0.85), label("cat (0)", 20, FG),
+            Square(0.25, stroke_width=0).set_fill(DOG_C, 0.85), label("dog (1)", 20, FG),
+        ).arrange(RIGHT, buff=0.15)
+        legend[2].shift(RIGHT * 0.3); legend[3].shift(RIGHT * 0.3)
+        legend.next_to(head, DOWN, buff=0.25)
+        self.add(legend)
+
+        # Row 1: everything
+        all_bar = class_bar(12500, 12500).move_to(UP * 1.35)
+        all_lbl = label("all files: 25,000  =  12,500 cats + 12,500 dogs", 22, FG).next_to(all_bar, DOWN, buff=0.15)
+        self.play(FadeIn(all_bar), FadeIn(all_lbl), run_time=1)
+        self.wait(0.6)
+
+        # Row 2: balanced 6,000 + 6,000
+        bal_bar = class_bar(6000, 6000).move_to(UP * 0.0)
+        bal_lbl = label("df.sample(6,000) per class  →  12,000 (50 / 50)", 22, FG).next_to(bal_bar, DOWN, buff=0.15)
+        self.play(TransformFromCopy(all_bar, bal_bar), FadeIn(bal_lbl), run_time=1.2)
+        self.wait(0.6)
+
+        # Row 3: 70 / 15 / 15, each stratified
+        tr = class_bar(4200, 4200); va = class_bar(900, 900); te = class_bar(900, 900)
+        row = VGroup(tr, va, te).arrange(RIGHT, buff=1.5).move_to(DOWN * 1.55)
+        names = [("train 70%", "8,400", "4,200 | 4,200"), ("val 15%", "1,800", "900 | 900"),
+                 ("test 15%", "1,800", "900 | 900")]
+        lbls = VGroup()
+        for bar, (nm, total, split) in zip(row, names):
+            lbls.add(VGroup(label(nm, 20, FG), label(total, 20, FG, mono=True), label(split, 18, MUTED, mono=True))
+                     .arrange(DOWN, buff=0.06).next_to(bar, DOWN, buff=0.15))
+        step1 = label("train_test_split(test_size=0.3, stratify=label)", 19, HIGHLIGHT, mono=True)
+        step1.next_to(bal_lbl, DOWN, buff=0.12)
+        self.play(FadeIn(step1), run_time=0.5)
+        self.play(TransformFromCopy(bal_bar, tr), run_time=1)
+        self.play(FadeIn(lbls[0]), run_time=0.4)
+        step2 = label("then split the 30% in half, stratified again", 19, HIGHLIGHT, mono=True).move_to(step1)
+        self.play(Transform(step1, step2), run_time=0.5)
+        self.play(TransformFromCopy(bal_bar, VGroup(va, te)), run_time=1)
+        self.play(FadeIn(lbls[1]), FadeIn(lbls[2]), run_time=0.5)
+        self.wait(0.5)
+        self.play(FadeIn(caption_bar("Every subset keeps exactly 50% cats: no split is starved of a class")))
+        self.wait(2.5)
+
+
+class PixelToTensor(WikiScene):
+    """One stored pixel to model input: BGR→RGB, ÷255, then HWC → CHW regrouping."""
+
+    def construct(self):
+        head = title("From a stored pixel to a model-ready tensor")
+        self.add(head)
+
+        def cells(values, colors, size=24, w=1.5):
+            g = VGroup()
+            for v, c in zip(values, colors):
+                box = Rectangle(width=w, height=0.75, stroke_color=c, stroke_width=3).set_fill(c, 0.18)
+                g.add(VGroup(box, label(v, size, FG, mono=True).move_to(box)))
+            return g.arrange(RIGHT, buff=0.12)
+
+        R, G, B = ERROR, SUCCESS, INFO
+        # Stage 1: OpenCV gives B, G, R
+        bgr = cells(["87", "164", "203"], [B, G, R]).move_to(UP * 1.5 + LEFT * 2.6)
+        tags = VGroup(*[label(t, 20, c).next_to(bgr[i], UP, buff=0.12) for i, (t, c) in enumerate([("B", B), ("G", G), ("R", R)])])
+        note = label("cv2.imread  →  uint8, BGR order", 22, MUTED).next_to(bgr, RIGHT, buff=0.5)
+        self.play(FadeIn(bgr), FadeIn(tags), FadeIn(note), run_time=0.8)
+        self.wait(0.6)
+
+        # Stage 2: swap to R, G, B
+        note2 = label("cvtColor(BGR2RGB)  →  203, 164, 87", 22, HIGHLIGHT).move_to(note, aligned_edge=LEFT)
+        p0, p2 = bgr[0].get_center(), bgr[2].get_center()
+        t0, t2 = tags[0].get_center(), tags[2].get_center()
+        self.play(bgr[0].animate.move_to(p2), bgr[2].animate.move_to(p0),
+                  tags[0].animate.move_to(t2), tags[2].animate.move_to(t0),
+                  Transform(note, note2), run_time=1.2)
+        self.wait(0.5)
+
+        # Stage 3: divide by 255 (values from numpy: 0.796, 0.643, 0.341)
+        scaled = cells(["0.796", "0.643", "0.341"], [R, G, B], size=22).move_to(DOWN * 0.1 + LEFT * 2.6)
+        note3 = label("÷ 255  →  float in [0, 1]", 22, HIGHLIGHT).next_to(scaled, RIGHT, buff=0.5)
+        self.play(FadeIn(scaled, shift=DOWN * 0.3), FadeIn(note3), run_time=1)
+        self.wait(0.6)
+
+        # Stage 4: HWC → CHW for a 2×2 image (symbolic values)
+        self.play(*[FadeOut(m) for m in (bgr, tags, note, scaled, note3)], run_time=0.5)
+        hwc_title = label("(H, W, C): channels interleaved, pixel by pixel", 22, FG).move_to(UP * 1.75)
+        names = []
+        for p in range(1, 5):
+            names += [(f"R{p}", R), (f"G{p}", G), (f"B{p}", B)]
+        strip = VGroup(*[VGroup(Rectangle(width=0.82, height=0.6, stroke_color=c, stroke_width=2.5).set_fill(c, 0.18),
+                                label(n, 18, FG, mono=True)) for n, c in names])
+        for item in strip:
+            item[1].move_to(item[0])
+        strip.arrange(RIGHT, buff=0.06).move_to(UP * 0.95)
+        self.play(FadeIn(hwc_title), FadeIn(strip), run_time=0.8)
+        self.wait(0.4)
+        ghost = strip.copy().set_opacity(0.35)          # keep the "before" layout visible
+        self.add(ghost)
+
+        chw_title = label("np.transpose(img, (2, 0, 1))  →  (C, H, W): one plane per colour", 22, HIGHLIGHT).move_to(DOWN * 0.15)
+        targets = []
+        plane_centers = [LEFT * 4 + DOWN * 1.65, DOWN * 1.65, RIGHT * 4 + DOWN * 1.65]
+        for idx in range(12):
+            ch, p = idx % 3, idx // 3
+            r, c = p // 2, p % 2
+            targets.append(plane_centers[ch] + RIGHT * (c - 0.5) * 0.9 + DOWN * (r - 0.5) * 0.68)
+        plane_lbls = VGroup(*[label(t, 20, col).move_to(pc + UP * 1.0) for t, col, pc in
+                              zip(["R plane", "G plane", "B plane"], [R, G, B], plane_centers)])
+        self.play(FadeIn(chw_title), run_time=0.5)
+        self.play(*[strip[i].animate.move_to(targets[i]) for i in range(12)], FadeIn(plane_lbls), run_time=1.6)
+        self.play(FadeIn(caption_bar("Conv2d reads whole colour planes: (3, H, W) per image, (B, 3, H, W) per batch")))
+        self.wait(2.5)
+
+
+class ConfusionMetrics(WikiScene):
+    """Example 1,800-image test set: TN 780, FP 120, FN 90, TP 810 (metrics from sklearn)."""
+
+    def construct(self):
+        head = title("Confusion matrix → precision, recall, F1   (positive class = dog)")
+        self.add(head)
+        cw, chh = 2.0, 1.1
+        origin = LEFT * 3.6 + UP * 0.35
+        vals = [[("TN", 780, SUCCESS), ("FP", 120, ERROR)], [("FN", 90, ERROR), ("TP", 810, SUCCESS)]]
+        cells = [[None, None], [None, None]]
+        grid = VGroup()
+        for i in range(2):
+            for j in range(2):
+                box = Rectangle(width=cw, height=chh, stroke_color=MUTED, stroke_width=2)
+                box.move_to(origin + RIGHT * j * cw + DOWN * i * chh)
+                cells[i][j] = box
+                grid.add(box)
+        col_h = VGroup(label("pred cat", 20, MUTED).next_to(cells[0][0], UP, buff=0.12),
+                       label("pred dog", 20, MUTED).next_to(cells[0][1], UP, buff=0.12))
+        row_h = VGroup(label("actual cat", 20, MUTED).next_to(cells[0][0], LEFT, buff=0.15),
+                       label("actual dog", 20, MUTED).next_to(cells[1][0], LEFT, buff=0.15))
+        self.play(Create(grid), FadeIn(col_h), FadeIn(row_h), run_time=0.8)
+
+        for i, j in [(0, 0), (1, 1), (0, 1), (1, 0)]:
+            tag, v, col = vals[i][j]
+            txt = VGroup(label(tag, 18, col), label(str(v), 30, FG, mono=True)).arrange(DOWN, buff=0.05).move_to(cells[i][j])
+            self.play(cells[i][j].animate.set_fill(col, 0.15), FadeIn(txt), run_time=0.45)
+        self.wait(0.4)
+
+        rx = RIGHT * 3.2
+        acc = label("accuracy = (780 + 810) / 1800 = 0.883", 22, FG).move_to(rx + UP * 1.6)
+        self.play(FadeIn(acc), run_time=0.6)
+
+        col_box = SurroundingRectangle(VGroup(cells[0][1], cells[1][1]), color=HIGHLIGHT, buff=0.05, stroke_width=4)
+        prec = label("precision = TP / (TP + FP) = 810 / 930 = 0.871", 22, HIGHLIGHT).move_to(rx + UP * 0.7)
+        prec_note = label("of everything called dog, how much was dog?", 18, MUTED).next_to(prec, DOWN, buff=0.08)
+        self.play(Create(col_box), FadeIn(prec), FadeIn(prec_note), run_time=0.9)
+        self.wait(0.8)
+
+        row_box = SurroundingRectangle(VGroup(cells[1][0], cells[1][1]), color=INFO, buff=0.05, stroke_width=4)
+        rec = label("recall = TP / (TP + FN) = 810 / 900 = 0.900", 22, INFO).move_to(rx + DOWN * 0.45)
+        rec_note = label("of all real dogs, how many were found?", 18, MUTED).next_to(rec, DOWN, buff=0.08)
+        self.play(ReplacementTransform(col_box, row_box), FadeIn(rec), FadeIn(rec_note), run_time=0.9)
+        self.wait(0.8)
+
+        f1 = label("F1 = 2PR / (P + R) = 0.885", 26, SUCCESS, weight=BOLD).move_to(rx + DOWN * 1.6)
+        self.play(FadeOut(row_box), FadeIn(f1, scale=1.1), run_time=0.8)
+        self.play(FadeIn(caption_bar("Precision is hurt by false alarms (FP), recall by misses (FN)")))
+        self.wait(2.5)

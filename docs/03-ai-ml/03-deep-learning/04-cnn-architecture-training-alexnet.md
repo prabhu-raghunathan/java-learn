@@ -12,6 +12,7 @@ A CNN classifier stacks **Conv → ReLU → Pool** blocks to turn an image into 
 :::info[This topic spans two pages]
 **Previous page:** [CNN Fundamentals](./03-cnn-fundamentals.md) covers convolution, stride, padding, filters and pooling (the output-size and parameter formulas live there).
 **This page** assembles those blocks into a full classifier, trains it, regularizes it, compares it with an ANN, and walks through AlexNet.
+**Next:** [CNN in Practice: Cats vs Dogs](./05-cnn-practical-cats-vs-dogs.md) runs the whole pipeline on real images, then [Transfer Learning with ResNet18](./06-transfer-learning-resnet18.md).
 :::
 
 ## ⚡ Essential Interview Recall

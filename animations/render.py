@@ -65,6 +65,13 @@ MANIFEST = {
     # CNN Architecture, Training, Dropout & AlexNet
     "cnn/shape-funnel":            ("cnn_scenes.py", "ShapeFunnel"),
     "cnn/dropout":                 ("cnn_scenes.py", "DropoutTrainEval"),
+    # CNN in Practice: Cats vs Dogs
+    "cnn/stratified-split":        ("cnn_scenes.py", "StratifiedSplit"),
+    "cnn/pixel-to-tensor":         ("cnn_scenes.py", "PixelToTensor"),
+    "cnn/confusion-metrics":       ("cnn_scenes.py", "ConfusionMetrics"),
+    # Transfer Learning with ResNet18
+    "transfer/freeze-vs-finetune": ("transfer_scenes.py", "FreezeVsFinetune"),
+    "transfer/early-stopping":     ("transfer_scenes.py", "EarlyStoppingScene"),
     # Core Java
     "jvm/gc-generations":          ("java_scenes.py", "GcGenerations"),
     "oop/init-order":              ("java_scenes.py", "InitOrder"),
