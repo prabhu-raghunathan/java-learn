@@ -9,6 +9,10 @@ A **PyTorch tensor** is a multi-dimensional array that stores numbers **plus** t
 
 <FormulaKey />
 
+:::info[Want the maths underneath?]
+[The Calculus Behind PyTorch](./01-calculus-behind-pytorch.md) works through derivatives, the chain rule and backpropagation by hand, then checks every number with autograd.
+:::
+
 ## ⚡ Essential Interview Recall
 
 - **Tensor** = scalar (0-D) → vector (1-D) → matrix (2-D) → n-D. What sets it apart is its **behavior**, not its shape: **vectorized math + gradient tracking + device mobility**.

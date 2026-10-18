@@ -6,7 +6,7 @@ and embedded with the `<Animation>` component.
 | File | What it holds |
 |---|---|
 | `style.py` | Shared colours, fonts and helpers. Every scene subclasses `WikiScene` |
-| `pytorch_scenes.py`, `ann_scenes.py`, `cnn_scenes.py`, `transfer_scenes.py` | One file per topic, several `Scene` classes each |
+| `pytorch_scenes.py`, `calculus_scenes.py`, `ann_scenes.py`, `cnn_scenes.py`, `transfer_scenes.py` | One file per topic, several `Scene` classes each |
 | `render.py` | Renders scenes → `static/animations/<topic>/<name>.{mp4,webm,jpg}` |
 
 ## Render

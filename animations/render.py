@@ -53,6 +53,11 @@ MANIFEST = {
     "pytorch/broadcasting":        ("pytorch_scenes.py", "Broadcasting"),
     "pytorch/autograd-backward":   ("pytorch_scenes.py", "AutogradBackward"),
     "pytorch/zero-grad":           ("pytorch_scenes.py", "ZeroGradAccumulation"),
+    # The Calculus Behind PyTorch
+    "calculus/secant-to-tangent":  ("calculus_scenes.py", "SecantToTangent"),
+    "calculus/graph-backprop":     ("calculus_scenes.py", "GraphBackprop"),
+    "calculus/gradient-descent":   ("calculus_scenes.py", "GradientDescent"),
+    "calculus/sigmoid-derivative": ("calculus_scenes.py", "SigmoidDerivative"),
     # Artificial Neural Networks
     "ann/forward-backward":        ("ann_scenes.py", "ForwardBackward"),
     "ann/relu-kinks":              ("ann_scenes.py", "ReluKinks"),
