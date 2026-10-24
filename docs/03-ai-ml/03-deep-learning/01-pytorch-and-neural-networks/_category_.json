@@ -1,0 +1,8 @@
+{
+  "label": "PyTorch & Neural Networks",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "PyTorch tensors and autograd, the calculus behind it, and artificial neural networks."
+  }
+}

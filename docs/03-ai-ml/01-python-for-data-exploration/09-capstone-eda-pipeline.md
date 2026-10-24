@@ -17,10 +17,10 @@ Every previous page took one tool and one slice of the problem. Real EDA doesn't
 
 | Stage | Question it answers | Tools | Page |
 |---|---|---|---|
-| 1. Load and profile | What do I actually have? What's broken? | `read_csv`, `info`, `nunique`, `isna().mean()` | [Structures & Loading](./03-pandas-structures-loading-indexing.md) |
-| 2. Clean | What's true? | `to_datetime`, `.str`, `category`, `drop_duplicates`, IQR fences, `merge(validate=...)` | [Cleaning](./04-pandas-cleaning-types-missing-data.md), [Reshape & Combine](./06-pandas-reshape-combine.md) |
-| 3. Features and aggregation | What summarizes the business? | Vectorized columns, `pd.cut`, `groupby` / `agg` / `transform`, `pivot_table` | [GroupBy](./05-pandas-groupby-apply-transform.md) |
-| 4. Visualize | Where are the patterns? | `GridSpec`, Matplotlib lines and bars, Seaborn lines, boxes, bars | [Matplotlib](./07-matplotlib-figures-axes.md), [Seaborn](./08-seaborn-statistical-plots.md) |
+| 1. Load and profile | What do I actually have? What's broken? | `read_csv`, `info`, `nunique`, `isna().mean()` | [Structures & Loading](./02-pandas/03-pandas-structures-loading-indexing.md) |
+| 2. Clean | What's true? | `to_datetime`, `.str`, `category`, `drop_duplicates`, IQR fences, `merge(validate=...)` | [Cleaning](./02-pandas/04-pandas-cleaning-types-missing-data.md), [Reshape & Combine](./02-pandas/06-pandas-reshape-combine.md) |
+| 3. Features and aggregation | What summarizes the business? | Vectorized columns, `pd.cut`, `groupby` / `agg` / `transform`, `pivot_table` | [GroupBy](./02-pandas/05-pandas-groupby-apply-transform.md) |
+| 4. Visualize | Where are the patterns? | `GridSpec`, Matplotlib lines and bars, Seaborn lines, boxes, bars | [Matplotlib](./03-visualization/07-matplotlib-figures-axes.md), [Seaborn](./03-visualization/08-seaborn-statistical-plots.md) |
 | 5. Conclude | What should someone do? | Numbers + effect sizes + caveats | This page |
 
 | New concept | One-line meaning |
@@ -150,7 +150,7 @@ $$
 - **Determinism**: the generator is seeded (`seed=42`), the bootstrap CIs use Seaborn's own RNG (pass `seed=` for exact reproducibility), and every number on this page comes from one run of the script.
 
 :::danger[Interview Trap]
-**Cleaning can create or destroy a trend.** On the [Matplotlib page](./07-matplotlib-figures-axes.md), before per-category outlier removal, Beauty revenue looked up **71%** in May and **40%** by June. Two ×40 Beauty price errors were inflating it; after cleaning, May is +32% and June +24%. Always re-run the charts after changing a cleaning rule, and be suspicious of any spectacular trend driven by a handful of rows (check with `nlargest`).
+**Cleaning can create or destroy a trend.** On the [Matplotlib page](./03-visualization/07-matplotlib-figures-axes.md), before per-category outlier removal, Beauty revenue looked up **71%** in May and **40%** by June. Two ×40 Beauty price errors were inflating it; after cleaning, May is +32% and June +24%. Always re-run the charts after changing a cleaning rule, and be suspicious of any spectacular trend driven by a handful of rows (check with `nlargest`).
 :::
 
 :::danger[Interview Trap]

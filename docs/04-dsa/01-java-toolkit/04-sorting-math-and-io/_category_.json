@@ -1,0 +1,8 @@
+{
+  "label": "Sorting, Math & I/O",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Comparators and sorting, number pitfalls and bit tricks, streams and fast input/output."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "label": "JVM Internals",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "JDK vs JRE vs JVM, class loading, runtime memory areas, JIT, and garbage collection."
+  }
+}

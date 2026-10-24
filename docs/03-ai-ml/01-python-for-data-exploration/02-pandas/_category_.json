@@ -1,0 +1,8 @@
+{
+  "label": "pandas",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Series and DataFrames: loading, indexing, cleaning, GroupBy, reshaping and combining."
+  }
+}

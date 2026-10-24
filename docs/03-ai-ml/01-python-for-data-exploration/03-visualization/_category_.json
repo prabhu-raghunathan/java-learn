@@ -1,0 +1,8 @@
+{
+  "label": "Visualization",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "Matplotlib figures and axes, and Seaborn statistical plots."
+  }
+}

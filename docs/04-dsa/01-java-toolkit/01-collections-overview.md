@@ -80,17 +80,34 @@ Map<String, List<Integer>> graph = new HashMap<>();
 
 ## Big-O Cheat Sheet
 
-| Structure | Add | Remove | Search / contains | Get by index | Ordered? |
-| --- | --- | --- | --- | --- | --- |
-| `ArrayList` | O(1)* at end, O(n) in middle | O(n) (shift), O(1) at end | O(n) | **O(1)** | insertion |
-| `LinkedList` | O(1) at ends | O(1) at ends, O(n) by value | O(n) | O(n) | insertion |
-| `ArrayDeque` | O(1)* at ends | O(1) at ends | O(n) | n/a | insertion |
-| `PriorityQueue` | O(log n) | O(log n) `poll`, **O(n)** `remove(x)` | O(n) | n/a | **heap order only** |
-| `HashSet` / `HashMap` | O(1) avg | O(1) avg | O(1) avg | n/a | none |
-| `LinkedHashSet` / `LinkedHashMap` | O(1) avg | O(1) avg | O(1) avg | n/a | insertion (or access) |
-| `TreeSet` / `TreeMap` | O(log n) | O(log n) | O(log n) | n/a | **sorted** |
+Time per operation, and memory. "Bytes/elem" was measured on JDK 21 with 10⁶ `Integer` elements (64-bit JVM, compressed references); see [Time & Space Complexity](../00-complexity-analysis.md) for the method.
+
+| Structure | Add | Remove | Search / contains | Get by index | Ordered? | Space | Bytes/elem |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `int[]` (for comparison) | n/a (fixed size) | n/a | O(n), O(log n) if sorted | **O(1)** | as written | O(n) | 4 |
+| `ArrayList` | O(1)* at end, O(n) in middle | O(n) (shift), O(1) at end | O(n) | **O(1)** | insertion | O(n) | ~21 |
+| `LinkedList` | O(1) at ends | O(1) at ends, O(n) by value | O(n) | O(n) | insertion | O(n) | 40 |
+| `ArrayDeque` | O(1)* at ends | O(1) at ends | O(n) | n/a | insertion | O(n) | ~21 |
+| `PriorityQueue` | O(log n) | O(log n) `poll`, **O(n)** `remove(x)` | O(n) | n/a | **heap order only** | O(n) | ~21 |
+| `HashSet` | O(1) avg | O(1) avg | **O(1) avg** | n/a | none | O(n) | ~56 |
+| `HashMap` | O(1) avg | O(1) avg | O(1) avg (key) | n/a | none | O(n) | ~72 |
+| `LinkedHashSet` / `LinkedHashMap` | O(1) avg | O(1) avg | O(1) avg | n/a | insertion (or access) | O(n) | ~80 (map) |
+| `TreeSet` / `TreeMap` | O(log n) | O(log n) | **O(log n)** | n/a | **sorted** | O(n) | ~56 / ~72 |
 
 \* amortised: the backing array occasionally grows (ArrayList by 1.5×; ArrayDeque doubles while small, then grows by 1.5×), which is O(n) once but averages out to O(1).
+
+Every structure here is **O(n) space**, but the constant differs a lot: a `HashMap<Integer, Integer>` uses ~18× the memory of an `int[]` holding the same numbers, because each entry is a node object plus two boxed `Integer`s.
+
+### Searching: HashSet vs TreeSet vs List vs sorted array
+
+| Structure | `contains` time | Extra space | Also gives you | Pick it when |
+| --- | --- | --- | --- | --- |
+| `HashSet` | **O(1)** average, O(log n) worst | O(n) | nothing else | you only ask "is x present?" |
+| `TreeSet` | O(log n) | O(n) | sorted order, `floor`/`ceiling`, min/max | you also need order or the nearest value |
+| sorted `int[]` + `Arrays.binarySearch` | O(log n) | O(1) beyond the array | insertion point | the data is fixed after one sort (O(n log n) once) |
+| `ArrayList.contains` | **O(n)** | O(1) beyond the list | index access | never inside a loop |
+
+Measured (10⁶ lookups in 10⁶ `Integer`s): `HashSet` 72 ms, sorted `int[]` 165 ms, `TreeSet` 952 ms; `ArrayList.contains` took 1.1 s for just 1,000 lookups.
 
 :::info[Hash worst case]
 Since Java 8, a `HashMap` bucket that collects 8 or more colliding keys (in a table of at least 64 buckets) turns into a **red-black tree**, so the worst case per operation is **O(log n)**, not O(n). In interviews, still quote **O(1) average**.
@@ -192,14 +209,14 @@ A record can be declared inside a method or as a nested class in your `Solution`
 
 ### Other ways to use a pair as a key
 
-| Key type | Works as a HashSet / HashMap key? | Notes |
-| --- | --- | --- |
-| `record Cell(int r, int c)` | ✅ yes | Best choice on Java 16+ |
-| `List.of(r, c)` / `Arrays.asList(r, c)` | ✅ yes | `List.equals` compares elements; boxing makes it slower |
-| `r + "," + c` (String) | ✅ yes | Easy but slow (builds a String every time) |
-| `r * cols + c` (int) | ✅ yes | Fastest; decode with `id / cols`, `id % cols` |
-| `(long) r << 32 \| c` (long) | ✅ yes | Fast, works for large coordinates (needs `c ≥ 0`) |
-| `int[] {r, c}` | ❌ **no** | Arrays use identity `equals`: `contains(new int[]{1, 2})` is `false` |
+| Key type | Works as a HashSet / HashMap key? | Cost per hash / equals | Extra memory per key | Notes |
+| --- | --- | --- | --- | --- |
+| `record Cell(int r, int c)` | ✅ yes | O(1) | one small object | Best choice on Java 16+ |
+| `List.of(r, c)` / `Arrays.asList(r, c)` | ✅ yes | O(k) for k items, recomputed every time | list + boxed `Integer`s | slower; fine for small tuples |
+| `r + "," + c` (String) | ✅ yes | O(digits) + building the string each lookup | a new `String` per lookup | easy but slow |
+| `r * cols + c` (int) | ✅ yes | O(1) | none (`int`, boxed only inside the map) | Fastest; decode with `id / cols`, `id % cols` |
+| `(long) r << 32 \| c` (long) | ✅ yes | O(1) | none | Fast, works for large coordinates (needs `c ≥ 0`) |
+| `int[] {r, c}` | ❌ **no** | identity only | | Arrays use identity `equals`: `contains(new int[]{1, 2})` is `false` |
 
 ```java showLineNumbers
 int r = 3, c = 4, cols = 10;
@@ -222,6 +239,13 @@ System.out.println(s.size());                // 1
 
 Records are immutable, which is another reason to prefer them as keys.
 :::
+
+## Hidden Costs of Keys and Elements
+
+- **Hashing a key costs O(key size).** For an `Integer` key it's O(1); for a `String` of length L it's O(L) the first time (then cached in the String); for a `List<Integer>` key it's O(list length) **every time** (lists don't cache their hash). So a "O(1)" map lookup with a 1,000-char string key is really O(1,000).
+- **Comparing keys costs O(key size) too.** `TreeMap<String, …>` operations are O(L · log n) for strings of length L.
+- **Boxing:** `List<Integer>` stores pointers to `Integer` objects. Values -128..127 come from a shared cache; everything else allocates a 16-byte object per value.
+- **`equals`/`hashCode` you write** must be O(fields), never loop over big collections.
 
 ## Common Interview Traps
 

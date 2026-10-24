@@ -1,0 +1,8 @@
+{
+  "label": "NumPy",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "description": "ndarrays, memory layout, indexing, broadcasting, linear algebra and aggregations."
+  }
+}

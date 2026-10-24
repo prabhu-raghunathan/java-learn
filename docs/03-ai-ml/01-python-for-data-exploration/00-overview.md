@@ -201,14 +201,14 @@ The generator bakes in real cause and effect so the EDA has something to find: *
 
 | # | Page | Lifecycle stage | Key interview topics |
 |---|---|---|---|
-| 1 | [NumPy: Arrays, Memory & Indexing](./01-numpy-arrays-memory-indexing.md) | Foundation | Why lists are slow, strides, dtypes, views vs copies, boolean masks |
-| 2 | [NumPy: Broadcasting, Reshaping, Linear Algebra & Aggregations](./02-numpy-broadcasting-linalg-aggregations.md) | Foundation | Broadcasting rules, `axis`, norms, `solve` vs `inv`, NumPy ↔ PyTorch |
-| 3 | [Pandas: Series, DataFrames, Loading & Indexing](./03-pandas-structures-loading-indexing.md) | Load, profile | Index alignment, `loc` vs `iloc`, chunked reading, Copy-on-Write |
-| 4 | [Pandas: Cleaning, Types & Missing Data](./04-pandas-cleaning-types-missing-data.md) | Clean | Dates, `.str`, `category`, imputation strategies, outliers |
-| 5 | [Pandas: map/apply, GroupBy, agg & transform](./05-pandas-groupby-apply-transform.md) | Features, aggregate | Split-apply-combine, `agg` vs `transform`, vectorization |
-| 6 | [Pandas: Reshaping & Combining](./06-pandas-reshape-combine.md) | Reshape, combine | Pivot vs melt, join types, `validate`, `indicator` |
-| 7 | [Matplotlib: Figures, Axes & Customization](./07-matplotlib-figures-axes.md) | Visualize | OO interface, chart choice, ticks, annotations, export |
-| 8 | [Seaborn: Statistical Visualization](./08-seaborn-statistical-plots.md) | Visualize | Figure vs axes level, distributions, heatmaps, pair plots |
+| 1 | [NumPy: Arrays, Memory & Indexing](./01-numpy/01-numpy-arrays-memory-indexing.md) | Foundation | Why lists are slow, strides, dtypes, views vs copies, boolean masks |
+| 2 | [NumPy: Broadcasting, Reshaping, Linear Algebra & Aggregations](./01-numpy/02-numpy-broadcasting-linalg-aggregations.md) | Foundation | Broadcasting rules, `axis`, norms, `solve` vs `inv`, NumPy ↔ PyTorch |
+| 3 | [Pandas: Series, DataFrames, Loading & Indexing](./02-pandas/03-pandas-structures-loading-indexing.md) | Load, profile | Index alignment, `loc` vs `iloc`, chunked reading, Copy-on-Write |
+| 4 | [Pandas: Cleaning, Types & Missing Data](./02-pandas/04-pandas-cleaning-types-missing-data.md) | Clean | Dates, `.str`, `category`, imputation strategies, outliers |
+| 5 | [Pandas: map/apply, GroupBy, agg & transform](./02-pandas/05-pandas-groupby-apply-transform.md) | Features, aggregate | Split-apply-combine, `agg` vs `transform`, vectorization |
+| 6 | [Pandas: Reshaping & Combining](./02-pandas/06-pandas-reshape-combine.md) | Reshape, combine | Pivot vs melt, join types, `validate`, `indicator` |
+| 7 | [Matplotlib: Figures, Axes & Customization](./03-visualization/07-matplotlib-figures-axes.md) | Visualize | OO interface, chart choice, ticks, annotations, export |
+| 8 | [Seaborn: Statistical Visualization](./03-visualization/08-seaborn-statistical-plots.md) | Visualize | Figure vs axes level, distributions, heatmaps, pair plots |
 | 9 | [Capstone: End-to-End EDA Pipeline](./09-capstone-eda-pipeline.md) | Everything | A full script → `GridSpec` dashboard → findings |
 
 ### 🟠 Setting up the environment

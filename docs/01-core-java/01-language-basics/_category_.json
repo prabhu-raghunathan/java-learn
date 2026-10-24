@@ -1,0 +1,8 @@
+{
+  "label": "Language Basics",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "description": "Primitive types, variables, literals, operators, precedence and the expression traps interviewers love."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "label": "Convolutional Neural Networks",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "description": "Convolution fundamentals, AlexNet-style architectures and training, a cats-vs-dogs project, and transfer learning."
+  }
+}
