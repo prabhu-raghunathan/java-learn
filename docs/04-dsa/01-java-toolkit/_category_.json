@@ -1,0 +1,8 @@
+{
+  "label": "Java Toolkit for DSA",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "description": "Every Java class, method and idiom that makes DSA code short and fast: collections, arrays, strings, heaps, ordered maps, comparators, math, bits, streams and fast I/O."
+  }
+}

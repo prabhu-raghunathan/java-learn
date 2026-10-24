@@ -119,6 +119,13 @@ NumPy, pandas, Matplotlib and Seaborn for EDA, all on one running dataset, **Sho
 - **Correctness:** outputs verified on Python 3.14, NumPy 2.5.4, pandas 3.0.6 (Copy-on-Write always on, `str` dtype default, `applymap` removed), Matplotlib 3.11.2, Seaborn 0.13.2, PyTorch 2.14 (CPU). Re-run the scripts and update the quoted numbers if the generator or cleaning changes.
 - **Charts:** follow the house style (one y-axis per chart: teach `twinx` only with a warning and the two-panel alternative), direct labels where possible, PNG at 150 dpi.
 
+# DSA pages (docs/04-dsa/) — separate "DSA" navbar tab
+DSA has its own navbar tab and sidebar (`dsaSidebar` in `sidebars.js`; `sidebarItemsGenerator` in `docusaurus.config.js` keeps it out of the main Docs sidebar). Language toolkits live in `01-java-toolkit/` (Python toolkit later as its own folder), DSA topics as further numbered folders.
+- **Light metadata on purpose:** notes + code only. No priority badges, `<PriorityKey />`, `:::speak`, `<Predict>`, `<Ladder>`, `:::incident` or Formula cards. Frontmatter, a short `:::tip[TL;DR]`, then topic sections.
+- **Keep:** tables for comparisons and method cheat sheets, admonitions for traps, the Code Block Conventions below (❌/✅ blocks, line markers, outputs in trailing comments).
+- **Diagrams/animations are optional and low priority:** a small Mermaid diagram only where it clearly helps. No Manim requirement.
+- **Correctness:** every snippet run on JDK 21+, outputs copied from the run, compiler errors quoted from `javac`.
+
 # Page Structure Specification
 Every generated `.md` page MUST strictly follow this layout:
 
