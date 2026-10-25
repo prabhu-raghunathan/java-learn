@@ -11,6 +11,10 @@ sidebar_position: 2
 Every snippet runs in `jshell`. Output is in the trailing comments.
 :::
 
+:::info[Solving a problem?]
+For a lookup by task ("count each letter", "drop the last char", "split into words") and worked solutions to the classic string problems, see the [String Problem Playbook](./03-string-problem-playbook.md).
+:::
+
 ## Complexity at a Glance
 
 `n` = length of the string, `m` = length of the pattern / other string, `k` = length of the piece produced.
