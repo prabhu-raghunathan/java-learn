@@ -1,0 +1,8 @@
+{
+  "label": "Hashing",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Hashing as a DSA technique: number and character hashing with arrays, hash maps for big keys, hash functions (division, multiplication, folding, mid-square), collision handling (chaining, open addressing), building your own hash map, and the problem patterns that hashing turns from O(n²) into O(n)."
+  }
+}

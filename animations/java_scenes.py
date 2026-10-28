@@ -381,3 +381,301 @@ class PostfixTrap(WikiScene):
         self.wait(0.6)
         say("Result: i = i++ never changes i. Use i++ or i = i + 1 on its own")
         self.wait(3)
+
+
+# ---------------------------------------------------------------------------
+# Hashing helpers (scenes 5-9)
+# ---------------------------------------------------------------------------
+def hcell(w, h, color=MUTED, fill=None, op=0.0):
+    r = Rectangle(width=w, height=h, stroke_color=color, stroke_width=2)
+    if fill is not None:
+        r.set_fill(fill, opacity=op)
+    return r
+
+
+def table_row(n, w, h, center, idx_size=14, color=MUTED):
+    """n adjacent cells with their index under each one. Returns (cells, idx_labels)."""
+    cells = VGroup(*[hcell(w, h, color) for _ in range(n)]).arrange(RIGHT, buff=0).move_to(center)
+    idx = VGroup(*[label(str(i), size=idx_size, color=MUTED, mono=True).next_to(cells[i], UP, buff=0.06)
+                   for i in range(n)])
+    return cells, idx
+
+
+def node(txt, color=INFO, w=0.7, h=0.42, size=18):
+    r = RoundedRectangle(corner_radius=0.08, width=w, height=h, stroke_color=color, stroke_width=2)
+    r.set_fill(color, opacity=0.18)
+    return VGroup(r, label(txt, size=size, mono=True))
+
+
+class HashSay:
+    """Mixin: cross-fading caption line."""
+    def say(self, text, color=FG):
+        new = caption_bar(text, size=24, color=color)
+        if getattr(self, "_cap", None) is None:
+            self._cap = new
+            self.play(FadeIn(new), run_time=0.3)
+        else:
+            self.play(Transform(self._cap, new), run_time=0.35)
+
+
+# ---------------------------------------------------------------------------
+# 5. String.hashCode(): h = 31*h + c   ("cat" -> 98262, verified on JDK 21)
+# ---------------------------------------------------------------------------
+class StringHashCode(HashSay, WikiScene):
+    def construct(self):
+        self.add(title('"cat".hashCode()  =  fold h = 31 · h + c over the chars'))
+        chars = [("c", 99), ("a", 97), ("t", 116)]
+        boxes = VGroup()
+        for ch, code in chars:
+            sq = Square(1.0, stroke_color=INFO, stroke_width=2.5).set_fill(INFO, opacity=0.1)
+            t = label(f"'{ch}'", size=32, mono=True)
+            v = label(str(code), size=20, color=MUTED, mono=True).next_to(sq, DOWN, buff=0.12)
+            boxes.add(VGroup(VGroup(sq, t), v))
+        boxes.arrange(RIGHT, buff=0.5).move_to([0, 1.6, 0])
+        self.play(FadeIn(boxes), run_time=0.6)
+
+        hreg = Rectangle(width=2.6, height=0.9, stroke_color=PURPLE, stroke_width=2.5).move_to([4.6, -0.6, 0])
+        hlab = label("h", size=26, color=PURPLE, weight=BOLD).next_to(hreg, UP, buff=0.12)
+        hval = label("0", size=32, mono=True).move_to(hreg)
+        self.play(FadeIn(hreg), FadeIn(hlab), FadeIn(hval), run_time=0.4)
+        self.say("Start with h = 0, then visit the characters left to right")
+
+        steps = [("31 × 0 + 99", "99"), ("31 × 99 + 97", "3166"), ("31 × 3166 + 116", "98262")]
+        lines = VGroup()
+        for k, (expr, res) in enumerate(steps):
+            self.play(boxes[k][0][0].animate.set_stroke(HIGHLIGHT).set_fill(HIGHLIGHT, opacity=0.2), run_time=0.3)
+            ln = VGroup(label(f"h = {expr}", size=26, mono=True),
+                        label(f"= {res}", size=26, mono=True, color=SUCCESS))
+            ln[1].next_to(ln[0], RIGHT, buff=0.25)
+            lines.add(ln)
+            lines.arrange(DOWN, aligned_edge=LEFT, buff=0.3).move_to([-2.3, -0.9, 0])
+            self.play(FadeIn(ln, shift=RIGHT * 0.2), run_time=0.5)
+            self.play(Transform(hval, label(res, size=32, mono=True, color=SUCCESS).move_to(hreg)), run_time=0.4)
+            self.play(boxes[k][0][0].animate.set_stroke(INFO).set_fill(INFO, opacity=0.1), run_time=0.2)
+            self.wait(0.5)
+        self.say("Same as 99·31² + 97·31 + 116: every char and its position count")
+        self.wait(1.4)
+        cache = label("cached in the String's hash field: next call is O(1)", size=22, color=HIGHLIGHT)
+        cache.move_to([0, -2.55, 0])
+        self.play(FadeIn(cache), run_time=0.4)
+        self.say("Different order, different hash: \"act\" and \"cat\" do not collide", color=FG)
+        self.wait(3)
+
+
+# ---------------------------------------------------------------------------
+# 6. Key -> hashCode -> spread -> index -> bucket (numbers verified on JDK 21)
+# ---------------------------------------------------------------------------
+class KeyToBucket(HashSay, WikiScene):
+    def construct(self):
+        self.add(title("From key to bucket in a HashMap with 16 buckets"))
+        heads = ["key", "hashCode()", "h ^ (h >>> 16)", "& 15  →  index"]
+        xs = [-5.0, -2.2, 1.0, 4.4]
+        head_row = VGroup(*[label(h, size=22, color=MUTED, mono=True).move_to([x, 2.55, 0]) for h, x in zip(heads, xs)])
+        arrows = VGroup(*[Arrow([xs[i] + 0.9, 1.85, 0], [xs[i + 1] - 1.0, 1.85, 0], buff=0, color=MUTED,
+                                stroke_width=2, max_tip_length_to_length_ratio=0.15) for i in range(3)])
+        self.play(FadeIn(head_row), FadeIn(arrows), run_time=0.5)
+
+        cells, idx = table_row(16, 0.78, 0.6, [0, -0.35, 0])
+        tlab = label("table[16]", size=20, color=MUTED, weight=BOLD).next_to(cells, LEFT, buff=0.15).shift(UP * 0.4)
+        tlab.to_edge(LEFT, buff=0.2)
+        self.play(FadeIn(cells), FadeIn(idx), run_time=0.5)
+
+        keys = [('"cat"', "98262", "98263", 7, INFO), ('"dog"', "99644", "99645", 13, INFO),
+                ('"Aa"', "2112", "2112", 0, INFO), ('"BB"', "2112", "2112", 0, GRAD)]
+        placed = {}
+        for name, hc, sp, ix, col in keys:
+            vals = [name, hc, sp, str(ix)]
+            row = VGroup(*[label(v, size=26, mono=True, color=(HIGHLIGHT if j == 3 else FG)).move_to([x, 1.85, 0])
+                           for j, (v, x) in enumerate(zip(vals, xs))])
+            self.say(f"{name}: hash, mix the high bits in, keep the low 4 bits")
+            for j in range(4):
+                self.play(FadeIn(row[j], shift=RIGHT * 0.15), run_time=0.3)
+            nd = node(name, color=col, w=0.74)
+            nd.move_to(row[3])
+            self.play(FadeIn(nd), run_time=0.2)
+            target_y = cells[ix].get_center()[1] - 0.75 * placed.get(ix, 0)
+            target = [cells[ix].get_center()[0], cells[ix].get_center()[1] if placed.get(ix, 0) == 0 else target_y, 0]
+            if placed.get(ix, 0) == 0:
+                self.play(nd.animate.move_to(target), cells[ix].animate.set_stroke(col), run_time=0.7)
+            else:
+                self.say("Same index as \"Aa\": equals() says different key, so it is chained", color=HIGHLIGHT)
+                self.play(nd.animate.move_to(target), run_time=0.7)
+                link = Arrow(cells[ix].get_bottom() + UP * 0.05, nd.get_top(), buff=0.02, color=GRAD,
+                             stroke_width=3, max_tip_length_to_length_ratio=0.35)
+                self.play(GrowArrow(link), run_time=0.3)
+                self.wait(1.0)
+            placed[ix] = placed.get(ix, 0) + 1
+            self.play(FadeOut(row), run_time=0.25)
+        self.say("get() repeats the same steps, then walks only that one bucket")
+        self.wait(3)
+
+
+# ---------------------------------------------------------------------------
+# 7. Resize 16 -> 32: each node stays at j or moves to j + 16 (lo/hi split)
+# ---------------------------------------------------------------------------
+class ResizeSplit(HashSay, WikiScene):
+    def construct(self):
+        self.add(title("Resize 16 → 32: one bit decides, stay at j or move to j + 16"))
+        old, old_idx = table_row(16, 0.8, 0.5, [0, 1.75, 0])
+        olab = label("old[16]", size=18, color=MUTED, weight=BOLD).next_to(old, UP, buff=0.32).align_to(old, LEFT)
+        new, new_idx = table_row(32, 0.4, 0.5, [0, -1.2, 0], idx_size=11)
+        nlab = label("new[32]", size=18, color=MUTED, weight=BOLD).next_to(new, UP, buff=0.32).align_to(new, LEFT)
+        self.play(FadeIn(old), FadeIn(old_idx), FadeIn(olab), run_time=0.5)
+
+        # keys 1,17,33 -> bucket 1; 5,21 -> bucket 5 (insertion order)
+        chains = {1: [1, 17, 33], 5: [5, 21]}
+        nodes = {}
+        for b, ks in chains.items():
+            for d, k in enumerate(ks):
+                nd = node(str(k), w=0.62, h=0.36, size=16)
+                nd.move_to(old[b].get_center() + DOWN * (0.0 if d == 0 else 0.42 * d))
+                if d > 0:
+                    nd.shift(DOWN * 0.0)
+                nodes[k] = nd
+        stack = VGroup(*nodes.values())
+        self.say("Keys 1, 17, 33 share bucket 1 and keys 5, 21 share bucket 5 (index = hash & 15)")
+        self.play(LaggedStart(*[FadeIn(n) for n in stack], lag_ratio=0.15), run_time=1.0)
+        self.wait(0.8)
+        self.play(FadeIn(new), FadeIn(new_idx), FadeIn(nlab), run_time=0.5)
+        self.say("New index = hash & 31. Only bit 16 is new: check hash & 16")
+
+        placed = {}
+        for k in [1, 17, 33, 5, 21]:
+            j = 1 if k in (1, 17, 33) else 5
+            hi = k & 16
+            dest = j + (16 if hi else 0)
+            col = HIGHLIGHT if hi else SUCCESS
+            msg = f"{k} & 16 = {hi}  →  " + (f"move to {j} + 16 = {dest}" if hi else f"stay at {j}")
+            tag = label(msg, size=22, mono=True, color=col).move_to([0, -2.55, 0])
+            self.play(FadeIn(tag), nodes[k][0].animate.set_stroke(col), run_time=0.3)
+            depth = placed.get(dest, 0)
+            target = new[dest].get_center() + DOWN * (0.45 * depth)
+            self.play(nodes[k].animate.scale(0.62).move_to(target), run_time=0.6)
+            placed[dest] = depth + 1
+            self.play(FadeOut(tag), run_time=0.2)
+        self.say("Relative order is kept, and no hashCode() is called again", color=SUCCESS)
+        self.wait(3)
+
+
+# ---------------------------------------------------------------------------
+# 8. Treeify: 9th colliding key resizes (table < 64), 11th turns the bin into a tree
+#    (BadKey with hashCode 42; capacities measured with reflection on JDK 21)
+# ---------------------------------------------------------------------------
+class Treeify(HashSay, WikiScene):
+    def construct(self):
+        self.add(title("Every key has hashCode 42: when does the bucket become a tree?"))
+        cap_lab = label("table length", size=20, color=MUTED).move_to([-4.8, 2.1, 0])
+        cap_val = label("16", size=40, mono=True, color=INFO).next_to(cap_lab, DOWN, buff=0.15)
+        bin_lab = label("bucket", size=20, color=MUTED).move_to([-1.6, 2.1, 0])
+        bin_val = label("42 & 15 = 10", size=26, mono=True).next_to(bin_lab, DOWN, buff=0.22)
+        cnt_lab = label("entries in that bucket", size=20, color=MUTED).move_to([2.6, 2.1, 0])
+        cnt_val = label("0", size=40, mono=True, color=GRAD).next_to(cnt_lab, DOWN, buff=0.15)
+        self.play(FadeIn(VGroup(cap_lab, cap_val, bin_lab, bin_val, cnt_lab, cnt_val)), run_time=0.5)
+
+        chain = VGroup()
+        y = -0.3
+        caps = {9: "32", 10: "64"}
+        bins = {9: "42 & 31 = 10", 10: "42 & 63 = 42"}
+        for i in range(1, 12):
+            c = Circle(radius=0.27, stroke_color=INFO, stroke_width=2.5).set_fill(INFO, opacity=0.2)
+            nd = VGroup(c, label(str(i), size=18, mono=True))
+            nd.move_to([-6.0 + 1.0 * (i - 1) * 1.17, y, 0])
+            arrows = []
+            if i > 1:
+                arrows.append(Arrow(chain[-1].get_right(), nd.get_left(), buff=0.03, color=MUTED, stroke_width=2,
+                                    max_tip_length_to_length_ratio=0.3))
+            self.play(FadeIn(nd, shift=DOWN * 0.2), *[GrowArrow(a) for a in arrows],
+                      Transform(cnt_val, label(str(i), size=40, mono=True, color=GRAD).move_to(cnt_val)),
+                      run_time=0.32)
+            for a in arrows:
+                chain.add(a)
+            chain.add(nd)
+            if i == 8:
+                self.say("8 entries: still a plain linked list")
+                self.wait(0.6)
+            if i in caps:
+                txt = ("9th entry: table is only 16 (< 64), so it RESIZES instead of treeifying"
+                       if i == 9 else "10th entry: 32 is still < 64, resize again")
+                self.say(txt, color=HIGHLIGHT)
+                self.play(Transform(cap_val, label(caps[i], size=40, mono=True, color=HIGHLIGHT).move_to(cap_val)),
+                          Transform(bin_val, label(bins[i], size=26, mono=True).move_to(bin_val)), run_time=0.5)
+                self.wait(1.0)
+        self.say("11th entry: table is 64 and the list is long, so the bin becomes a red-black tree", color=SUCCESS)
+        self.wait(0.6)
+
+        # balanced tree of 11 nodes (in-order = 1..11)
+        pos = {6: (0, 0.5), 3: (-3.2, -0.3), 9: (3.2, -0.3), 2: (-4.6, -1.1), 5: (-1.8, -1.1),
+               8: (1.8, -1.1), 10: (4.6, -1.1), 1: (-5.3, -1.9), 4: (-2.5, -1.9), 7: (1.1, -1.9), 11: (5.3, -1.9)}
+        reds = {3, 9, 1, 4, 7, 11}
+        tree_nodes = {}
+        for k, (x, yy) in pos.items():
+            col = ERROR if k in reds else FG
+            c = Circle(radius=0.27, stroke_color=col, stroke_width=3).set_fill(col, opacity=0.18)
+            tree_nodes[k] = VGroup(c, label(str(k), size=18, mono=True)).move_to([x, yy, 0])
+        edges = VGroup()
+        for p, kids in {6: [3, 9], 3: [2, 5], 9: [8, 10], 2: [1], 5: [4], 8: [7], 10: [11]}.items():
+            for kd in kids:
+                edges.add(Line(tree_nodes[p].get_center(), tree_nodes[kd].get_center(), color=MUTED,
+                               stroke_width=2, buff=0.28))
+        list_nodes = [m for m in chain if isinstance(m, VGroup)]
+        self.play(FadeOut(VGroup(*[m for m in chain if not isinstance(m, VGroup)])), run_time=0.3)
+        self.play(*[Transform(list_nodes[k - 1], tree_nodes[k]) for k in range(1, 12)], run_time=1.2)
+        self.play(Create(edges), run_time=0.6)
+        self.say("Lookups in this bin: O(log n) if keys are Comparable, else O(n) at worst", color=SUCCESS)
+        self.wait(3)
+
+
+# ---------------------------------------------------------------------------
+# 9. ConcurrentHashMap put: CAS into an empty bin, lock only the bin head otherwise
+# ---------------------------------------------------------------------------
+class ChmPut(HashSay, WikiScene):
+    def construct(self):
+        self.add(title("ConcurrentHashMap (Java 8+): lock one bin, never the whole map"))
+        cells, idx = table_row(8, 1.3, 0.8, [0, 0.9, 0])
+        self.play(FadeIn(cells), FadeIn(idx), run_time=0.4)
+        existing = node("k5", color=MUTED, w=1.0, h=0.5).move_to(cells[5])
+        existing6 = node("k6", color=MUTED, w=1.0, h=0.5).move_to(cells[6])
+        self.play(FadeIn(existing), FadeIn(existing6), run_time=0.3)
+
+        def thread(name, color, x):
+            r = RoundedRectangle(corner_radius=0.1, width=1.9, height=0.6, stroke_color=color, stroke_width=2.5)
+            r.set_fill(color, opacity=0.15)
+            return VGroup(r, label(name, size=20, color=color, weight=BOLD)).move_to([x, -1.5, 0])
+
+        ta = thread("Thread A", INFO, -4.6)
+        tb = thread("Thread B", GRAD, 0.9)
+        tc = thread("Thread C", PURPLE, 3.5)
+        self.play(FadeIn(ta), FadeIn(tb), FadeIn(tc), run_time=0.4)
+
+        # A: CAS into empty bin 1
+        self.say("A: bin 1 is empty, so one CAS (compare-and-swap) installs the node: no lock")
+        na = node("kA", color=INFO, w=1.0, h=0.5).move_to(ta.get_top() + UP * 0.4)
+        cas = label("CAS null → node", size=18, color=INFO, mono=True).next_to(cells[1], DOWN, buff=1.0)
+        self.play(FadeIn(na), FadeIn(cas), run_time=0.3)
+        self.play(na.animate.move_to(cells[1]), cells[1].animate.set_stroke(INFO), run_time=0.7)
+        self.wait(0.6)
+
+        # B and C at the same time on bins 5 and 6
+        self.say("B and C: bins 5 and 6 are occupied, each does synchronized on its own bin head")
+        lock_b = label("locked", size=16, color=GRAD, mono=True).next_to(cells[5], UP, buff=0.4)
+        lock_c = label("locked", size=16, color=PURPLE, mono=True).next_to(cells[6], UP, buff=0.4)
+        self.play(cells[5].animate.set_stroke(GRAD, width=5), cells[6].animate.set_stroke(PURPLE, width=5),
+                  FadeIn(lock_b), FadeIn(lock_c), run_time=0.5)
+        nb = node("kB", color=GRAD, w=1.0, h=0.5).move_to(tb.get_top() + UP * 0.4)
+        nc = node("kC", color=PURPLE, w=1.0, h=0.5).move_to(tc.get_top() + UP * 0.4)
+        self.play(FadeIn(nb), FadeIn(nc), run_time=0.3)
+        self.play(nb.animate.move_to(cells[5].get_center() + DOWN * 0.95 + LEFT * 0.0).scale(0.9),
+                  nc.animate.move_to(cells[6].get_center() + DOWN * 0.95 + RIGHT * 0.0).scale(0.9), run_time=0.8)
+        self.say("Both writes ran in parallel: different bins never block each other", color=SUCCESS)
+        self.wait(1.0)
+
+        # reader
+        reader = thread("get(k5)", SUCCESS, -1.8)
+        self.play(FadeIn(reader), run_time=0.3)
+        arr = Arrow(reader.get_top(), cells[5].get_bottom() + LEFT * 0.3, buff=0.1, color=SUCCESS, stroke_width=3)
+        self.say("Readers take no lock at all: volatile reads of the table and node fields")
+        self.play(GrowArrow(arr), run_time=0.5)
+        self.play(FadeOut(lock_b), FadeOut(lock_c), cells[5].animate.set_stroke(MUTED, width=2),
+                  cells[6].animate.set_stroke(MUTED, width=2), run_time=0.4)
+        self.say("Writers on the SAME bin wait; everyone else keeps going", color=FG)
+        self.wait(3)

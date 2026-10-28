@@ -82,6 +82,11 @@ MANIFEST = {
     "oop/init-order":              ("java_scenes.py", "InitOrder"),
     "variables/pass-by-value":     ("java_scenes.py", "PassByValue"),
     "operators/postfix-trap":      ("java_scenes.py", "PostfixTrap"),
+    "hashing/string-hashcode":     ("java_scenes.py", "StringHashCode"),
+    "hashing/key-to-bucket":       ("java_scenes.py", "KeyToBucket"),
+    "hashing/resize-split":        ("java_scenes.py", "ResizeSplit"),
+    "hashing/treeify":             ("java_scenes.py", "Treeify"),
+    "hashing/chm-put":             ("java_scenes.py", "ChmPut"),
     # Python Fundamentals
     "python/names-objects":        ("python_scenes.py", "NamesObjects"),
     "python/refcount":             ("python_scenes.py", "RefCount"),

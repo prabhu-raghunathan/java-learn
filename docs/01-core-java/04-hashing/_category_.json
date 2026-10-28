@@ -1,0 +1,8 @@
+{
+  "label": "Hashing & Hash Collections",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Hashing from first principles, hashCode() for every type, HashMap internals (put, get, resize, treeify), and the whole hash-collection family: HashSet, LinkedHashMap, Hashtable, ConcurrentHashMap, IdentityHashMap, WeakHashMap, EnumMap."
+  }
+}
