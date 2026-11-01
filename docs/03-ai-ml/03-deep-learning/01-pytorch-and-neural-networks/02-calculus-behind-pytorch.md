@@ -45,104 +45,7 @@ We'll work through one small example completely by hand: inputs $a = 2, b = 3$ f
 Your car's position changes over time. The **speedometer** doesn't tell you where you are; it tells you **how fast your position is changing right now**. A derivative is the speedometer of a function: how fast the output changes as you push the input. A gradient is a dashboard with one speedometer per input.
 :::
 
-## ⚡ Essential Interview Recall
-
-**Derivatives**
-- $\frac{df}{dx}$ = **slope** = rise over run for a tiny run: $\frac{f(x+h) - f(x)}{h}$ as $h \to 0$. For $x^2$ at 3: $h = 1 \to 7$, $0.1 \to 6.1$, $0.001 \to 6.001$, limit **6**.
-- Rules: constant → 0; $x^n \to n x^{n-1}$; sum → sum of derivatives; $c \cdot f \to c \cdot f'$; product $(uv)' = u'v + uv'$; $(e^x)' = e^x$; $(\ln x)' = 1/x$.
-- **Partial derivative**: differentiate with respect to one variable and treat the others as constants. $f = ab + b^2$ → $\frac{\partial f}{\partial a} = b$, $\frac{\partial f}{\partial b} = a + 2b$.
-- **Gradient** $\nabla f$ = vector of partials = direction of **steepest increase**. Gradient descent goes the opposite way.
-
-**Chain rule and backprop**
-- One path: $\frac{dz}{dx} = \frac{dz}{dy}\cdot\frac{dy}{dx}$ (**multiply** along the path).
-- Several paths: **add** the products of all paths. A value used twice gets gradient contributions from both uses.
-- Backward pass: start with $\frac{\partial f}{\partial f} = 1$; at each node, **upstream gradient × local derivative**; sum where branches meet.
-- Local derivatives to know: **add** passes the gradient through unchanged (×1); **multiply** sends each input the **other** input; **square** $u^2$ gives $2u$.
-- Worked example ($a = 2, b = 3$; $c = a + b$, $d = ab$, $e = cd$, $f = e + d$): $f = 36$, $\frac{\partial f}{\partial a} = 24$, $\frac{\partial f}{\partial b} = 18$.
-
-**Autograd mechanics**
-- PyTorch is **reverse-mode automatic differentiation**: one backward pass gives the derivative of **one scalar** with respect to **every** input. That's exactly the shape of training (one loss, millions of weights).
-- Each result tensor stores a `grad_fn` (`AddBackward0`, `MulBackward0`…) that knows its local derivative. `backward()` walks this graph in reverse.
-- `.grad` is filled only for **leaf** tensors with `requires_grad=True`; use `.retain_grad()` to keep an intermediate's gradient.
-- `backward()` **adds** into `.grad` (running the example twice gives 48 and 36) → `zero_grad()` every step.
-- The graph is **freed** after `backward()`; a second call raises "Trying to backward through the graph a second time". `backward()` on a non-scalar needs a `gradient=` argument.
-
-**Gradient descent**
-- $\param{w} \leftarrow \param{w} - \hyper{\eta}\,\frac{\partial \loss{L}}{\partial \param{w}}$. Negative gradient → $w$ increases; positive → $w$ decreases.
-- $L = (w - 3)^2$, $w_0 = 0$: $\eta = 0.1$ gives 0.6, 1.08, 1.464… → 3; $\eta = 1.0$ bounces 0, 6, 0, 6; $\eta = 1.1$ diverges (6.6, −1.32, 8.18…).
-
-**Neural-network derivatives**
-- Linear model, one point: $\hat y = wx + b$, $L = (\hat y - y)^2$ → $\frac{\partial L}{\partial w} = 2(\hat y - y)\,x$, $\frac{\partial L}{\partial b} = 2(\hat y - y)$.
-- **Sigmoid** $\sigma' = \sigma(1 - \sigma)$, at most **0.25** → stacking 5 sigmoids shrinks gradients to ≤ 0.001 (**vanishing gradient**). **ReLU**' = 1 if $z > 0$ else 0. **tanh**' $= 1 - \tanh^2$.
-- Matrix layer $\mathbf{y} = W\mathbf{x}$: $\frac{\partial L}{\partial W_{ij}} = g_i\,x_j$ (upstream × the input it multiplied); $\frac{\partial L}{\partial \mathbf{x}} = W^\top \mathbf{g}$.
-- Broadcast/reused values **sum** their gradients (a bias added to 3 outputs gets gradient 3 from `sum()`).
-- Softmax + cross-entropy: $\frac{\partial L}{\partial z} = p - y$.
-
-## 📐 Formula Sheet
-
-Every equation on this page in one place. Each one is explained in a card further down.
-
-| Concept | Formula | In plain words |
-|---|---|---|
-| Derivative | $\frac{df}{dx} = \lim_{h \to 0}\frac{f(x+h) - f(x)}{h}$ | Slope over a vanishingly small step |
-| Power rule | $\frac{d}{dx}x^n = n\,x^{n-1}$ | Bring the power down, reduce it by one |
-| Sum rule | $(u + v)' = u' + v'$ | Slopes add |
-| Product rule | $(uv)' = u'v + uv'$ | Each factor takes a turn changing |
-| Exp and log | $(e^x)' = e^x$, $\;(\ln x)' = \frac{1}{x}$ | |
-| Partial derivative | $\frac{\partial f}{\partial a}$ with $b$ held fixed | Slope along one input |
-| Gradient | $\nabla f = \left[\frac{\partial f}{\partial a},\ \frac{\partial f}{\partial b}\right]$ | All partial slopes together |
-| Chain rule | $\frac{dz}{dx} = \frac{dz}{dy}\cdot\frac{dy}{dx}$ | Multiply slopes along the path |
-| Multi-path chain rule | $\frac{\partial f}{\partial a} = \sum_{\text{paths}} \prod \text{local slopes}$ | Add up every route from $a$ to $f$ |
-| Backprop step | node gradient = upstream gradient × local derivative | What every `grad_fn` does |
-| Gradient descent | $\param{w} \leftarrow \param{w} - \hyper{\eta}\,\frac{\partial \loss{L}}{\partial \param{w}}$ | Step downhill |
-| Linear model gradients | $\frac{\partial \loss{L}}{\partial \param{w}} = 2(\pred{\hat y} - \data{y})\,\data{x}$, $\;\frac{\partial \loss{L}}{\partial \param{b}} = 2(\pred{\hat y} - \data{y})$ | Error × input, and error |
-| Mean over a batch | $\frac{\partial \loss{L}}{\partial \param{w}} = \frac{1}{N}\sum_i \frac{\partial \loss{\ell_i}}{\partial \param{w}}$ | Average the per-sample slopes |
-| Sigmoid derivative | $\sigma'(z) = \sigma(z)\,(1 - \sigma(z))$ | Peaks at 0.25 |
-| ReLU derivative | $1$ if $z > 0$, else $0$ | On/off switch |
-| Matrix layer gradients | $\frac{\partial \loss{L}}{\partial \param{W_{ij}}} = g_i\,\data{x_j}$, $\;\frac{\partial \loss{L}}{\partial \data{\mathbf{x}}} = \param{W}^\top \mathbf{g}$ | Upstream × input; send back through the transpose |
-| Softmax + CE | $\frac{\partial \loss{L}}{\partial \pred{z}} = \pred{p} - \data{y}$ | Predicted minus true |
-
-## The Mental Model
-
-### 1. Forward computes values, backward computes slopes
-
-```mermaid
-flowchart TB
-    IN["Inputs and weights<br/>a = 2, b = 3"] -->|"forward: do the arithmetic"| OUT["Output / loss<br/>f = 36"]
-    OUT -->|"backward: start with ∂f/∂f = 1"| G["Each node: upstream × local derivative"]
-    G -->|"sum where paths meet"| GR(["Gradients in .grad<br/>∂f/∂a = 24, ∂f/∂b = 18"])
-```
-
-### 2. The worked example as a computational graph
-
-```mermaid
-flowchart LR
-    A(["a = 2"]) --> C["c = a + b<br/>= 5"]
-    B(["b = 3"]) --> C
-    A --> D["d = a · b<br/>= 6"]
-    B --> D
-    C --> E["e = c · d<br/>= 30"]
-    D --> E
-    E --> F(["f = e + d<br/>= 36"])
-    D --> F
-```
-
-### 3. How gradients turn into learning
-
-```mermaid
-flowchart TB
-    W["Weights w"] --> FW["Forward: prediction ŷ"]
-    FW --> L["Loss L = how wrong"]
-    L --> BW["backward(): ∂L/∂w for every weight"]
-    BW --> ST["step(): w ← w − η · ∂L/∂w"]
-    ST -->|"repeat with the next batch"| W
-```
-
-## The Paradigm / Core Concepts
-
-### Part A: What a derivative is
-
-#### 📖 Understand it
+## 1. What a derivative is
 
 Take $f(x) = x^2$. At $x = 3$, $f = 9$. Now ask: **if I move $x$ a little, how much does $f$ move?** Move from 3 to 4 and $f$ goes from 9 to 16: it rose by 7 for a run of 1, so the average slope over that stretch is 7. Move only to 3.5 and $f$ goes to 12.25: a rise of 3.25 over a run of 0.5, slope 6.5. Move to 3.1: rise 0.61 over 0.1, slope 6.1. Move to 3.001: slope 6.001.
 
@@ -175,9 +78,11 @@ $$
 
 **Sign tells direction, size tells sensitivity.** A positive derivative means "increase $x$ and $f$ goes up"; negative means "increase $x$ and $f$ goes down"; zero means you're at a flat spot (often a minimum or maximum). A large magnitude means $f$ is very sensitive to $x$ there. Gradient descent uses both facts.
 
-### Part B: The derivative rules you actually need
+:::tip[🎯 Interview angle]
+**"What is a derivative?"** The slope of a function at a point: the limit of rise over run as the run shrinks to zero. For $x^2$ at 3 it is 6, so a nudge of 0.001 in $x$ moves $f$ by about 0.006. In training, the derivative of the loss with respect to a weight says how much the loss reacts to that weight.
+:::
 
-#### 📖 Understand it
+## 2. The derivative rules you actually need
 
 A neural network is built from a small set of operations: adding, multiplying, powers, exponentials, logarithms and a few activation functions. So you only need a small set of rules, and every one has a simple reason.
 
@@ -189,7 +94,7 @@ A neural network is built from a small set of operations: adding, multiplying, p
 - **Exponential:** $(e^x)' = e^x$. The exponential is the function whose rate of growth equals its current size (at $x = 2$, both are 7.389).
 - **Logarithm:** $(\ln x)' = 1/x$. The log grows quickly for small $x$ and slowly for large $x$ (at $x = 2$, slope 0.5).
 
-Notice that two of these rules are about *combining* functions (sum and product). The third combining rule, for functions *inside* other functions, is the **chain rule** in Part D. Together, these let you differentiate anything a neural network computes.
+Notice that two of these rules are about *combining* functions (sum and product). The third combining rule, for functions *inside* other functions, is the **chain rule** in Chapter 4. Together, these let you differentiate anything a neural network computes.
 
 <Formula name="The core derivative rules" tag="Building blocks" words="A constant has slope zero. Powers drop by one and multiply by the old power. Slopes of a sum add up. In a product, each factor takes a turn changing while the other is held. Exp is its own slope, and ln x has slope one over x." remember="Power down, sums add, products take turns.">
 
@@ -212,9 +117,11 @@ $$
 | Sum | $x^3 + e^x$ | $3x^2 + e^x$ | 19.389 | `AddBackward0` |
 | Product | $x^2 \cdot 3x$ | $9x^2$ | **36** | `MulBackward0` |
 
-### Part C: Partial derivatives and the gradient
+:::tip[🎯 Interview angle]
+Be fluent with the five rules (power, sum, constant multiple, product, exp/log). Interviewers rarely ask for long derivations; they ask you to differentiate a one-liner like $(wx + b - y)^2$ or $\sigma(z)$ on the spot.
+:::
 
-#### 📖 Understand it
+## 3. Partial derivatives and the gradient
 
 A neural network's loss depends on many numbers at once (every weight). So we need slopes for functions of **several** inputs. The idea is simple: **change one input, freeze all the others, and measure the slope**. That slope is the **partial derivative** with respect to that input, written with a curly $\partial$ to remind you the others are being held still.
 
@@ -247,9 +154,11 @@ $$
 You're standing on a hill in thick fog. You can feel the slope under your feet in the east direction (one partial derivative) and in the north direction (another). Together they tell you which way is steepest uphill. A hiker who wants to get down quickly just turns around and walks the opposite way, one careful step at a time. That hiker is gradient descent.
 :::
 
-### Part D: The chain rule
+:::tip[🎯 Interview angle]
+**"What is the gradient, and why do we subtract it?"** The vector of partial derivatives, one per input; it points in the direction of steepest **increase**. Training minimises the loss, so it steps in the opposite direction, $-\nabla L$.
+:::
 
-#### 📖 Understand it
+## 4. The chain rule
 
 Real functions are built in **steps**: compute something, feed it into the next thing, and so on. The chain rule tells you the slope of the whole pipeline from the slopes of its steps: **multiply them**.
 
@@ -276,9 +185,11 @@ $$
 Gear A drives gear B, which drives gear C. If B turns 3 times for every turn of A, and C turns 8 times for every turn of B, then C turns 3 × 8 = 24 times for every turn of A. Each local derivative is one gear ratio; the chain rule multiplies them.
 :::
 
-### Part E: The full worked example: from $a, b$ to $f$, by hand
+:::tip[🎯 Interview angle]
+**"State the chain rule and how backprop uses it."** Along one path, multiply the local slopes; across several paths, add the products. Backprop applies this from the loss backwards, so each node only needs its own local derivative and the gradient passed back to it.
+:::
 
-#### 📖 Understand it
+## 5. The full worked example: from $a, b$ to $f$, by hand
 
 Now the example this page is built around. Two inputs, $a = 2$ and $b = 3$, go through four small steps:
 
@@ -291,7 +202,19 @@ $$
 
 We want $\frac{\partial f}{\partial a}$ and $\frac{\partial f}{\partial b}$: how much $f$ changes per nudge of each input. We'll do it in the same three stages autograd uses.
 
-**Stage 1: the forward pass.** Just compute the values from left to right and remember them, because the backward pass will need them.
+```mermaid
+flowchart TB
+    A(["a = 2"]) --> C["c = a + b<br/>= 5"]
+    B(["b = 3"]) --> C
+    A --> D["d = a · b<br/>= 6"]
+    B --> D
+    C --> E["e = c · d<br/>= 30"]
+    D --> E
+    E --> F(["f = e + d<br/>= 36"])
+    D --> F
+```
+
+**Stage 1: the forward pass.** Just compute the values from the inputs to the output and remember them, because the backward pass will need them.
 
 | Node | Formula | Value |
 |---|---|---|
@@ -300,7 +223,7 @@ We want $\frac{\partial f}{\partial a}$ and $\frac{\partial f}{\partial b}$: how
 | $e$ | $c \cdot d$ | 5 × 6 = **30** |
 | $f$ | $e + d$ | 30 + 6 = **36** |
 
-**Stage 2: local derivatives.** Each operation only knows about its own inputs. These are the only derivative facts we need, and they come from Part B:
+**Stage 2: local derivatives.** Each operation only knows about its own inputs. These are the only derivative facts we need, and they come from Chapter 2:
 
 - An **addition** $u + v$ has slope **1** with respect to each input: whatever you add to $u$ appears in the sum one-for-one.
 - A **multiplication** $u \cdot v$ has slope **$v$** with respect to $u$, and **$u$** with respect to $v$: each input's slope is **the other input**.
@@ -352,11 +275,20 @@ Why not always expand? For four nodes it's easy. For a network with millions of 
 The total bill (the loss) arrives at the end. Each person traces back what they ordered, and each dish traces back its ingredients. If one ingredient (like $d$) went into two dishes, it gets charged for **both**. At the end, every original ingredient knows exactly how much of the bill it caused. That's each input's gradient.
 :::
 
-### Part F: How autograd does it for you
+:::tip[🎯 Interview angle]
+Be ready to do this exact kind of graph on a whiteboard: forward pass for the values, then backward with *upstream × local* at every node, **adding** where a value is used twice. The add, multiply and square rules cover almost every toy question.
+:::
 
-#### 📖 Understand it
+## 6. How autograd does it for you
 
 PyTorch automates exactly the three stages above.
+
+```mermaid
+flowchart TB
+    IN["Inputs and weights<br/>a = 2, b = 3"] -->|"forward: do the arithmetic"| OUT["Output / loss<br/>f = 36"]
+    OUT -->|"backward: start with ∂f/∂f = 1"| G["Each node: upstream × local derivative"]
+    G -->|"sum where paths meet"| GR(["Gradients in .grad<br/>∂f/∂a = 24, ∂f/∂b = 18"])
+```
 
 **Recording.** When a tensor has `requires_grad=True`, every operation on it produces a result tensor that remembers *how it was made*: its `grad_fn`. In our example `f.grad_fn` is `AddBackward0`, and it links to the `MulBackward0` that made `e` and the one that made `d`. These links form the **computational graph**, recorded on the fly as your Python code runs (which is why it's called **define-by-run**). Each `grad_fn` also saves the values its local derivative needs: `MulBackward0` for $e = c \cdot d$ keeps $c = 5$ and $d = 6$, because $\frac{\partial e}{\partial c} = d$ and $\frac{\partial e}{\partial d} = c$.
 
@@ -391,9 +323,11 @@ $$
 
 </Formula>
 
-### Part G: Gradient descent: using the slope to learn
+:::tip[🎯 Interview angle]
+**"How does autograd work internally?"** It records a `grad_fn` per operation during the forward pass (define-by-run), each saving what its local derivative needs; `backward()` walks the graph in reverse topological order from a scalar, multiplying and summing, and writes results into leaf tensors' `.grad`. Reverse mode wins because there is one output (the loss) and millions of inputs (the weights).
+:::
 
-#### 📖 Understand it
+## 7. Gradient descent: using the slope to learn
 
 Gradients tell us which way is uphill. Training wants to make the loss **smaller**, so it steps the other way. For one weight $w$ and loss $L(w)$, the update is $w \leftarrow w - \eta\,\frac{dL}{dw}$, where $\eta$ (the **learning rate**) is a small number you choose. The minus sign does all the steering. If the slope is negative (the loss falls as $w$ grows), subtracting a negative number **increases** $w$. If the slope is positive, $w$ **decreases**. Either way, $w$ moves downhill. And the step is proportional to the slope: big when the ground is steep (far from the minimum), small when it flattens out (close to it), so the steps naturally shrink as you arrive.
 
@@ -430,9 +364,11 @@ $$
 You can't see the valley floor, only the slope under your feet. So you take a step downhill, feel the slope again, and take another. Steps scaled by the steepness are a natural safety rule: stride when it's steep, shuffle when it's nearly flat. But if your stride (the learning rate) is too long, you leap clean over the valley and land higher up the other side.
 :::
 
-### Part H: Putting it together: one linear model, one training step by hand
+:::tip[🎯 Interview angle]
+**"What happens if the learning rate is too large?"** Steps overshoot the minimum: on $(w-3)^2$, $\eta = 1.0$ bounces between 0 and 6 forever and $\eta = 1.1$ diverges. Too small converges correctly but slowly. The steps shrink near the minimum by themselves because the slope shrinks.
+:::
 
-#### 📖 Understand it
+## 8. Putting it together: one linear model, one training step by hand
 
 Now combine everything on the simplest real model: **linear regression**, $\hat y = wx + b$, with squared-error loss $L = (\hat y - y)^2$. Take one training point $x = 2$, $y = 7$, and start from $w = 1$, $b = 0$.
 
@@ -467,9 +403,22 @@ $$
 
 </Formula>
 
-### Part I: A neuron with an activation function
+The whole training cycle, in one picture:
 
-#### 📖 Understand it
+```mermaid
+flowchart TB
+    W["Weights w"] --> FW["Forward: prediction ŷ"]
+    FW --> L["Loss L = how wrong"]
+    L --> BW["backward(): ∂L/∂w for every weight"]
+    BW --> ST["step(): w ← w − η · ∂L/∂w"]
+    ST -->|"repeat with the next batch"| W
+```
+
+:::tip[🎯 Interview angle]
+Know the two linear-model gradients cold: $\partial L/\partial w = 2(\hat y - y)\,x$ and $\partial L/\partial b = 2(\hat y - y)$, i.e. *error × input* and *error*. With a mean loss over a batch, the gradient is the average of the per-sample gradients.
+:::
+
+## 9. A neuron with an activation function
 
 A neuron adds one more link to the chain: after the weighted sum $z = wx + b$, it applies a non-linear **activation** $a = \sigma(z)$. The backward pass simply gains one more local derivative to multiply by.
 
@@ -516,9 +465,11 @@ $$
 A message passes along a line of people, and each one repeats it at a quarter of the volume (sigmoid's best case). After five people it's a thousandth of the original: the people at the front of the line (the early layers) can't hear what to change. ReLU is a person who repeats the message at full volume, or not at all.
 :::
 
-### Part J: Vectors and matrices, gently
+:::tip[🎯 Interview angle]
+**"Why do sigmoids cause vanishing gradients, and why does ReLU help?"** $\sigma' = \sigma(1-\sigma) \le 0.25$, so each sigmoid layer multiplies the gradient by at most a quarter; five layers give at most 0.001. ReLU's derivative is exactly 1 for positive inputs, so the gradient passes through undiminished (but is 0 for negative inputs, the "dying ReLU" risk).
+:::
 
-#### 📖 Understand it
+## 10. Vectors and matrices, gently
 
 Real layers don't have one weight; they compute $\mathbf{y} = W\mathbf{x}$ for a whole matrix $W$. That looks harder, but every output is just a **dot product**, a sum of multiplications, so the rules you already have apply to each number individually.
 
@@ -545,9 +496,11 @@ $$
 
 </Formula>
 
-### Part K: The classification gradient you'll see everywhere
+:::tip[🎯 Interview angle]
+**"What is the gradient of a linear layer?"** $\partial L/\partial W = \mathbf{g}\,\mathbf{x}^\top$ (upstream gradient times the input each weight multiplied) and $\partial L/\partial \mathbf{x} = W^\top \mathbf{g}$ (sent back through the transpose). A value that is broadcast or reused **sums** the gradients from every place it was used.
+:::
 
-#### 📖 Understand it
+## 11. The classification gradient you'll see everywhere
 
 For classification, the network outputs **logits** $z$, softmax turns them into probabilities $p$, and cross-entropy compares them with the one-hot target $y$. Differentiating softmax and the log separately is messy, but the combination collapses to one of the cleanest results in deep learning: the gradient with respect to each logit is simply **predicted probability minus target**.
 
@@ -563,7 +516,11 @@ $$
 
 </Formula>
 
-## ⚙️ Under the Hood (The Math & PyTorch Internals)
+:::tip[🎯 Interview angle]
+**"What is the gradient of softmax + cross-entropy?"** $p - y$: predicted probability minus the one-hot target. That clean form is why PyTorch's `CrossEntropyLoss` takes raw logits and fuses softmax with the log: it is simpler and numerically stable.
+:::
+
+## ⚙️ Going Deeper (The Math & PyTorch Internals)
 
 **What autograd stores**
 - Each operation creates a `Node` (the `grad_fn`) holding pointers to the nodes that produced its inputs (`next_functions`) and the **saved tensors** its local derivative needs. `f.grad_fn` is `AddBackward0` with two `MulBackward0` parents. `MulBackward0` saves both inputs; `ExpBackward0` saves its *output* (since $(e^x)' = e^x$); `SigmoidBackward0` saves $\sigma(z)$ to compute $\sigma(1 - \sigma)$.
@@ -785,7 +742,7 @@ print(w.grad, b.grad)                         # tensor(-13.3333) tensor(-6.)
 
 ### 9. A sigmoid neuron, link by link
 
-Every intermediate gradient matches the hand calculation in Part I.
+Every intermediate gradient matches the hand calculation in Chapter 9.
 
 ```python showLineNumbers
 import torch
@@ -910,3 +867,62 @@ $\sigma(0) = 0.5$, $\sigma'(0) = 0.5 \times 0.5 = $ **0.25**: the largest slope 
 - **Sigmoid/tanh in deep stacks** shrink gradients multiplicatively (max slope 0.25 / 1.0 and much smaller away from 0): vanishing gradients. ReLU passes slope 1 for positive inputs.
 - **Exactly-zero inputs to ReLU** get gradient 0 in PyTorch (a convention, since the true derivative doesn't exist there).
 - **Finite-difference checks in float32** are unreliable; use float64 and central differences (`gradcheck` does both).
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+**Derivatives**
+- $\frac{df}{dx}$ = **slope** = rise over run for a tiny run: $\frac{f(x+h) - f(x)}{h}$ as $h \to 0$. For $x^2$ at 3: $h = 1 \to 7$, $0.1 \to 6.1$, $0.001 \to 6.001$, limit **6**.
+- Rules: constant → 0; $x^n \to n x^{n-1}$; sum → sum of derivatives; $c \cdot f \to c \cdot f'$; product $(uv)' = u'v + uv'$; $(e^x)' = e^x$; $(\ln x)' = 1/x$.
+- **Partial derivative**: differentiate with respect to one variable and treat the others as constants. $f = ab + b^2$ → $\frac{\partial f}{\partial a} = b$, $\frac{\partial f}{\partial b} = a + 2b$.
+- **Gradient** $\nabla f$ = vector of partials = direction of **steepest increase**. Gradient descent goes the opposite way.
+
+**Chain rule and backprop**
+- One path: $\frac{dz}{dx} = \frac{dz}{dy}\cdot\frac{dy}{dx}$ (**multiply** along the path).
+- Several paths: **add** the products of all paths. A value used twice gets gradient contributions from both uses.
+- Backward pass: start with $\frac{\partial f}{\partial f} = 1$; at each node, **upstream gradient × local derivative**; sum where branches meet.
+- Local derivatives to know: **add** passes the gradient through unchanged (×1); **multiply** sends each input the **other** input; **square** $u^2$ gives $2u$.
+- Worked example ($a = 2, b = 3$; $c = a + b$, $d = ab$, $e = cd$, $f = e + d$): $f = 36$, $\frac{\partial f}{\partial a} = 24$, $\frac{\partial f}{\partial b} = 18$.
+
+**Autograd mechanics**
+- PyTorch is **reverse-mode automatic differentiation**: one backward pass gives the derivative of **one scalar** with respect to **every** input. That's exactly the shape of training (one loss, millions of weights).
+- Each result tensor stores a `grad_fn` (`AddBackward0`, `MulBackward0`…) that knows its local derivative. `backward()` walks this graph in reverse.
+- `.grad` is filled only for **leaf** tensors with `requires_grad=True`; use `.retain_grad()` to keep an intermediate's gradient.
+- `backward()` **adds** into `.grad` (running the example twice gives 48 and 36) → `zero_grad()` every step.
+- The graph is **freed** after `backward()`; a second call raises "Trying to backward through the graph a second time". `backward()` on a non-scalar needs a `gradient=` argument.
+
+**Gradient descent**
+- $\param{w} \leftarrow \param{w} - \hyper{\eta}\,\frac{\partial \loss{L}}{\partial \param{w}}$. Negative gradient → $w$ increases; positive → $w$ decreases.
+- $L = (w - 3)^2$, $w_0 = 0$: $\eta = 0.1$ gives 0.6, 1.08, 1.464… → 3; $\eta = 1.0$ bounces 0, 6, 0, 6; $\eta = 1.1$ diverges (6.6, −1.32, 8.18…).
+
+**Neural-network derivatives**
+- Linear model, one point: $\hat y = wx + b$, $L = (\hat y - y)^2$ → $\frac{\partial L}{\partial w} = 2(\hat y - y)\,x$, $\frac{\partial L}{\partial b} = 2(\hat y - y)$.
+- **Sigmoid** $\sigma' = \sigma(1 - \sigma)$, at most **0.25** → stacking 5 sigmoids shrinks gradients to ≤ 0.001 (**vanishing gradient**). **ReLU**' = 1 if $z > 0$ else 0. **tanh**' $= 1 - \tanh^2$.
+- Matrix layer $\mathbf{y} = W\mathbf{x}$: $\frac{\partial L}{\partial W_{ij}} = g_i\,x_j$ (upstream × the input it multiplied); $\frac{\partial L}{\partial \mathbf{x}} = W^\top \mathbf{g}$.
+- Broadcast/reused values **sum** their gradients (a bias added to 3 outputs gets gradient 3 from `sum()`).
+- Softmax + cross-entropy: $\frac{\partial L}{\partial z} = p - y$.
+
+## 📐 Formula Sheet
+
+Every equation on this page in one place. Each one is explained in the chapters above.
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Derivative | $\frac{df}{dx} = \lim_{h \to 0}\frac{f(x+h) - f(x)}{h}$ | Slope over a vanishingly small step |
+| Power rule | $\frac{d}{dx}x^n = n\,x^{n-1}$ | Bring the power down, reduce it by one |
+| Sum rule | $(u + v)' = u' + v'$ | Slopes add |
+| Product rule | $(uv)' = u'v + uv'$ | Each factor takes a turn changing |
+| Exp and log | $(e^x)' = e^x$, $\;(\ln x)' = \frac{1}{x}$ | |
+| Partial derivative | $\frac{\partial f}{\partial a}$ with $b$ held fixed | Slope along one input |
+| Gradient | $\nabla f = \left[\frac{\partial f}{\partial a},\ \frac{\partial f}{\partial b}\right]$ | All partial slopes together |
+| Chain rule | $\frac{dz}{dx} = \frac{dz}{dy}\cdot\frac{dy}{dx}$ | Multiply slopes along the path |
+| Multi-path chain rule | $\frac{\partial f}{\partial a} = \sum_{\text{paths}} \prod \text{local slopes}$ | Add up every route from $a$ to $f$ |
+| Backprop step | node gradient = upstream gradient × local derivative | What every `grad_fn` does |
+| Gradient descent | $\param{w} \leftarrow \param{w} - \hyper{\eta}\,\frac{\partial \loss{L}}{\partial \param{w}}$ | Step downhill |
+| Linear model gradients | $\frac{\partial \loss{L}}{\partial \param{w}} = 2(\pred{\hat y} - \data{y})\,\data{x}$, $\;\frac{\partial \loss{L}}{\partial \param{b}} = 2(\pred{\hat y} - \data{y})$ | Error × input, and error |
+| Mean over a batch | $\frac{\partial \loss{L}}{\partial \param{w}} = \frac{1}{N}\sum_i \frac{\partial \loss{\ell_i}}{\partial \param{w}}$ | Average the per-sample slopes |
+| Sigmoid derivative | $\sigma'(z) = \sigma(z)\,(1 - \sigma(z))$ | Peaks at 0.25 |
+| ReLU derivative | $1$ if $z > 0$, else $0$ | On/off switch |
+| Matrix layer gradients | $\frac{\partial \loss{L}}{\partial \param{W_{ij}}} = g_i\,\data{x_j}$, $\;\frac{\partial \loss{L}}{\partial \data{\mathbf{x}}} = \param{W}^\top \mathbf{g}$ | Upstream × input; send back through the transpose |
+| Softmax + CE | $\frac{\partial \loss{L}}{\partial \pred{z}} = \pred{p} - \data{y}$ | Predicted minus true |

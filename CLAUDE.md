@@ -7,7 +7,7 @@ This is an interview preparation wiki built on Docusaurus v3. It covers deep-div
 - **Group pages into sub-topic folders** once a section has more than ~5 pages or mixes clearly different topics. Each sub-folder gets a `_category_.json` (`label`, `position`, generated-index `description`); `sidebar_position` inside it restarts at 1. Current groups:
   - Core Java: `01-language-basics/`, `02-oop/`, `03-jvm-internals/`, `04-hashing/`
   - Data Exploration: `01-numpy/`, `02-pandas/`, `03-visualization/` (overview and capstone stay at the top)
-  - Deep Learning: `01-pytorch-and-neural-networks/`, `02-cnns/` (overview at the top)
+  - Deep Learning: `01-pytorch-and-neural-networks/`, `02-cnns/`, `03-nlp-foundations/`, `04-rnns/` (overview at the top)
   - DSA Java toolkit: `02-arrays-and-strings/`, `03-collections/`, `04-sorting-math-and-io/`
   - DSA topics: `02-hashing/` (basics, hash functions & collisions, patterns)
 - Number prefixes are stripped from URLs, so a page's URL is `/docs/<folder path without NN- prefixes>/<file without NN->`. Moving a page changes its URL; cross-links must be **relative file links** (`../02-pandas/05-pandas-groupby-apply-transform.md`) so the build catches broken ones.
@@ -18,8 +18,29 @@ When I provide raw, handwritten, or lecture notes, DO NOT just format them blind
 2. **Correct & Clarify:** Silently fix technical inaccuracies.
 3. **Enrich:** Expand brief notes using the reference materials to ensure they meet senior-level interview standards.
 
+# Study-Notes Format (REQUIRED for EVERY tab: Java, Spring, AI/ML, DSA, and future subjects)
+Pages are **textbook-style study material first, revision sheet second**. The reader should be able to *learn* the topic from the page, not just recall it. Reference implementation: the Deep Learning pages (`docs/03-ai-ml/03-deep-learning/`), especially the NLP Foundations pages. Where a tab's section below lists extra components (priority badges, `:::speak`, `<Predict>`, complexity tables…), keep them, but place them within this layout.
+
+**Page order:**
+1. Frontmatter → `:::tip[TL;DR (30-Second Interview Pitch)]` → tab-specific key component (`<PriorityKey />` and/or `<FormulaKey />`) → optional `:::info[Where this page sits]` with relative links to the previous/next pages.
+2. `## 🧭 Start Here`: 2–4 paragraphs of plain prose on what problem the topic solves and how the page is organized, then a `| New concept | One-line meaning |` table.
+3. **Numbered chapters**, `## 1. <Topic>`, `## 2. <Topic>`, … in teaching order (one chapter per important concept). Each chapter:
+   - **opens with prose**: 2–5 paragraphs that explain the concept like a good textbook (the problem, the idea, how it works, why it's designed that way, a worked example in words). Write in full sentences and define every term before using it. No "📖 Understand it" sub-headings (they clutter the table of contents); the chapter simply starts with the prose.
+   - then the supporting material: Mermaid diagram, `<Animation>`, tables, `<Formula>`/`<RuleCard>` cards, `:::analogy`, `:::danger[Interview Trap: ...]`. Put each Mermaid diagram inside the chapter it explains (there is no separate "Mental Model" section any more).
+   - **ends with** `:::tip[🎯 Interview angle]`: the likely interview question in bold quotes and a 2–4 sentence model answer.
+4. `## ⚙️ Going Deeper (...)`: internals, memory layout, performance, edge mechanics (bullets are fine here).
+5. `## 💻 <Language> Implementation`: small verified code blocks (Code Block Conventions below).
+6. Tab-specific practice sections, if the tab requires them: 🧪 Predict the Output → 🪜 Follow-up Ladder → 🚑 Production Scenario(s).
+7. `## 🚨 Interview Gotchas & Edge Cases`, starting with the `:::warning[The Most Common Question]` box.
+8. `## ⚡ Essential Interview Recall`, **at the end**, opening with "A one-screen revision list. Every point is explained in the chapters above." Scannable bullets grouped by bold sub-labels.
+9. The `:::speak` 60-second answer (tabs that use it) directly after the Recall.
+10. `## 📐 Formula Sheet` (pages with equations): every equation in one table.
+11. `## Concept-Check Answers (from the notebook)` with `<details>` blocks, when the source has concept-check questions.
+
+**Writing rules:** prose explains, tables compare, cards and boxes highlight; never replace an explanation with a bullet list. In prose, escape literal `{` `}` (MDX treats them as JSX). Every number in prose must come from a real run or the reference material.
+
 # Formatting & UI Constraints (STRICT)
-- **NO WALLS OF TEXT.** The UI must be punchy, highly visual, and optimized for instant recall.
+- **Explain first, then make it scannable.** Each concept gets real explanatory prose (see Study-Notes Format above); tables, admonitions, cards and the end-of-page Recall provide the fast-revision layer.
 - Use **Markdown Tables** whenever comparing two concepts.
 - Use **Docusaurus Admonitions** (`:::tip`, `:::danger`, `:::warning`, `:::info`) to break up the visual monotony and highlight interview traps.
 - **Admonition title syntax (this Docusaurus version requires brackets):** `:::tip[Your Title Here]` — NOT `:::tip Your Title Here`. The space-separated legacy form silently fails to render (renders as literal `:::` text) on Docusaurus 3.10+, which uses `remark-directive` under the hood. Bare admonitions with no title (`:::danger` / `:::` with no title) don't need brackets.
@@ -28,6 +49,21 @@ When I provide raw, handwritten, or lecture notes, DO NOT just format them blind
 - **Images and Mermaid diagrams are click-to-zoom** by default (`docusaurus-plugin-image-zoom`) — no extra markup needed.
 - **Mermaid rendering:** `src/theme/Mermaid/index.js` is a swizzled copy of the theme component that **queues diagram renders one at a time**. The stock component races (several diagrams per page + the dark-mode re-render) and leaves diagrams blank. **Do not delete it.** All diagram types (flowchart, decision diamonds, mindmap) render with it. Layout tips: if a `subgraph` sets its own `direction`, don't draw edges that cross between subgraphs (Mermaid ignores the direction and squashes the layout); split into separate diagrams instead. Prefer `flowchart TB` for chains of 4+ nodes, because long `LR` chains render too small to read.
 - The site has **local full-text search** built in — no action needed when writing pages, just keep headings and titles descriptive since search ranks on them.
+
+# Textbook-Style Page Layout (CURRENT FORMAT — applies to every tab)
+Pages are written as **textbook chapters**: teach first, revise last. This layout **overrides** the older "Recall first / Mental Model / Core Concepts Part A, B, C" order described elsewhere in this file; every component and quality rule in the other sections (Formula cards, colour macros, analogies, Manim clips, priority badges, Predict drills, code conventions, verification) still applies, just placed inside the chapters. Existing pages outside Deep Learning/NLP are still in the old layout and will be converted later.
+1. Frontmatter → `:::tip[TL;DR (30-Second Interview Pitch)]` → `<FormulaKey />` (AI/ML) or `<PriorityKey />` (Java/Python).
+2. `:::info[Where this page sits]`: **Before** / **This page** (name the source notebook or lecture) / **Next**, as relative file links.
+3. `## 🧭 Start Here`: plain-language overview, the numbered chain of ideas the page builds, a `| New concept | One-line meaning |` table, one opening `:::analogy`.
+4. **Numbered chapters** `## 1. …`, `## 2. …` in teaching order. Each is real prose (explain *why*, not just *what*), with its Mermaid diagram, `<Animation>`, `<Formula>`/`<RuleCard>` cards, tables, `:::danger[Interview Trap: …]` and analogy placed inside the chapter it explains. **Every chapter ends with a `:::tip[🎯 Interview angle]` box** (the likely question in bold + the model answer).
+5. `## ⚙️ Going Deeper (…Internals)`: senior-level internals as bold-titled mini sections.
+6. `## 💻 Python Implementation` (or Java/PyTorch): small numbered `### N. …` blocks, one idea each, outputs in trailing comments, all verified by a real run. Notebook mistakes are fixed here and the fix is explained.
+7. Java/Python pages: `## 🧪 Predict the Output`, `## 🪜 Follow-up Ladder`, `## 🚑 Production Scenario(s)`, and the `:::speak` box before the Recall.
+8. `## 🚨 Interview Gotchas & Edge Cases`: `:::warning[The Most Common Question]` + bullets.
+9. `## ⚡ Essential Interview Recall` — **at the end**, as a one-screen revision check grouped by bold sub-headings.
+10. `## 📐 Formula Sheet` (AI/ML): every equation on the page.
+11. `## Concept-Check Answers (from the notebook)`: every notebook question, grouped by `###` notebook section, each answer in a `<details><summary><strong>Q1. …</strong></summary>` block.
+- **One page per notebook**; a two-notebook topic gets two linked pages. Every notebook concept and question is covered; notebook errors are corrected (say what was wrong in the implementation section) and enriched from `_reference_materials/`.
 
 # Animations (Manim) — REQUIRED for every AI/ML page
 Every page under `docs/03-ai-ml/` gets **2–4 Manim animations** for the concepts that involve motion or change: something sliding, flowing, accumulating, converging or being built up step by step. Static structure stays in Mermaid diagrams and tables. Full workflow: `animations/README.md`.
@@ -47,7 +83,7 @@ Equations are the most important part of the AI/ML notes. Every page under `docs
   - `\pred{Z}`: outputs and activations ($z, a, \hat y, p, Y$)
   - `\loss{L}`: loss and gradients ($L, \nabla, \delta, \partial L$, `.grad`)
   - `\hyper{\eta}`: things you choose ($\eta$, dropout $p$, stride $S$, padding $P$, kernel size $F$, channel counts)
-- **`## 📐 Formula Sheet`** right after Essential Interview Recall: a table `| Concept | Formula | In plain words |` with **every** equation on the page.
+- **`## 📐 Formula Sheet`** at the end of the page, right after Essential Interview Recall: a table `| Concept | Formula | In plain words |` with **every** equation on the page.
 - **`<Formula>` cards** for every important equation in the body (replace bare `$$` blocks):
   ```mdx
   <Formula name="Mean Squared Error (MSE)" tag="Regression loss" words="One or two plain-English sentences." remember="A 3–7 word memory hook.">
@@ -71,7 +107,7 @@ Equations are the most important part of the AI/ML notes. Every page under `docs
 Every page under `docs/01-core-java/` and `docs/02-spring-boot/` (and future Java-ecosystem folders, except `docs/04-dsa/`, which has its own lighter rules below) must pass this checklist before it counts as done. The target is the interview depth of top Indian product companies and banks (Google, Microsoft, Amazon, Atlassian, Uber, Flipkart, Walmart, Goldman Sachs, JPMorgan).
 1. **Coverage:** every 🔴 topic for the subject is present. Research the commonly asked questions *before* writing. If a topic would make a page too long, split it into a sibling page (e.g. `garbage-collection.md` next to `jdk-jre-jvm.md`) and cross-link them.
 2. **Priority badges:** every `##`/`###` section heading and every Essential Recall bullet starts with 🔴 (asked almost always), 🟠 (frequent) or 🟡 (senior differentiator). `<PriorityKey />` goes right after the TL;DR box.
-3. **60-second answer:** one `:::speak[The page's most-asked question]` box right after Essential Interview Recall, written as the spoken answer (first person, ~120–170 words).
+3. **60-second answer:** one `:::speak[The page's most-asked question]` box right after Essential Interview Recall (end of the page), written as the spoken answer (first person, ~120–170 words).
 4. **Rule cards:** every hard rule (a contract, a set of compiler rules, a recipe) goes in a `<RuleCard>` — the Java counterpart of the Formula card.
 5. **Predict the Output:** a `## 🧪 Predict the Output` section with **at least 5** `<Predict>` drills; each answer explains *why*.
 6. **Follow-up ladder:** a `## 🪜 Follow-up Ladder` with one `<Ladder>` of 4–5 `<Rung>`s, going from the basic question to a senior/production-level one.
@@ -82,7 +118,7 @@ Every page under `docs/01-core-java/` and `docs/02-spring-boot/` (and future Jav
 11. **Correctness:** every snippet compiled and every output comment taken from a real run (JDK 21+); compiler errors quoted from `javac`. No unverified numbers.
 12. **Senior signals:** at least one 🟡 section per page (internals, tuning, or modern Java).
 
-**Java page layout:** frontmatter → TL;DR → `<PriorityKey />` → ⚡ Essential Interview Recall → `:::speak` → The Mental Model → The Paradigm / Core Concepts → ⚙️ Under the Hood → 💻 Java Implementation → 🧪 Predict the Output → 🪜 Follow-up Ladder → 🚑 Production Scenario(s) → 🚨 Interview Gotchas & Edge Cases.
+**Java page layout:** frontmatter → TL;DR → `<PriorityKey />` → 🧭 Start Here → numbered chapters (prose + diagrams/tables/cards + 🎯 Interview angle; priority badge on each chapter heading) → ⚙️ Going Deeper → 💻 Java Implementation → 🧪 Predict the Output → 🪜 Follow-up Ladder → 🚑 Production Scenario(s) → 🚨 Interview Gotchas & Edge Cases → ⚡ Essential Interview Recall → `:::speak`.
 
 **Interview components** (`src/components/Interview/`, registered globally, no imports):
 ````mdx
@@ -116,7 +152,7 @@ Same prop rules as the Formula card: blank lines around inner markdown, and no d
 
 # Python Fundamentals pages (docs/03-ai-ml/00-python-fundamentals/)
 Core-language Python for AI-engineer interviews. These pages use the **Java quality bar and layout** above (priority badges, `:::speak`, rule cards, 5+ `<Predict>` drills, one `<Ladder>`, `:::incident` scenarios, analogies), adapted to Python, plus the AI/ML animation rule (2 Manim clips per page, scenes in `animations/python_scenes.py`, keys `python/...`).
-- **Layout:** frontmatter → TL;DR → `<PriorityKey lang="Python" v="3.10" />` → ⚡ Essential Interview Recall → `:::speak` → The Mental Model → The Paradigm / Core Concepts → ⚙️ Under the Hood (CPython Internals) → 💻 Python Implementation → 🧪 Predict the Output → 🪜 Follow-up Ladder → 🚑 Production Scenario(s) → 🚨 Interview Gotchas & Edge Cases.
+- **Layout:** frontmatter → TL;DR → `<PriorityKey lang="Python" v="3.10" />` → 🧭 Start Here → numbered chapters (prose + supporting material + 🎯 Interview angle) → ⚙️ Going Deeper (CPython Internals) → 💻 Python Implementation → 🧪 Predict the Output → 🪜 Follow-up Ladder → 🚑 Production Scenario(s) → 🚨 Interview Gotchas & Edge Cases → ⚡ Essential Interview Recall → `:::speak`.
 - **Version pills:** `<Since v="3.10" lang="Python" />` renders "Python 3.10+" (the `lang` prop defaults to Java).
 - **AI angle:** keep the course notes' AI/ML tips as `:::info[AI Engineering: ...]` boxes, and prefer AI examples (training loops, tokenizers, LLM API calls, PyTorch `Dataset`/`nn.Module`) in code and incidents.
 - **Correctness:** run every snippet on a current CPython (the existing pages were verified on 3.14.6, the free-threaded build on 3.14.6t) and copy outputs into the trailing comments; quote error messages exactly as that version prints them.
@@ -125,14 +161,14 @@ Core-language Python for AI-engineer interviews. These pages use the **Java qual
 
 # Python for Data Exploration pages (docs/03-ai-ml/01-python-for-data-exploration/)
 NumPy, pandas, Matplotlib and Seaborn for EDA, all on one running dataset, **ShopStream** (a seeded, deliberately messy e-commerce dataset).
-- **Layout:** frontmatter → TL;DR → `<PriorityKey lang="pandas" v="3.0" />` (library and version per page) → `<FormulaKey />` (if the page has equations) → `## 🧭 Start Here` (plain-language explainer, a "New concept | One-line meaning" table, an analogy) → ⚡ Essential Interview Recall → 📐 Formula Sheet (if equations) → `:::speak` → The Mental Model (Mermaid + 2 `<Animation>`) → The Paradigm / Core Concepts (tables, `<RuleCard>`, `<Formula>`) → ⚙️ Under the Hood → 💻 Implementation on ShopStream → 🧪 Predict the Output (5+) → 🪜 Follow-up Ladder → 🚑 Production Scenarios → 🚨 Interview Gotchas. 3 analogies per page.
+- **Layout:** frontmatter → TL;DR → `<PriorityKey lang="pandas" v="3.0" />` (library and version per page) → `<FormulaKey />` (if the page has equations) → `## 🧭 Start Here` (plain-language explainer, a "New concept | One-line meaning" table, an analogy) → numbered chapters (prose, then Mermaid / 2 `<Animation>` / tables / `<RuleCard>` / `<Formula>`, then 🎯 Interview angle) → ⚙️ Going Deeper → 💻 Implementation on ShopStream → 🧪 Predict the Output (5+) → 🪜 Follow-up Ladder → 🚑 Production Scenarios → 🚨 Interview Gotchas → ⚡ Essential Interview Recall → `:::speak` → 📐 Formula Sheet (if equations). 3 analogies per page.
 - **Shared code** lives in `scripts/data_exploration/`: `shopstream.py` (generator, `make_shopstream()`), `clean.py` (`clean_orders()`, used from the GroupBy page on), `site_style.py` (house chart style: validated palette + rcParams), `figures_matplotlib.py` and `figures_seaborn.py` (render every image on those pages into `static/img/data-exploration/`), `capstone_eda.py` (the full capstone script, embedded verbatim on page 9). CSVs for download are in `static/data/` and linked with `pathname:///data/...`.
 - **Correctness:** outputs verified on Python 3.14, NumPy 2.5.4, pandas 3.0.6 (Copy-on-Write always on, `str` dtype default, `applymap` removed), Matplotlib 3.11.2, Seaborn 0.13.2, PyTorch 2.14 (CPU). Re-run the scripts and update the quoted numbers if the generator or cleaning changes.
 - **Charts:** follow the house style (one y-axis per chart: teach `twinx` only with a warning and the two-panel alternative), direct labels where possible, PNG at 150 dpi.
 
 # DSA pages (docs/04-dsa/) — separate "DSA" navbar tab
 `00-complexity-analysis.md` (Big-O cheat sheet) is the first page of the tab. Language toolkits live in `01-java-toolkit/` (Python toolkit later as its own folder), DSA topics as further numbered folders. The Java toolkit is grouped into `02-arrays-and-strings/`, `03-collections/` and `04-sorting-math-and-io/`, with the collections overview page at the top.
-- **Light metadata on purpose:** notes + code only. No priority badges, `<PriorityKey />`, `:::speak`, `<Predict>`, `<Ladder>`, `:::incident` or Formula cards. Frontmatter, a short `:::tip[TL;DR]`, then topic sections.
+- **Light metadata on purpose:** notes + code only. No priority badges, `<PriorityKey />`, `:::speak`, `<Predict>`, `<Ladder>`, `:::incident` or Formula cards. Still follow the Study-Notes Format: frontmatter → short `:::tip[TL;DR]` → 🧭 Start Here → `## Complexity at a Glance` → numbered chapters (prose explanation of each idea/pattern, then code and its complexity line, then 🎯 Interview angle) → 🚨 Interview Gotchas → `## Pattern Complexity Summary` (if patterns) → ⚡ Essential Interview Recall.
 - **Keep:** tables for comparisons and method cheat sheets, admonitions for traps, the Code Block Conventions below (❌/✅ blocks, line markers, outputs in trailing comments).
 - **Diagrams/animations are optional and low priority:** a small Mermaid diagram only where it clearly helps. No Manim requirement.
 - **Time & space complexity everywhere (REQUIRED):** every DSA page starts (after the TL;DR) with a `## Complexity at a Glance` table (operation | time | extra space | note), states time **and** space after every pattern / algorithm snippet (one bold line, with the brute-force comparison when there is one), and ends patterns with a `## Pattern Complexity Summary` table where it has patterns. Mention hidden costs (key hashing O(L), boxing, recursion stack, copies). `docs/04-dsa/00-complexity-analysis.md` is the shared Big-O cheat sheet; link to it instead of repeating the sorting-algorithm or master tables.
@@ -140,7 +176,7 @@ NumPy, pandas, Matplotlib and Seaborn for EDA, all on one running dataset, **Sho
 - **Correctness:** every snippet run on JDK 21+, outputs copied from the run, compiler errors quoted from `javac`.
 
 # Page Structure Specification
-Every generated `.md` page MUST strictly follow this layout:
+Every generated `.md` page MUST follow the **Study-Notes Format** near the top of this file. Skeleton:
 
 ---
 title: "<Concept Name>"
@@ -151,16 +187,16 @@ sidebar_position: <number>
 A concise 2-3 sentence definition explaining what the concept is and why it matters in production.
 :::
 
-## ⚡ Essential Interview Recall
-A highly refined, scannable bulleted list of the absolute must-remember facts, mechanics, and keywords for this topic. No fluff, no Q&A—just the raw, distilled data points required to pass a senior-level interview.
+## 🧭 Start Here
+Plain-prose orientation + a `| New concept | One-line meaning |` table.
 
-## The Mental Model
-Always include a visual diagram using Mermaid.js (` ```mermaid `) for flowcharts, lifecycles, or mindmaps.
+## 1. <First concept>
+Textbook-style prose explanation first; then Mermaid diagram, tables, cards, analogies and traps; end with `:::tip[🎯 Interview angle]`.
 
-## The Paradigm / Core Concepts
-Use a Markdown Table here if comparing approaches. Otherwise, use a concise bulleted list.
+## 2. <Next concept>
+(same pattern, one chapter per important concept)
 
-## ⚙️ Under the Hood (JVM Mechanics)
+## ⚙️ Going Deeper (JVM Mechanics / Internals)
 Bullet points breaking down the internal mechanics. 
 - Emphasize memory layout, bytecode instructions, and performance tradeoffs.
 - If there is a common misconception, wrap it in a `:::danger[Interview Trap]` admonition block.
@@ -188,6 +224,9 @@ Clean, compilable code demonstrating the concept, following the **Code Block Con
 Highlight the single most frequently asked deep-dive question regarding this topic here.
 :::
 - Follow with bullet points covering edge cases, performance pitfalls, or default configuration traps.
+
+## ⚡ Essential Interview Recall
+At the end of the page: a scannable bulleted revision list of the must-remember facts, every one of them explained in the chapters above. (Then `:::speak`, 📐 Formula Sheet and Concept-Check Answers where the tab uses them.)
 
 # Execution Guardrails
 - Write files directly to disk in the `docs/` folder, maintaining a clean numeric hierarchy (e.g., `docs/01-core-java/02-oop/`).

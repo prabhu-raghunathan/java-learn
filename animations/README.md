@@ -6,7 +6,7 @@ and embedded with the `<Animation>` component.
 | File | What it holds |
 |---|---|
 | `style.py` | Shared colours, fonts and helpers. Every scene subclasses `WikiScene` |
-| `pytorch_scenes.py`, `calculus_scenes.py`, `ann_scenes.py`, `cnn_scenes.py`, `transfer_scenes.py` | One file per topic, several `Scene` classes each |
+| `pytorch_scenes.py`, `calculus_scenes.py`, `ann_scenes.py`, `cnn_scenes.py`, `transfer_scenes.py`, `nlp_scenes.py`, `rnn_scenes.py` | One file per topic, several `Scene` classes each |
 | `render.py` | Renders scenes → `static/animations/<topic>/<name>.{mp4,webm,jpg}` |
 
 ## Render
@@ -42,3 +42,7 @@ No import needed: the component is registered in `src/theme/MDXComponents.js`.
 `python_scenes.py` holds the 18 animations for `docs/03-ai-ml/00-python-fundamentals/` (keys `python/...`). They subclass `PyScene` (a `WikiScene` with `say()` / `code()` helpers that cross-fade captions and code lines) and use `box()`, `code_block()` (keeps indentation, which `Text` strips) and `arrow()`. Numbers shown (list capacities, dict probe slots, GIL and asyncio timings) come from the verified runs quoted on the pages. Avoid `NumberLine(include_numbers=True)`: it needs LaTeX/dvisvgm; draw tick labels with `label()` instead.
 
 `data_scenes.py` holds the 18 animations for `docs/03-ai-ml/01-python-for-data-exploration/` (keys `numpy/...`, `pandas/...`, `matplotlib/...`, `seaborn/...`, `capstone/...`). It reuses `PyScene`, `box()`, `retext()` and `arrow()` from `python_scenes.py` and adds `cell()`, `row_of()` and `col_of()` for table-like layouts. `HistogramBinning` and `BoxplotQuartiles` compute their numbers from ShopStream at render time (`scripts/data_exploration/`), so the Manim venv also needs `pandas==3.0.6` and `pyarrow` installed.
+
+## RNN scenes
+
+`rnn_scenes.py` holds the 6 animations for `docs/03-ai-ml/03-deep-learning/04-rnns/` (keys `rnn/...`). They use text labels with a small `sym()` subscript helper instead of `MathTex`, so they render without LaTeX/dvisvgm. Numbers come from the pages' verified runs: the notebook-12 toy weights (hidden-state flow), the padded batch ids, the measured BPTT gradient norms (`BPTT_NORMS`, W_hh = 0.5 × orthogonal, T = 20) and the 0.5/1.5/0.95 repeated-multiplication sequences.

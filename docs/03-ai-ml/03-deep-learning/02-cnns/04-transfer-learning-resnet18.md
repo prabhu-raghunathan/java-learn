@@ -46,111 +46,7 @@ Using a pretrained model brings its own rules. You must feed it inputs that look
 A chef with ten years of experience doesn't relearn how to hold a knife or what "golden brown" means when they join a new restaurant. They keep their skills (the **frozen backbone**) and only learn the new menu (the **new head**). If the new cuisine is a bit different, they might adjust a few advanced techniques, carefully (**fine-tuning with a small learning rate**). Training from scratch is hiring someone who has never cooked and giving them 8,400 recipes.
 :::
 
-## ⚡ Essential Interview Recall
-
-**Why not train from scratch?**
-- Deep CNNs have **millions of parameters** (SmallCNN 2.1 M, SimpleCNN 4.3 M, ResNet18 **11.7 M**), need **lots of labelled data**, heavy **compute**, careful **tuning**, and they **overfit** small datasets.
-- Scratch SimpleCNN on 8,400 images: val accuracy **~0.81** with a growing train/val gap.
-
-**Transfer learning**
-- $f_{new}(\data{X}) = g_{\param{\phi}}\big(h_{\param{\theta^*}}(\data{X})\big)$: pretrained feature extractor $h$ + new task head $g$.
-- Works because **early layers learn universal features** (edges, textures, colour blobs) and later layers more task-specific ones (parts, objects). Edges learned for cars also help with dogs.
-- Pretrained on **ImageNet**: ~1.2 M images, 1,000 classes. `models.resnet18(weights=models.ResNet18_Weights.DEFAULT)` (= `IMAGENET1K_V1`); `pretrained=True` is the deprecated spelling.
-
-**ResNet18**
-- Stem (conv 7×7/2 + BN + ReLU + maxpool) → `layer1`…`layer4` (2 BasicBlocks each) → global average pool → `fc`. 224×224 → 112 → 56 → 56 → 28 → 14 → **7×7×512** → `(512,)` → logits.
-- **11,689,512** params with the 1,000-class head; **11,177,538** with `Linear(512, 2)`. `layer4` alone = **8,393,728** (72%).
-- **Residual connection** $y = F(x) + x$: the identity path gives gradients a shortcut, so 18–152-layer nets train without vanishing gradients.
-
-**Two strategies**
-- **Feature extraction:** freeze all, train `fc` only → **1,026** trainable params (0.009%). Optimizer gets `model.fc.parameters()`. Notebook: best val **0.9819** in 5 epochs.
-- **Fine-tuning:** unfreeze `layer4` + `fc` → **8,394,754** trainable (75%). Use a **small LR (1e-4)**. Notebook: best val **0.9874**, early-stopped at epoch 8, train acc 0.998 (starting to overfit).
-- Choose by **dataset size** and **similarity to ImageNet**: small + similar → extract; large or different → fine-tune more layers; huge and very different → maybe from scratch.
-- Freezing ≠ fixing BatchNorm: in `model.train()` mode, frozen BN layers **still update their running mean/var**. Put them in `eval()` if the backbone must stay truly fixed.
-
-**Data pipeline for pretrained models**
-- Input must match pretraining: **RGB, 224×224, `ToTensor()` (÷255 and HWC→CHW), `Normalize(ImageNet mean, std)`**.
-- **Augment train only** (`RandomHorizontalFlip(0.5)`, `RandomRotation(10)`); val/test get the deterministic transform. Augmentation is re-sampled **every time** an image is loaded, so each epoch sees new variants.
-- On-the-fly loading needs a custom `Dataset` (`__len__`, `__getitem__`) or `datasets.ImageFolder` (labels from sub-folder names, `class_to_idx` **alphabetical**).
-
-**Training control**
-- `ReduceLROnPlateau(factor, patience)`: multiply LR by `factor` once val loss fails to improve for **more than** `patience` epochs. Notebook fine-tune: **1e-4 → 5e-5 → 2.5e-5**.
-- **Early stopping:** count epochs without improvement greater than `min_delta`; stop at `patience`. Restore the **best** weights, saved with `copy.deepcopy(model.state_dict())` (a plain `state_dict()` holds **references** that keep changing).
-- **L2:** `weight_decay=λ` adds $\hyper{\lambda}\param{w}$ to every gradient (= penalty $\frac{\hyper{\lambda}}{2}\sum \param{w}^2$). Shrinks all weights smoothly. With **Adam**, prefer **AdamW** (decoupled decay).
-- **L1:** add $\hyper{\lambda}\sum|\param{w}|$ to the loss manually; constant-size push towards 0 → **sparse** weights.
-- With a frozen backbone, L1/L2/scheduler changes moved val accuracy by **under 0.5 points**: with 1,026 trainable params there is almost nothing to overfit. The big win is **pretrained vs scratch** (~81% → ~98%).
-
-## 📐 Formula Sheet
-
-Every equation on this page in one place. Each one is explained in a card further down.
-
-| Concept | Formula | In plain words |
-|---|---|---|
-| Transfer learning | $f_{new}(\data{X}) = g_{\param{\phi}}\big(h_{\param{\theta^*}}(\data{X})\big)$ | Pretrained feature extractor + new head |
-| Residual block | $\pred{y} = F(\data{x};\param{W}) + \data{x}$ | Learn a correction on top of the identity |
-| Residual gradient | $\frac{\partial \pred{y}}{\partial \data{x}} = \frac{\partial F}{\partial \data{x}} + I$ | The "+I" keeps gradients alive |
-| Freezing | $\param{\theta_{frozen}} \leftarrow \param{\theta_{frozen}}$, $\;\param{\phi} \leftarrow \param{\phi} - \hyper{\eta}\,\nabla_{\param{\phi}}\loss{L}$ | Only unfrozen parameters move |
-| Head parameters | $512 \times 2 + 2 = 1{,}026$ | All you train in feature extraction |
-| ImageNet normalization | $\data{x'_c} = (\data{x_c} - \mu_c)/\sigma_c$ | Speak the pretrained model's units |
-| Augmentation objective | $\min_{\param{\theta}} \; \mathbb{E}_{t \sim \mathcal{T}}\, \loss{L}\big(f(t(\data{x})), \data{y}\big)$ | Be right for every plausible variant |
-| L2 penalty | $\loss{L_{total}} = \loss{L_{CE}} + \frac{\hyper{\lambda}}{2}\sum_i \param{w_i}^2$ | Large weights cost extra |
-| Weight-decay step | $\param{w} \leftarrow (1 - \hyper{\eta}\hyper{\lambda})\,\param{w} - \hyper{\eta}\,\nabla \loss{L_{CE}}$ | Shrink a little, then step |
-| L1 penalty | $\loss{L_{total}} = \loss{L_{CE}} + \hyper{\lambda}\sum_i \lvert \param{w_i} \rvert$ | Pushes small weights to exactly 0 |
-| L1 gradient | $\hyper{\lambda}\,\text{sign}(\param{w_i})$ | Constant-size push towards 0 |
-| AdamW step | $\param{w} \leftarrow \param{w} - \hyper{\eta}\,\frac{\hat m}{\sqrt{\hat v} + \epsilon} - \hyper{\eta}\hyper{\lambda}\,\param{w}$ | Decay applied outside Adam's scaling |
-| ReduceLROnPlateau | $\hyper{\eta} \leftarrow \hyper{\eta} \cdot \text{factor}$ after $>$ patience bad epochs | Slow down when stuck |
-| Early stopping | stop when bad epochs $\ge$ patience; bad means $\loss{L_{val}} \ge \text{best} - \delta$ | Quit when validation stops improving |
-
-## The Mental Model
-
-### 1. ResNet18 anatomy (224×224 input)
-
-```mermaid
-flowchart TB
-    IN["Input (B, 3, 224, 224)<br/>RGB, ImageNet-normalized"] --> STEM["Stem: conv 7×7 /2 + BN + ReLU → (64, 112, 112)<br/>maxpool 3×3 /2 → (64, 56, 56) · 9.5 K params"]
-    STEM --> L1["layer1: 2 BasicBlocks → (64, 56, 56) · 148 K"]
-    L1 --> L2["layer2: 2 BasicBlocks → (128, 28, 28) · 526 K"]
-    L2 --> L3["layer3: 2 BasicBlocks → (256, 14, 14) · 2.1 M"]
-    L3 --> L4["layer4: 2 BasicBlocks → (512, 7, 7) · 8.39 M"]
-    L4 --> GAP["Global average pool → (512,)"]
-    GAP --> FC(["fc: Linear(512, 1000) → replaced by Linear(512, 2)"])
-```
-
-### 2. Feature extraction: train the head only
-
-```mermaid
-flowchart TB
-    A["Stem + layer1–layer3<br/>🧊 frozen"] --> B["layer4<br/>🧊 frozen"]
-    B --> C["avgpool → 512 features"]
-    C --> D(["fc 512→2<br/>🔥 trainable: 1,026 params"])
-```
-
-### 3. Fine-tuning: also adapt the deepest block
-
-```mermaid
-flowchart TB
-    A["Stem + layer1–layer3<br/>🧊 frozen: generic edges, textures, parts"] --> B["layer4<br/>🔥 trainable, small LR"]
-    B --> C["avgpool → 512 features"]
-    C --> D(["fc 512→2<br/>🔥 trainable: 8,394,754 params in total"])
-```
-
-### 4. Choosing a strategy
-
-```mermaid
-flowchart TB
-    Q1{"How much labelled data?"} -->|"small (hundreds to a few thousand)"| Q2{"Similar to ImageNet photos?"}
-    Q1 -->|"large (tens of thousands+)"| Q3{"Similar to ImageNet photos?"}
-    Q2 -->|"yes (pets, objects)"| S1(["Feature extraction:<br/>freeze all, train the head"])
-    Q2 -->|"no (X-rays, satellite)"| S2(["Fine-tune the last blocks, small LR,<br/>strong augmentation"])
-    Q3 -->|"yes"| S3(["Fine-tune most or all layers,<br/>small LR"])
-    Q3 -->|"no"| S4(["Fine-tune everything,<br/>or train from scratch if very large"])
-```
-
-## The Paradigm / Core Concepts
-
-### Part A: Why training a CNN from scratch is hard
-
-#### 📖 Understand it
+## 1. Why Training a CNN from Scratch Is Hard
 
 Even "two classes" is not a simple problem for a vision model. Cats and dogs appear in every pose, lighting, background, camera angle and breed, often partly hidden. A model must learn features that survive all that variation. To do so it needs many layers of filters, and each filter weight is one more number to learn from data.
 
@@ -166,9 +62,11 @@ Compute is the second problem. Every training step is a forward and backward pas
 | **Careful tuning** | Unstable training, many restarts | A well-conditioned starting point |
 | **Overfitting** | Train ≫ validation | Generic features generalize by construction |
 
-### Part B: What transfer learning is, and why it works
+:::tip[🎯 Interview angle]
+**"Why not just train a CNN from scratch?"** Millions of parameters (ResNet18 has 11.7 M) need far more labeled data than most projects have, so a small dataset leads to overfitting; and training is compute-hungry, multiplied by every hyperparameter experiment.
+:::
 
-#### 📖 Understand it
+## 2. What Transfer Learning Is, and Why It Works
 
 **Transfer learning** means reusing knowledge learned on one task to solve a different but related task. In vision, the "knowledge" is the weights of a CNN trained on ImageNet, and the "reuse" is taking that network as the starting point instead of random weights.
 
@@ -204,9 +102,11 @@ $$
 A radiology student doesn't learn to see from scratch. They arrive with twenty years of eyesight that already detects edges, shapes and textures, and medical school only teaches them what those shapes *mean* on an X-ray. The pretrained backbone is the eyesight; the new head is the medical training.
 :::
 
-### Part C: ResNet18 and residual connections
+:::tip[🎯 Interview angle]
+**"What is transfer learning and why does it work?"** Start from a network trained on a large dataset (ImageNet) instead of random weights. Early layers learn generic features (edges, textures) that transfer to any natural-image task; you keep the backbone $h_{\theta^*}$ and train a new head $g_\phi$ (here `Linear(512, 2)`, 1,026 parameters).
+:::
 
-#### 📖 Understand it
+## 3. ResNet18 and Residual Connections
 
 **ResNet** (He et al., 2015) won ImageNet 2015 and solved a problem that had capped network depth: past roughly 20 layers, plain CNNs got *worse*, even on training data. Gradients have to pass backwards through every layer, being multiplied at each step, and over many layers they shrink towards zero (**vanishing gradients**), so the early layers barely learn.
 
@@ -241,9 +141,22 @@ $$
 
 Notice where the parameters are: the deep, wide `layer4` holds three quarters of the model. That is why unfreezing just `layer4` (fine-tuning) jumps the trainable count from 1,026 to 8.4 M.
 
-### Part D: Feature extraction vs fine-tuning
+```mermaid
+flowchart TB
+    IN["Input (B, 3, 224, 224)<br/>RGB, ImageNet-normalized"] --> STEM["Stem: conv 7×7 /2 + BN + ReLU → (64, 112, 112)<br/>maxpool 3×3 /2 → (64, 56, 56) · 9.5 K params"]
+    STEM --> L1["layer1: 2 BasicBlocks → (64, 56, 56) · 148 K"]
+    L1 --> L2["layer2: 2 BasicBlocks → (128, 28, 28) · 526 K"]
+    L2 --> L3["layer3: 2 BasicBlocks → (256, 14, 14) · 2.1 M"]
+    L3 --> L4["layer4: 2 BasicBlocks → (512, 7, 7) · 8.39 M"]
+    L4 --> GAP["Global average pool → (512,)"]
+    GAP --> FC(["fc: Linear(512, 1000) → replaced by Linear(512, 2)"])
+```
 
-#### 📖 Understand it
+:::tip[🎯 Interview angle]
+**"What problem do residual connections solve?"** Plain networks deeper than ~20 layers trained worse, even on training data (degradation, vanishing gradients). A skip connection outputs $F(x) + x$, so the block only learns a correction, and its gradient always contains an identity term ($\partial y/\partial x = \partial F/\partial x + I$), letting signals flow through 100+ layers.
+:::
+
+## 4. Feature Extraction vs Fine-Tuning
 
 **Freezing** a parameter means setting `param.requires_grad = False`. Autograd then computes no gradient for it, and since it has no gradient the optimizer can't change it. Two things follow. Training is cheaper: backpropagation can stop as soon as it reaches the first frozen layer, because nothing below it needs a gradient. And the pretrained knowledge is protected: no amount of noisy small-data training can damage it.
 
@@ -288,9 +201,35 @@ It freezes the **learnable** parameters only. **BatchNorm** layers also keep **r
 Feature extraction is buying a good suit and just choosing the right tie (the head). Fine-tuning is taking the suit to a tailor to adjust the sleeves and waist (`layer4`): small, careful changes. Re-cutting the whole suit (a large learning rate on all layers) risks ruining what made it good in the first place.
 :::
 
-### Part E: Feeding a pretrained model: transforms, augmentation and datasets
+```mermaid
+flowchart TB
+    A["Stem + layer1–layer3<br/>🧊 frozen"] --> B["layer4<br/>🧊 frozen"]
+    B --> C["avgpool → 512 features"]
+    C --> D(["fc 512→2<br/>🔥 trainable: 1,026 params"])
+```
 
-#### 📖 Understand it
+```mermaid
+flowchart TB
+    A["Stem + layer1–layer3<br/>🧊 frozen: generic edges, textures, parts"] --> B["layer4<br/>🔥 trainable, small LR"]
+    B --> C["avgpool → 512 features"]
+    C --> D(["fc 512→2<br/>🔥 trainable: 8,394,754 params in total"])
+```
+
+```mermaid
+flowchart TB
+    Q1{"How much labelled data?"} -->|"small (hundreds to a few thousand)"| Q2{"Similar to ImageNet photos?"}
+    Q1 -->|"large (tens of thousands+)"| Q3{"Similar to ImageNet photos?"}
+    Q2 -->|"yes (pets, objects)"| S1(["Feature extraction:<br/>freeze all, train the head"])
+    Q2 -->|"no (X-rays, satellite)"| S2(["Fine-tune the last blocks, small LR,<br/>strong augmentation"])
+    Q3 -->|"yes"| S3(["Fine-tune most or all layers,<br/>small LR"])
+    Q3 -->|"no"| S4(["Fine-tune everything,<br/>or train from scratch if very large"])
+```
+
+:::tip[🎯 Interview angle]
+**"Feature extraction or fine-tuning?"** Small dataset similar to ImageNet → freeze the backbone and train the head. More data or a different domain → unfreeze the deepest blocks top-down with a small learning rate to avoid catastrophic forgetting. Remember that `requires_grad=False` does not stop BatchNorm running statistics from updating in `train()` mode.
+:::
+
+## 5. Feeding a Pretrained Model: Transforms, Augmentation and Datasets
 
 A pretrained network has learned its filters on inputs prepared in one specific way. Its first-layer weights expect numbers on a particular scale: ImageNet images resized to 224×224, converted to RGB, scaled to 0–1 and then standardized with ImageNet's per-channel **mean `[0.485, 0.456, 0.406]`** and **std `[0.229, 0.224, 0.225]`**. Feed it raw 0–255 values, or BGR, or un-normalized 0–1 values, and every activation is shifted from what the network was trained on. Nothing crashes, but accuracy drops, sometimes badly. So rule one of transfer learning: **reproduce the pretraining preprocessing exactly**. (`ResNet18_Weights.DEFAULT.transforms()` returns the official recipe: resize to 256, centre-crop 224, normalize. The notebook's direct resize to 224×224 is a common, slightly simpler variant.)
 
@@ -341,9 +280,11 @@ Horizontal flips are safe for cats and dogs, but **not** for digits or text (a f
 A pilot trained on altimeters in **feet** will crash if you quietly swap the instruments for **metres**: same plane, same skills, wrong numbers. A pretrained network was trained on ImageNet-normalized inputs; give it anything else and its "instruments" read wrong. Augmentation, meanwhile, is a pilot practising landings in different crosswinds, so a real gusty day doesn't surprise them.
 :::
 
-### Part F: Controlling training: scheduler, early stopping, L2 and L1
+:::tip[🎯 Interview angle]
+**"What preprocessing does a pretrained model need?"** Exactly what it was trained with: 224×224 RGB, `ToTensor()` (0–1, CHW), then `Normalize` with ImageNet mean/std. Augment only the training set, only with label-preserving transforms, and load lazily through a custom `Dataset` so each epoch sees fresh variants.
+:::
 
-#### 📖 Understand it
+## 6. Controlling Training: Scheduler, Early Stopping, L2 and L1
 
 The basic loop (fixed learning rate, fixed number of epochs) works, but three tools make it more robust, and interviewers like to ask about each.
 
@@ -420,9 +361,11 @@ $$
 Lowering the learning rate is **slowing down as you approach your parking space**: full speed would overshoot it. Early stopping is **turning the engine off once you're parked**: driving on only scrapes the car (overfits). L2 is a **gentle spring on every steering adjustment**, so no single correction gets extreme. L1 is a **rule that you must stop using any control you barely touch**: you end up driving with fewer controls.
 :::
 
-### Part G: The scoreboard: scratch vs transfer
+:::tip[🎯 Interview angle]
+Know each tool in one line: `ReduceLROnPlateau` lowers the LR when validation loss stalls; early stopping stops after `patience` bad epochs and restores the best weights; L2 (`weight_decay`) shrinks weights proportionally ($\lambda w$); L1 pushes with constant force ($\lambda\,\text{sign}(w)$) and creates exact zeros. With Adam, use **AdamW** so weight decay isn't rescaled by the adaptive step.
+:::
 
-#### 📖 Understand it
+## 7. The Scoreboard: Scratch vs Transfer
 
 The notebooks ran six configurations on the same split. Read the table below for three lessons.
 
@@ -443,7 +386,11 @@ Third, in the frozen runs **training accuracy is *lower* than validation accurac
 
 **Time per epoch** tells a pipeline story too. The scratch CNN read pre-made tensors from RAM and took **~5–7 s** per epoch. Every ResNet run decoded and transformed JPEGs on the fly in the main process (`num_workers=0` by default) and took **~50–70 s**. The fine-tuned model, with a much bigger backward pass, took about the same time per epoch as the frozen one, which suggests the data loading and the full forward pass, not the backward pass, were the bottleneck. Raising `num_workers` is the first speed fix.
 
-## ⚙️ Under the Hood (The Math & PyTorch Internals)
+:::tip[🎯 Interview angle]
+**"What mattered most in these experiments?"** The starting point: scratch CNN ~81% → frozen pretrained ResNet18 ~98% validation accuracy; schedulers, L1/L2 and fine-tuning each moved it by half a point or less (best: fine-tuned `layer4`, 98.7%). Also be ready to explain why train accuracy below validation accuracy is normal with augmentation.
+:::
+
+## ⚙️ Going Deeper (The Math & PyTorch Internals)
 
 **How freezing saves compute**
 - Autograd only records operations whose inputs require a gradient. With everything frozen except `fc`, the whole backbone runs as a plain forward computation, and `loss.backward()` computes gradients for `fc` alone.
@@ -852,9 +799,66 @@ def predict(model, path, class_names=("Cat", "Dog")):
 - **Slow ResNet epochs** are usually the data pipeline: raise `num_workers`, use `pin_memory=True`, and cache features when the backbone is frozen and you don't augment.
 - **Domain shift:** ImageNet features transfer well to pets and everyday objects, and less well to X-rays, satellite or microscopy images. Fine-tune more layers there, or look for a model pretrained on that domain.
 
-### Concept-Check Answers (from the notebooks)
+## ⚡ Essential Interview Recall
 
-#### Why training from scratch is hard
+A one-screen revision list. Every point is explained in the chapters above.
+
+**Why not train from scratch?**
+- Deep CNNs have **millions of parameters** (SmallCNN 2.1 M, SimpleCNN 4.3 M, ResNet18 **11.7 M**), need **lots of labelled data**, heavy **compute**, careful **tuning**, and they **overfit** small datasets.
+- Scratch SimpleCNN on 8,400 images: val accuracy **~0.81** with a growing train/val gap.
+
+**Transfer learning**
+- $f_{new}(\data{X}) = g_{\param{\phi}}\big(h_{\param{\theta^*}}(\data{X})\big)$: pretrained feature extractor $h$ + new task head $g$.
+- Works because **early layers learn universal features** (edges, textures, colour blobs) and later layers more task-specific ones (parts, objects). Edges learned for cars also help with dogs.
+- Pretrained on **ImageNet**: ~1.2 M images, 1,000 classes. `models.resnet18(weights=models.ResNet18_Weights.DEFAULT)` (= `IMAGENET1K_V1`); `pretrained=True` is the deprecated spelling.
+
+**ResNet18**
+- Stem (conv 7×7/2 + BN + ReLU + maxpool) → `layer1`…`layer4` (2 BasicBlocks each) → global average pool → `fc`. 224×224 → 112 → 56 → 56 → 28 → 14 → **7×7×512** → `(512,)` → logits.
+- **11,689,512** params with the 1,000-class head; **11,177,538** with `Linear(512, 2)`. `layer4` alone = **8,393,728** (72%).
+- **Residual connection** $y = F(x) + x$: the identity path gives gradients a shortcut, so 18–152-layer nets train without vanishing gradients.
+
+**Two strategies**
+- **Feature extraction:** freeze all, train `fc` only → **1,026** trainable params (0.009%). Optimizer gets `model.fc.parameters()`. Notebook: best val **0.9819** in 5 epochs.
+- **Fine-tuning:** unfreeze `layer4` + `fc` → **8,394,754** trainable (75%). Use a **small LR (1e-4)**. Notebook: best val **0.9874**, early-stopped at epoch 8, train acc 0.998 (starting to overfit).
+- Choose by **dataset size** and **similarity to ImageNet**: small + similar → extract; large or different → fine-tune more layers; huge and very different → maybe from scratch.
+- Freezing ≠ fixing BatchNorm: in `model.train()` mode, frozen BN layers **still update their running mean/var**. Put them in `eval()` if the backbone must stay truly fixed.
+
+**Data pipeline for pretrained models**
+- Input must match pretraining: **RGB, 224×224, `ToTensor()` (÷255 and HWC→CHW), `Normalize(ImageNet mean, std)`**.
+- **Augment train only** (`RandomHorizontalFlip(0.5)`, `RandomRotation(10)`); val/test get the deterministic transform. Augmentation is re-sampled **every time** an image is loaded, so each epoch sees new variants.
+- On-the-fly loading needs a custom `Dataset` (`__len__`, `__getitem__`) or `datasets.ImageFolder` (labels from sub-folder names, `class_to_idx` **alphabetical**).
+
+**Training control**
+- `ReduceLROnPlateau(factor, patience)`: multiply LR by `factor` once val loss fails to improve for **more than** `patience` epochs. Notebook fine-tune: **1e-4 → 5e-5 → 2.5e-5**.
+- **Early stopping:** count epochs without improvement greater than `min_delta`; stop at `patience`. Restore the **best** weights, saved with `copy.deepcopy(model.state_dict())` (a plain `state_dict()` holds **references** that keep changing).
+- **L2:** `weight_decay=λ` adds $\hyper{\lambda}\param{w}$ to every gradient (= penalty $\frac{\hyper{\lambda}}{2}\sum \param{w}^2$). Shrinks all weights smoothly. With **Adam**, prefer **AdamW** (decoupled decay).
+- **L1:** add $\hyper{\lambda}\sum|\param{w}|$ to the loss manually; constant-size push towards 0 → **sparse** weights.
+- With a frozen backbone, L1/L2/scheduler changes moved val accuracy by **under 0.5 points**: with 1,026 trainable params there is almost nothing to overfit. The big win is **pretrained vs scratch** (~81% → ~98%).
+
+## 📐 Formula Sheet
+
+Every equation on this page in one place. Each one is explained in the chapters above.
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Transfer learning | $f_{new}(\data{X}) = g_{\param{\phi}}\big(h_{\param{\theta^*}}(\data{X})\big)$ | Pretrained feature extractor + new head |
+| Residual block | $\pred{y} = F(\data{x};\param{W}) + \data{x}$ | Learn a correction on top of the identity |
+| Residual gradient | $\frac{\partial \pred{y}}{\partial \data{x}} = \frac{\partial F}{\partial \data{x}} + I$ | The "+I" keeps gradients alive |
+| Freezing | $\param{\theta_{frozen}} \leftarrow \param{\theta_{frozen}}$, $\;\param{\phi} \leftarrow \param{\phi} - \hyper{\eta}\,\nabla_{\param{\phi}}\loss{L}$ | Only unfrozen parameters move |
+| Head parameters | $512 \times 2 + 2 = 1{,}026$ | All you train in feature extraction |
+| ImageNet normalization | $\data{x'_c} = (\data{x_c} - \mu_c)/\sigma_c$ | Speak the pretrained model's units |
+| Augmentation objective | $\min_{\param{\theta}} \; \mathbb{E}_{t \sim \mathcal{T}}\, \loss{L}\big(f(t(\data{x})), \data{y}\big)$ | Be right for every plausible variant |
+| L2 penalty | $\loss{L_{total}} = \loss{L_{CE}} + \frac{\hyper{\lambda}}{2}\sum_i \param{w_i}^2$ | Large weights cost extra |
+| Weight-decay step | $\param{w} \leftarrow (1 - \hyper{\eta}\hyper{\lambda})\,\param{w} - \hyper{\eta}\,\nabla \loss{L_{CE}}$ | Shrink a little, then step |
+| L1 penalty | $\loss{L_{total}} = \loss{L_{CE}} + \hyper{\lambda}\sum_i \lvert \param{w_i} \rvert$ | Pushes small weights to exactly 0 |
+| L1 gradient | $\hyper{\lambda}\,\text{sign}(\param{w_i})$ | Constant-size push towards 0 |
+| AdamW step | $\param{w} \leftarrow \param{w} - \hyper{\eta}\,\frac{\hat m}{\sqrt{\hat v} + \epsilon} - \hyper{\eta}\hyper{\lambda}\,\param{w}$ | Decay applied outside Adam's scaling |
+| ReduceLROnPlateau | $\hyper{\eta} \leftarrow \hyper{\eta} \cdot \text{factor}$ after $>$ patience bad epochs | Slow down when stuck |
+| Early stopping | stop when bad epochs $\ge$ patience; bad means $\loss{L_{val}} \ge \text{best} - \delta$ | Quit when validation stops improving |
+
+## Concept-Check Answers (from the notebooks)
+
+### Why training from scratch is hard
 
 <details>
 <summary><strong>Why is image classification not truly "simple" even with only two classes?</strong></summary>
@@ -874,7 +878,7 @@ It has millions of individual weights (kernel values, biases, FC weights) that t
 Every step is a forward + backward pass through all layers for every batch, over many epochs, repeated for every hyperparameter trial. Transfer learning starts from weights that already encode useful features, cutting the data, compute and tuning needed.
 </details>
 
-#### What transfer learning is
+### What transfer learning is
 
 <details>
 <summary><strong>What is the main idea, and why are early CNN layers reusable?</strong></summary>
@@ -894,7 +898,7 @@ Freezing sets `requires_grad = False`, so the layer gets no gradients and its we
 Most parameters arrive already trained, so far fewer must be learned (1,026 vs 11 M), backward passes stop early at frozen layers, and convergence takes a few epochs instead of many.
 </details>
 
-#### Preparing the image dataset
+### Preparing the image dataset
 
 <details>
 <summary><strong>Why resize everything to a fixed size? Why different transforms for train and validation?</strong></summary>
@@ -920,7 +924,7 @@ Batches must be rectangular tensors, and the pretrained network expects its trai
 The network's weights were learned on inputs standardized with ImageNet's per-channel mean and std. Using the same statistics gives activations on the scale the filters expect; different scaling shifts every layer's inputs and degrades accuracy.
 </details>
 
-#### ResNet18 training choices
+### ResNet18 training choices
 
 <details>
 <summary><strong>Why is augmentation applied only to training data?</strong></summary>

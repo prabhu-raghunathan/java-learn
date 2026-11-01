@@ -1,0 +1,8 @@
+{
+  "label": "NLP Foundations",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Turning text into numbers: preprocessing, vocabularies, one-hot encoding, word embeddings, Word2Vec, co-occurrence, TF-IDF and a first sentiment classifier."
+  }
+}

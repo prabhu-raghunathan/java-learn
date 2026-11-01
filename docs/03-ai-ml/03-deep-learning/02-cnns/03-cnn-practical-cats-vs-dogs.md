@@ -49,115 +49,7 @@ The punchline sets up the next page: even done carefully, a CNN trained from scr
 The model is the chef. It is talented, but it only cooks with ingredients that arrive **washed, cut to the same size and laid out in the same order** (preprocessing), delivered **one tray at a time** (mini-batches), on the **same counter** it works at (device). The train/validation/test split is the difference between **practising recipes**, **tasting during practice**, and the **food critic's single visit**. If the critic's dish was secretly practised in advance (leakage), the review means nothing.
 :::
 
-## ⚡ Essential Interview Recall
-
-**Problem framing**
-- An image is just numbers: OpenCV gives `(H, W, 3)` **uint8** in **BGR** order, values **0–255**. The model learns $f(\data{X};\param{\theta}) \to \{0, 1\}$ (cat = 0, dog = 1).
-- Two output logits + `CrossEntropyLoss` (the notebook) and one logit + `BCEWithLogitsLoss` are equivalent ways to do binary classification.
-
-**Device**
-- `device = torch.device("cuda" if torch.cuda.is_available() else "cpu")`; move **both** model (`model.to(device)`) and every batch (`x.to(device)`). A mismatch raises a `RuntimeError`.
-- GPU timing needs a **warm-up** and `torch.cuda.synchronize()`. CUDA calls are **asynchronous** and the first call pays a one-off start-up cost. The notebook's naive test showed GPU *slower* (2.15 s vs 0.09 s); done properly it was **~14× faster** (0.0227 s vs 0.3164 s per 4000×4000 matmul).
-- `tensor.to(device)` returns a **copy**; `module.to(device)` moves **in place**.
-
-**Data preparation**
-- Labels come from file names (`"cat.0.jpg".split(".")[0]`). Balanced subset: **6,000 cats + 6,000 dogs = 12,000**.
-- Two calls to `train_test_split(..., stratify=label)` give **70 / 15 / 15** = **8,400 / 1,800 / 1,800**, each exactly 50/50.
-- **Train** fits weights, **validation** picks hyperparameters/epochs, **test** is touched **once** at the end. The sets must not overlap: $\data{D_{train}} \cap \data{D_{val}} = \data{D_{train}} \cap \data{D_{test}} = \data{D_{val}} \cap \data{D_{test}} = \emptyset$.
-
-**Preprocessing**
-- `cv2.imread` → `cv2.resize(img, (W, H))` (**width first**) → `cv2.cvtColor(BGR2RGB)` → `/ 255.0` → `np.transpose(img, (2, 0, 1))` (HWC→CHW) → `float32` tensor.
-- `cv2.imread` returns **`None`** for a missing or corrupt file (no exception); it only fails later inside `resize`.
-- Scaling to [0, 1] keeps inputs small and similar so gradients are stable. **Mean-std** standardization $(\data{x} - \mu)/\sigma$ centres them on 0, and is **required** for pretrained models (ImageNet mean/std).
-- Eagerly preprocessing 8,400 images at 128×128 as float32 costs **1.54 GiB of RAM** ($8400 \cdot 3 \cdot 128 \cdot 128 \cdot 4$ bytes). Saving `.pt` files skips re-decoding but **blocks random augmentation**.
-
-**Batching**
-- `DataLoader(dataset, batch_size=64, shuffle=True)` → $\lceil 8400/64 \rceil$ = **132** batches (the last has 16 images). Shuffle **train only**; val/test `shuffle=False`.
-- The model sees batches of shape `(B, C, H, W)` = `(64, 3, 128, 128)`. Labels `(64,)` int64.
-
-**Model (SimpleCNN)**
-- 3 × [Conv 3×3, pad 1 → ReLU → MaxPool 2] with channels **32 → 64 → 128**; spatial **128 → 64 → 32 → 16**; flatten **128·16·16 = 32,768** → FC 128 → Dropout 0.3 → FC 2.
-- **4,287,938** params, of which `fc1` holds **4,194,432 (97.8%)**. Conv layers: 896 + 18,496 + 73,856.
-- `CrossEntropyLoss` + `Adam(lr=1e-4)`.
-
-**Training & evaluation**
-- Each epoch: `model.train()` → for each batch: forward → loss → `zero_grad` → `backward` → `step`; then `model.eval()` + `torch.no_grad()` for validation.
-- Notebook run: train accuracy **0.88 → 0.90**, validation stuck at **~0.80–0.81**, validation loss rising (0.43 → 0.45). That is overfitting.
-- `torch.max(outputs, 1)` returns `(values, indices)`; the **indices** are the predicted classes (same as `argmax`).
-- sklearn's `confusion_matrix`: **rows = actual, columns = predicted**, ordered by label. With dog (1) as the positive class: `[[TN, FP], [FN, TP]]`.
-- Precision $= TP/(TP+FP)$, Recall $= TP/(TP+FN)$, F1 = their harmonic mean. Accuracy alone hides **which** class fails and is useless on imbalanced data.
-
-## 📐 Formula Sheet
-
-Every equation on this page in one place. Each one is explained in a card further down.
-
-| Concept | Formula | In plain words |
-|---|---|---|
-| Image as a tensor | $\data{X} \in \mathbb{R}^{H \times W \times 3} \;\to\; \mathbb{R}^{3 \times H \times W}$ | OpenCV stores channels last; PyTorch wants them first |
-| Model objective | $f(\data{X};\param{\theta}) \to \{0, 1\}$ | Learn a function from pixels to cat/dog |
-| Min-max scaling | $\data{x'} = \data{x} / 255$ | Squash 0–255 into 0–1 |
-| Standardization | $\data{x'} = (\data{x} - \mu_c)/\sigma_c$ | Centre each channel on 0, unit spread |
-| Disjoint splits | $\data{D} = \data{D_{tr}} \cup \data{D_{val}} \cup \data{D_{te}}$, pairwise $\cap = \emptyset$ | Every image in exactly one set |
-| Batches per epoch | $\lceil N / \hyper{B} \rceil$ | Last batch can be smaller |
-| Tensor memory | $N \cdot C \cdot H \cdot W \cdot 4$ bytes | float32 = 4 bytes per number |
-| Conv / pool output size | $\left\lfloor \frac{H + 2\hyper{P} - \hyper{K}}{\hyper{S}} \right\rfloor + 1$ | 3×3 pad 1 keeps size; pool 2 halves it |
-| Flatten size | $\hyper{C} \cdot H \cdot W = 128 \cdot 16 \cdot 16 = 32{,}768$ | Must equal `fc1.in_features` |
-| Parameter counts | conv $\hyper{C_{out}}(\hyper{C_{in}}\hyper{K}^2 + 1)$, FC $d_{out}(d_{in} + 1)$ | The first FC layer dominates |
-| Mini-batch gradient | $\nabla_{\param{\theta}} \loss{L_B} = \frac{1}{\hyper{B}} \sum_{i \in B} \nabla_{\param{\theta}} \loss{\ell_i}$ | Average the per-image gradients |
-| Prediction | $\pred{\hat y} = \arg\max_k \pred{z_k}$ | Pick the class with the biggest logit |
-| Accuracy | $\frac{TP + TN}{TP + TN + FP + FN}$ | Share of all predictions that are right |
-| Precision | $\frac{TP}{TP + FP}$ | When it says dog, how often is it a dog? |
-| Recall | $\frac{TP}{TP + FN}$ | Of all real dogs, how many did it find? |
-| F1 score | $2 \cdot \frac{P \cdot R}{P + R}$ | One number that punishes a weak P or R |
-
-## The Mental Model
-
-### 1. The end-to-end pipeline
-
-```mermaid
-flowchart TB
-    A["📁 25,000 JPEGs<br/>cat.0.jpg · dog.1234.jpg"] -->|"parse file names"| B["DataFrame<br/>filepath · label_text · label"]
-    B -->|"balanced sample 6,000 + 6,000"| C["12,000 rows"]
-    C -->|"stratified 70 / 15 / 15"| D["train 8,400 · val 1,800 · test 1,800"]
-    D -->|"resize · BGR→RGB · ÷255 · HWC→CHW"| E["Tensors (N, 3, 128, 128)"]
-    E -->|"DataLoader, batch 64, shuffle train"| F["Batches (64, 3, 128, 128)"]
-    F -->|"forward · loss · backward · step"| G["Trained SimpleCNN"]
-    G -->|"once, at the very end"| H(["Test metrics<br/>confusion matrix · precision · recall · F1"])
-```
-
-### 2. Who uses which split, and when
-
-```mermaid
-flowchart TB
-    TR["Train set 70%"] -->|"gradients update the weights"| M["Model"]
-    VA["Validation set 15%"] -->|"no gradients: pick epochs, LR, dropout"| M
-    M -->|"final, frozen model"| TE["Test set 15%<br/>touched exactly once"]
-    TE --> R(["Reported performance"])
-```
-
-### 3. One epoch of training
-
-```mermaid
-flowchart TB
-    S["model.train()"] --> L1["for each training batch"]
-    L1 --> FW["outputs = model(images)"]
-    FW --> LO["loss = criterion(outputs, labels)"]
-    LO --> ZG["optimizer.zero_grad()"]
-    ZG --> BW["loss.backward()"]
-    BW --> ST["optimizer.step()"]
-    ST -->|"next batch"| L1
-    ST -->|"epoch done"| EV["model.eval() + torch.no_grad()"]
-    EV --> VL["validation loss and accuracy"]
-    VL --> DEC{"val loss still falling?"}
-    DEC -->|"yes"| S
-    DEC -->|"no, gap growing"| OF(["Overfitting: stop, regularize,<br/>or switch to transfer learning"])
-```
-
-## The Paradigm / Core Concepts
-
-### Part A: Framing the problem
-
-#### 📖 Understand it
+## 1. Framing the Problem
 
 When you look at a photo of a dog, you see ears, fur and a snout immediately. The computer sees none of that. It sees a grid of numbers: a 374×500 photo is **374 rows × 500 columns × 3 colour values**, each an integer from 0 (none of that colour) to 255 (full intensity). The notebook prints the top-left corner of one image as `[203, 164, 87]` repeated: a warm brown, stored as three numbers.
 
@@ -183,9 +75,22 @@ $$
 The notebook ends the model with `nn.Linear(128, 2)` and uses `CrossEntropyLoss` (softmax over 2 classes). The other standard option is `nn.Linear(128, 1)` + `BCEWithLogitsLoss` (sigmoid on 1 score) with **float** labels of shape `(B, 1)`. They are mathematically equivalent for two classes: softmax over $[z_0, z_1]$ equals sigmoid of $z_1 - z_0$. The two-logit version generalizes to more classes without changing the code; the one-logit version has 129 fewer parameters. Either answer is fine in an interview if you match the loss to the output shape.
 :::
 
-### Part B: CPU vs GPU, and the same-device rule
+```mermaid
+flowchart TB
+    A["📁 25,000 JPEGs<br/>cat.0.jpg · dog.1234.jpg"] -->|"parse file names"| B["DataFrame<br/>filepath · label_text · label"]
+    B -->|"balanced sample 6,000 + 6,000"| C["12,000 rows"]
+    C -->|"stratified 70 / 15 / 15"| D["train 8,400 · val 1,800 · test 1,800"]
+    D -->|"resize · BGR→RGB · ÷255 · HWC→CHW"| E["Tensors (N, 3, 128, 128)"]
+    E -->|"DataLoader, batch 64, shuffle train"| F["Batches (64, 3, 128, 128)"]
+    F -->|"forward · loss · backward · step"| G["Trained SimpleCNN"]
+    G -->|"once, at the very end"| H(["Test metrics<br/>confusion matrix · precision · recall · F1"])
+```
 
-#### 📖 Understand it
+:::tip[🎯 Interview angle]
+**"How does a CNN see an image?"** As a tensor of numbers, `(H, W, 3)` values from 0 to 255, which we reorder to `(3, H, W)`. Training searches for parameters $\theta$ of a chosen architecture that map those numbers to the right label. For two classes, two logits + `CrossEntropyLoss` and one logit + `BCEWithLogitsLoss` are equivalent; just match the loss to the output shape.
+:::
+
+## 2. CPU vs GPU, and the Same-Device Rule
 
 Training a CNN is mostly **huge numbers of multiply-adds**: every conv layer slides its kernels over every position of every image in the batch. These operations are independent of each other, so they can run in parallel. A CPU has a handful of powerful cores built for doing *different* things one after another. A GPU has thousands of simpler cores built for doing the *same* thing to lots of data at once. That is exactly the shape of deep-learning math, which is why a GPU is the standard for training.
 
@@ -212,9 +117,11 @@ Move results back with `.cpu()` before converting to NumPy or plotting.
 One brilliant chef (CPU) can cook any dish, one step at a time. A thousand line cooks (GPU) can each only chop, but give them a mountain of onions and they finish in seconds. Deep learning is a mountain of onions. But calling the line cooks in takes time (warm-up), and if you stop your stopwatch the moment you *shout the order* rather than when the onions are chopped (no `synchronize`), you will measure nonsense.
 :::
 
-### Part C: From a folder of files to clean splits
+:::tip[🎯 Interview angle]
+**"Why train on a GPU, and what's the most common device bug?"** GPUs run thousands of identical multiply-adds in parallel, which is exactly what convolutions and matmuls are (~14× faster here). The bug is mixing devices: move the model once and every batch inside the loop. When benchmarking, warm up first and call `torch.cuda.synchronize()`, because CUDA calls are asynchronous.
+:::
 
-#### 📖 Understand it
+## 3. From a Folder of Files to Clean Splits
 
 The Kaggle Dogs vs Cats folder has no CSV and no label column. The only place the answer is written is the **file name**: `cat.0.jpg`, `dog.1234.jpg`. So the first step is to scan the folder (`glob`), take each file's base name, split it on `"."`, and keep the first piece. That gives a text label, which we then **label-encode** as a number (cat → 0, dog → 1) because the loss function needs integers. Putting this into a **pandas DataFrame** (one row per image: path, text label, numeric label) turns a messy folder into a table you can count, filter, shuffle and split like any other dataset.
 
@@ -251,9 +158,19 @@ $$
 You learn from **homework** (train). You take **mock exams** to decide how to study (validation), and because you adjust to them, a good mock score is a slightly hopeful estimate. The **final exam** (test) is sat once. If you saw the final's questions while studying, your grade says nothing about what you know.
 :::
 
-### Part D: Preprocessing: every image into the same shape and scale
+```mermaid
+flowchart TB
+    TR["Train set 70%"] -->|"gradients update the weights"| M["Model"]
+    VA["Validation set 15%"] -->|"no gradients: pick epochs, LR, dropout"| M
+    M -->|"final, frozen model"| TE["Test set 15%<br/>touched exactly once"]
+    TE --> R(["Reported performance"])
+```
 
-#### 📖 Understand it
+:::tip[🎯 Interview angle]
+**"Why train / validation / test, and why stratify?"** Train updates weights, validation guides your choices (epochs, LR, dropout), test is touched once for an unbiased final number. Stratification keeps the class ratio identical in every split. Then name the leakage traps: tuning on test, computing normalization stats before splitting, near-duplicates or the same person/patient across splits.
+:::
+
+## 4. Preprocessing: Every Image into the Same Shape and Scale
 
 A batch is one tensor, and a tensor must be rectangular. So **every image must have exactly the same size** before it can be stacked with others. Raw photos come in all sizes (the notebook's samples are 374×500 and 333×500). The simplest fix is `cv2.resize` to 128×128. Note that this **stretches** non-square photos and distorts their aspect ratio. Production pipelines usually resize the short side and then **crop** the centre instead.
 
@@ -323,9 +240,11 @@ $$
 A professional kitchen washes, peels and cuts every ingredient to the same size *before* service, so the chef never stops to deal with a muddy carrot. Resizing, colour-fixing and scaling are the same chores for images. And mixing up BGR and RGB is like a supplier labelling the salt jar "sugar": nothing explodes, but every dish tastes wrong.
 :::
 
-### Part E: Dataset, DataLoader and mini-batches
+:::tip[🎯 Interview angle]
+**"Walk me through image preprocessing."** Read → resize to a fixed size → BGR→RGB (OpenCV) → scale to 0–1 → standardize per channel (mandatory with ImageNet stats for pretrained models) → HWC→CHW → float32 tensor. Scaling matters because gradient size follows input size. Know the memory cost: $N \cdot C \cdot H \cdot W \cdot 4$ bytes for float32.
+:::
 
-#### 📖 Understand it
+## 5. Dataset, DataLoader and Mini-Batches
 
 You could push all 8,400 images through the network in one go, but it would need gigabytes of GPU memory for the activations and would give you **one** weight update per pass over the data. At the other extreme, one image at a time gives 8,400 updates per pass, but each is based on a single, noisy example and the GPU sits mostly idle. **Mini-batches** (here 64 images) are the practical middle: big enough to keep the GPU busy and to average out noise, small enough to fit in memory and to update the weights 132 times per epoch.
 
@@ -368,9 +287,11 @@ $$
 The Dataset is the deck: it knows how many cards there are and can hand you card number *i*. The DataLoader is the dealer: it shuffles the deck before every round (epoch), deals hands of 64 cards (batches), and with `num_workers` hires extra dealers so the players (the GPU) never wait between hands.
 :::
 
-### Part F: What convolution does to a real photo
+:::tip[🎯 Interview angle]
+**"Why mini-batches, and why shuffle only the training set?"** Mini-batches balance GPU utilization, memory and update frequency; their averaged gradient is a noisy estimate whose noise can help generalization. Shuffling prevents ordered data from biasing consecutive updates; validation/test order doesn't affect metrics, so keep it fixed. `Dataset` = length + get item; `DataLoader` = shuffle, batch, collate, parallel workers.
+:::
 
-#### 📖 Understand it
+## 6. What Convolution Does to a Real Photo
 
 Before training anything, the notebook applies three **hand-made** 3×3 filters to a greyscale cat photo with `cv2.filter2D`. This is the clearest way to see what a single convolution kernel does. Each filter is a small grid of weights; at every pixel, the output is the weighted sum of that pixel's 3×3 neighbourhood.
 
@@ -392,9 +313,11 @@ Max pooling (2×2, stride 2) then keeps the strongest response in each 2×2 bloc
 `cv2.filter2D(gray, -1, kernel)` with `ddepth=-1` keeps the input type, **uint8**, so results are **clipped to 0–255**. On a dark→bright step (50 → 200) the edge filter's true responses are **−450** and **+450**, but uint8 stores **0** and **255**: half of every edge (the negative side) vanishes, and strong edges all look the same. For analysis, convert first (`gray.astype(np.float32)`) or pass `ddepth=cv2.CV_32F`. Also note `filter2D` computes **correlation** (no kernel flip), which is what deep-learning "convolution" layers compute too.
 :::
 
-### Part G: Building SimpleCNN
+:::tip[🎯 Interview angle]
+Be able to explain a hand-made kernel: weights summing to 0 (edge detector) remove flat regions; summing to 1 (blur, sharpen) preserve brightness. In a CNN these numbers are learned, and first-layer filters do end up looking like edge and colour detectors.
+:::
 
-#### 📖 Understand it
+## 7. Building SimpleCNN
 
 The model follows the pattern from the previous page: a **feature extractor** made of three identical blocks, then a small **classifier**. Each block is Conv(3×3, padding 1) → ReLU → MaxPool(2). The padded 3×3 conv **keeps** the height and width; the pool **halves** them. So the spatial size goes 128 → 64 → 32 → 16, while the number of channels (feature types) doubles 32 → 64 → 128. Early blocks see small patches and learn many simple patterns; deeper blocks see larger regions and combine them into more complex ones.
 
@@ -437,9 +360,11 @@ $$
 `fc1 = nn.Linear(128 * 16 * 16, 128)` silently assumes **128×128** inputs. Feed 224×224 images (as you might for ResNet) and the flatten becomes 128 × 28 × 28 = 100,352, and you get `mat1 and mat2 shapes cannot be multiplied (2x100352 and 32768x128)`. Fixes: compute the size with a dummy forward pass, use `nn.LazyLinear(128)`, or use global average pooling so the head no longer cares about H and W.
 :::
 
-### Part H: Training, and reading the curves
+:::tip[🎯 Interview angle]
+**"Where are this model's parameters, and what does that tell you?"** Conv layers: 93 K; `fc1`: 4.19 M (97.8%). The flatten-FC head dominates, which is where overfitting comes from, and it hard-codes the input size. Global average pooling would cut the model to ~93.5 K parameters and accept any resolution.
+:::
 
-#### 📖 Understand it
+## 8. Training, and Reading the Curves
 
 Training repeats one simple loop. For every batch: run the images forward to get logits, compute the cross-entropy loss against the true labels, clear the old gradients (`zero_grad`), backpropagate (`backward`) to get a gradient for every kernel and weight, and let the optimizer nudge each parameter downhill (`step`). One pass over all 132 batches is an **epoch**. The notebook uses **Adam** with a small learning rate (**1e-4**), a safe choice for a 4.3 M-parameter model.
 
@@ -482,9 +407,27 @@ $$
 A student who memorizes last year's exam answers scores 100% on that paper (training accuracy) and fails this year's (validation). The validation curve is your early warning: the moment it stops improving while the training score keeps rising, the extra "learning" is memorization.
 :::
 
-### Part I: Evaluating honestly
+```mermaid
+flowchart TB
+    S["model.train()"] --> L1["for each training batch"]
+    L1 --> FW["outputs = model(images)"]
+    FW --> LO["loss = criterion(outputs, labels)"]
+    LO --> ZG["optimizer.zero_grad()"]
+    ZG --> BW["loss.backward()"]
+    BW --> ST["optimizer.step()"]
+    ST -->|"next batch"| L1
+    ST -->|"epoch done"| EV["model.eval() + torch.no_grad()"]
+    EV --> VL["validation loss and accuracy"]
+    VL --> DEC{"val loss still falling?"}
+    DEC -->|"yes"| S
+    DEC -->|"no, gap growing"| OF(["Overfitting: stop, regularize,<br/>or switch to transfer learning"])
+```
 
-#### 📖 Understand it
+:::tip[🎯 Interview angle]
+**"How do you read train/validation curves?"** Both improving → keep going; train improving while validation worsens → overfitting (here val loss bottoms at epoch 3, a ~10-point accuracy gap); both poor → underfitting or a bug. In validation use **both** `model.eval()` (layer behaviour) and `torch.no_grad()` (no graph), then switch back with `model.train()`.
+:::
+
+## 9. Evaluating Honestly
 
 Once training is finished and every choice is made, the test set is used **once**. A single accuracy number is a start, but it hides *which* mistakes the model makes. With two classes there are exactly four possible outcomes per image, and a **confusion matrix** counts each of them. sklearn's `confusion_matrix(y_true, y_pred)` puts **actual classes on the rows** and **predicted classes on the columns**, in label order (0 = cat, 1 = dog). The diagonal holds the correct answers; everything off the diagonal is an error, and its position tells you the kind of error.
 
@@ -538,15 +481,21 @@ $$
 **Recall** is how many of the fish in the lake ended up in your net. **Precision** is how much of what's in your net is actually fish, not old boots. A giant net catches every fish (high recall) and a lot of boots (low precision). A tiny, careful net is all fish (high precision) but misses most of them (low recall). F1 rewards a net that does both.
 :::
 
-### Part J: Is a scratch CNN enough?
+:::tip[🎯 Interview angle]
+**"Precision vs recall: which matters?"** Precision = TP/(TP+FP), hurt by false alarms; recall = TP/(TP+FN), hurt by misses; F1 is their harmonic mean. Pick by the cost of errors: recall for disease or fraud, precision for spam or alerts. On imbalanced data accuracy misleads (always predicting the majority gives 95% with zero recall), so use per-class metrics and macro F1.
+:::
 
-#### 📖 Understand it
+## 10. Is a Scratch CNN Enough?
 
 Our CNN had to learn **everything** from 8,400 images: what an edge is, what fur texture looks like, what an ear is, and finally what separates cats from dogs. That is a lot to ask of a small dataset, and the curves show the result: ~81% validation accuracy with a growing overfitting gap.
 
 A human asked to sort cats from dogs doesn't start from zero; they already know what shapes, textures and animals look like and only need to learn the final distinction. **Transfer learning** gives a model that same head start: take a CNN already trained on 1.2 million ImageNet photos, keep its learned feature extractor, and train only a new final layer on our data. On this exact dataset that lifts validation accuracy from ~81% to ~98%. That is the [next page](./04-transfer-learning-resnet18.md).
 
-## ⚙️ Under the Hood (The Math & PyTorch Internals)
+:::tip[🎯 Interview angle]
+**"Your scratch CNN overfits at ~81%. What next?"** More data or augmentation and regularization help, but the big win is **transfer learning**: reuse an ImageNet-pretrained backbone and train a new head (~98% on this dataset).
+:::
+
+## ⚙️ Going Deeper (The Math & PyTorch Internals)
 
 **OpenCV vs PIL vs torchvision**
 - `cv2.imread` → NumPy array, `(H, W, C)`, uint8, **BGR**. `PIL.Image.open(...).convert("RGB")` → PIL image, **RGB**. torchvision transforms work on PIL images (and tensors), which is why the next page switches to PIL.
@@ -896,9 +845,72 @@ plt.show()
 - **Eagerly preprocessing large datasets** exhausts RAM (1.54 GiB for 8,400 small images) and rules out random augmentation. Load lazily in a `Dataset` for real projects.
 - **`.pt` files from untrusted sources:** `torch.load(..., weights_only=False)` unpickles arbitrary objects and can execute code. Keep the default `weights_only=True`.
 
-### Concept-Check Answers (from the notebook)
+## ⚡ Essential Interview Recall
 
-#### Setup and framing
+A one-screen revision list. Every point is explained in the chapters above.
+
+**Problem framing**
+- An image is just numbers: OpenCV gives `(H, W, 3)` **uint8** in **BGR** order, values **0–255**. The model learns $f(\data{X};\param{\theta}) \to \{0, 1\}$ (cat = 0, dog = 1).
+- Two output logits + `CrossEntropyLoss` (the notebook) and one logit + `BCEWithLogitsLoss` are equivalent ways to do binary classification.
+
+**Device**
+- `device = torch.device("cuda" if torch.cuda.is_available() else "cpu")`; move **both** model (`model.to(device)`) and every batch (`x.to(device)`). A mismatch raises a `RuntimeError`.
+- GPU timing needs a **warm-up** and `torch.cuda.synchronize()`. CUDA calls are **asynchronous** and the first call pays a one-off start-up cost. The notebook's naive test showed GPU *slower* (2.15 s vs 0.09 s); done properly it was **~14× faster** (0.0227 s vs 0.3164 s per 4000×4000 matmul).
+- `tensor.to(device)` returns a **copy**; `module.to(device)` moves **in place**.
+
+**Data preparation**
+- Labels come from file names (`"cat.0.jpg".split(".")[0]`). Balanced subset: **6,000 cats + 6,000 dogs = 12,000**.
+- Two calls to `train_test_split(..., stratify=label)` give **70 / 15 / 15** = **8,400 / 1,800 / 1,800**, each exactly 50/50.
+- **Train** fits weights, **validation** picks hyperparameters/epochs, **test** is touched **once** at the end. The sets must not overlap: $\data{D_{train}} \cap \data{D_{val}} = \data{D_{train}} \cap \data{D_{test}} = \data{D_{val}} \cap \data{D_{test}} = \emptyset$.
+
+**Preprocessing**
+- `cv2.imread` → `cv2.resize(img, (W, H))` (**width first**) → `cv2.cvtColor(BGR2RGB)` → `/ 255.0` → `np.transpose(img, (2, 0, 1))` (HWC→CHW) → `float32` tensor.
+- `cv2.imread` returns **`None`** for a missing or corrupt file (no exception); it only fails later inside `resize`.
+- Scaling to [0, 1] keeps inputs small and similar so gradients are stable. **Mean-std** standardization $(\data{x} - \mu)/\sigma$ centres them on 0, and is **required** for pretrained models (ImageNet mean/std).
+- Eagerly preprocessing 8,400 images at 128×128 as float32 costs **1.54 GiB of RAM** ($8400 \cdot 3 \cdot 128 \cdot 128 \cdot 4$ bytes). Saving `.pt` files skips re-decoding but **blocks random augmentation**.
+
+**Batching**
+- `DataLoader(dataset, batch_size=64, shuffle=True)` → $\lceil 8400/64 \rceil$ = **132** batches (the last has 16 images). Shuffle **train only**; val/test `shuffle=False`.
+- The model sees batches of shape `(B, C, H, W)` = `(64, 3, 128, 128)`. Labels `(64,)` int64.
+
+**Model (SimpleCNN)**
+- 3 × [Conv 3×3, pad 1 → ReLU → MaxPool 2] with channels **32 → 64 → 128**; spatial **128 → 64 → 32 → 16**; flatten **128·16·16 = 32,768** → FC 128 → Dropout 0.3 → FC 2.
+- **4,287,938** params, of which `fc1` holds **4,194,432 (97.8%)**. Conv layers: 896 + 18,496 + 73,856.
+- `CrossEntropyLoss` + `Adam(lr=1e-4)`.
+
+**Training & evaluation**
+- Each epoch: `model.train()` → for each batch: forward → loss → `zero_grad` → `backward` → `step`; then `model.eval()` + `torch.no_grad()` for validation.
+- Notebook run: train accuracy **0.88 → 0.90**, validation stuck at **~0.80–0.81**, validation loss rising (0.43 → 0.45). That is overfitting.
+- `torch.max(outputs, 1)` returns `(values, indices)`; the **indices** are the predicted classes (same as `argmax`).
+- sklearn's `confusion_matrix`: **rows = actual, columns = predicted**, ordered by label. With dog (1) as the positive class: `[[TN, FP], [FN, TP]]`.
+- Precision $= TP/(TP+FP)$, Recall $= TP/(TP+FN)$, F1 = their harmonic mean. Accuracy alone hides **which** class fails and is useless on imbalanced data.
+
+## 📐 Formula Sheet
+
+Every equation on this page in one place. Each one is explained in the chapters above.
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Image as a tensor | $\data{X} \in \mathbb{R}^{H \times W \times 3} \;\to\; \mathbb{R}^{3 \times H \times W}$ | OpenCV stores channels last; PyTorch wants them first |
+| Model objective | $f(\data{X};\param{\theta}) \to \{0, 1\}$ | Learn a function from pixels to cat/dog |
+| Min-max scaling | $\data{x'} = \data{x} / 255$ | Squash 0–255 into 0–1 |
+| Standardization | $\data{x'} = (\data{x} - \mu_c)/\sigma_c$ | Centre each channel on 0, unit spread |
+| Disjoint splits | $\data{D} = \data{D_{tr}} \cup \data{D_{val}} \cup \data{D_{te}}$, pairwise $\cap = \emptyset$ | Every image in exactly one set |
+| Batches per epoch | $\lceil N / \hyper{B} \rceil$ | Last batch can be smaller |
+| Tensor memory | $N \cdot C \cdot H \cdot W \cdot 4$ bytes | float32 = 4 bytes per number |
+| Conv / pool output size | $\left\lfloor \frac{H + 2\hyper{P} - \hyper{K}}{\hyper{S}} \right\rfloor + 1$ | 3×3 pad 1 keeps size; pool 2 halves it |
+| Flatten size | $\hyper{C} \cdot H \cdot W = 128 \cdot 16 \cdot 16 = 32{,}768$ | Must equal `fc1.in_features` |
+| Parameter counts | conv $\hyper{C_{out}}(\hyper{C_{in}}\hyper{K}^2 + 1)$, FC $d_{out}(d_{in} + 1)$ | The first FC layer dominates |
+| Mini-batch gradient | $\nabla_{\param{\theta}} \loss{L_B} = \frac{1}{\hyper{B}} \sum_{i \in B} \nabla_{\param{\theta}} \loss{\ell_i}$ | Average the per-image gradients |
+| Prediction | $\pred{\hat y} = \arg\max_k \pred{z_k}$ | Pick the class with the biggest logit |
+| Accuracy | $\frac{TP + TN}{TP + TN + FP + FN}$ | Share of all predictions that are right |
+| Precision | $\frac{TP}{TP + FP}$ | When it says dog, how often is it a dog? |
+| Recall | $\frac{TP}{TP + FN}$ | Of all real dogs, how many did it find? |
+| F1 score | $2 \cdot \frac{P \cdot R}{P + R}$ | One number that punishes a weak P or R |
+
+## Concept-Check Answers (from the notebook)
+
+### Setup and framing
 
 <details>
 <summary><strong>Why can't we feed .jpg/.png files directly into a CNN?</strong></summary>
@@ -924,7 +936,7 @@ The values of its kernels and weights, which end up as a hierarchy of feature de
 Validation is used **repeatedly** to make decisions (epochs, learning rate, dropout), so it gradually stops being unbiased. The test set is used **once** at the end for an honest estimate on unseen data.
 </details>
 
-#### Device
+### Device
 
 <details>
 <summary><strong>Why is a GPU preferred? Is it always required?</strong></summary>
@@ -938,7 +950,7 @@ Deep learning is dominated by large, parallel matrix multiplies and convolutions
 A `RuntimeError` (tensors on different devices). `is_available()` checks for a usable CUDA GPU and driver. `.to(device)` moves a module's parameters (in place) or returns a copy of a tensor on the target device.
 </details>
 
-#### Data preparation
+### Data preparation
 
 <details>
 <summary><strong>How do we extract labels from file names, and why use a DataFrame?</strong></summary>
@@ -958,7 +970,7 @@ A subset trains faster for experiments and teaching. With imbalance the model is
 Stratifying keeps the class ratio identical in train, validation and test, so metrics are comparable and no subset is starved of a class. Test data must **never** influence training or tuning; that is leakage and makes the reported score optimistic.
 </details>
 
-#### Preprocessing
+### Preprocessing
 
 <details>
 <summary><strong>Why resize, why BGR→RGB, why normalize, why HWC→CHW, why save .pt?</strong></summary>
@@ -966,7 +978,7 @@ Stratifying keeps the class ratio identical in train, validation and test, so me
 **Resize:** batches need identical shapes. **BGR→RGB:** OpenCV loads BGR, while every other library and every pretrained model expects RGB. **Normalize:** small, comparable input scales give stable gradients and faster convergence. **HWC→CHW:** `Conv2d` expects channels first. **.pt:** skip re-decoding thousands of JPEGs on every run.
 </details>
 
-#### Batching
+### Batching
 
 <details>
 <summary><strong>Why batches? What does a DataLoader do? What is the batch shape?</strong></summary>
@@ -980,7 +992,7 @@ Full-dataset steps don't fit in memory and update rarely; single-image steps are
 Shuffling prevents order effects (all cats then all dogs) and gives each epoch a different sequence of mixed batches. Same device: an operation can only read memory on one device, so mismatched inputs raise a runtime error.
 </details>
 
-#### Convolution on real images
+### Convolution on real images
 
 <details>
 <summary><strong>What does convolution do? Why multiple filters? What does pooling do?</strong></summary>
@@ -994,7 +1006,7 @@ Convolution computes a weighted sum over each neighbourhood, highlighting one pa
 Grayscale gives one channel, so a 2-D filter's effect is easy to see. A CNN does **not** use fixed filters: it starts with random kernels and learns them by backpropagation.
 </details>
 
-#### Model and training
+### Model and training
 
 <details>
 <summary><strong>Why multiple conv layers? Why flatten before the FC layer?</strong></summary>
@@ -1020,7 +1032,7 @@ Forward pass → loss → backward pass → optimizer step, repeated for every b
 Training accuracy rising (loss falling) while validation accuracy stalls or validation loss rises, as in the notebook (0.90 vs 0.81). Loss is the smooth signal the optimizer actually minimizes and reveals confidence; accuracy is the coarse, human-meaningful outcome. Loss can worsen while accuracy holds steady (the model is becoming over-confident on its mistakes).
 </details>
 
-#### Evaluation
+### Evaluation
 
 <details>
 <summary><strong>Why evaluate on test data? What does a confusion matrix show?</strong></summary>

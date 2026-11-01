@@ -77,6 +77,19 @@ MANIFEST = {
     # Transfer Learning with ResNet18
     "transfer/freeze-vs-finetune": ("transfer_scenes.py", "FreezeVsFinetune"),
     "transfer/early-stopping":     ("transfer_scenes.py", "EarlyStoppingScene"),
+    # NLP Foundations
+    "nlp/preprocessing-pipeline":  ("nlp_scenes.py", "PreprocessingPipeline"),
+    "nlp/context-window":          ("nlp_scenes.py", "ContextWindow"),
+    "nlp/cooccurrence-coffee-tea": ("nlp_scenes.py", "CooccurrenceCoffeeTea"),
+    "nlp/tfidf-weights":           ("nlp_scenes.py", "TfidfWeights"),
+    "nlp/split-variance":          ("nlp_scenes.py", "SplitVariance"),
+    # Recurrent Neural Networks
+    "rnn/hidden-state-flow":       ("rnn_scenes.py", "HiddenStateFlow"),
+    "rnn/padding-mask":            ("rnn_scenes.py", "PaddingMask"),
+    "rnn/unroll-shared-weights":   ("rnn_scenes.py", "UnrolledSharedWeights"),
+    "rnn/bptt-gradient-flow":      ("rnn_scenes.py", "BpttGradientFlow"),
+    "rnn/vanishing-exploding":     ("rnn_scenes.py", "VanishingExploding"),
+    "rnn/gated-memory":            ("rnn_scenes.py", "GatedMemory"),
     # Core Java
     "jvm/gc-generations":          ("java_scenes.py", "GcGenerations"),
     "oop/init-order":              ("java_scenes.py", "InitOrder"),

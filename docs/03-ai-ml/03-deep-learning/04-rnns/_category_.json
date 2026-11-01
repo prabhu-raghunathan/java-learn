@@ -1,0 +1,8 @@
+{
+  "label": "Recurrent Neural Networks",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "Sequence data and the idea of recurrence, the RNN cell and backpropagation through time, many-to-one and many-to-many RNNs from scratch and in PyTorch, vanishing and exploding gradients, and why LSTM and GRU exist."
+  }
+}

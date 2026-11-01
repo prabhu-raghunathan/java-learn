@@ -15,61 +15,31 @@ A CNN classifier stacks **Conv → ReLU → Pool** blocks to turn an image into 
 **Next:** [CNN in Practice: Cats vs Dogs](./03-cnn-practical-cats-vs-dogs.md) runs the whole pipeline on real images, then [Transfer Learning with ResNet18](./04-transfer-learning-resnet18.md).
 :::
 
-## ⚡ Essential Interview Recall
+## 🧭 Start Here
 
-**Full architecture**
-- Pipeline: **Conv → ReLU → Pool → Conv → ReLU → Pool → Flatten → FC → ReLU → FC (logits)**. Conv/pool = **feature extractor**, FC = **classifier**.
-- Shape flow (32×32 RGB): `(N,3,32,32)` → `(N,16,32,32)` → `(N,16,16,16)` → `(N,32,16,16)` → `(N,32,8,8)` → flatten `(N,2048)` → `(N,64)` → `(N,10)`.
-- $H_{out} = \lfloor (H + 2P - K)/S \rfloor + 1$. Conv params $= C_{out}(C_{in}K^2 + 1)$. FC params $= d_{out}(d_{in} + 1)$.
-- **Conv params don't depend on H, W; FC params do.** In the notebook's SmallCNN, `fc1` alone holds **131 K of 137 K params (96%)**. Modern nets replace flatten + big FC with **global average pooling**.
-- Convolution = **linear transformation with structured sparsity + weight sharing** = a constrained FC layer.
+The [fundamentals page](./01-cnn-fundamentals.md) built the pieces: convolution, stride, padding, filters, pooling, and the Conv → ReLU → Pool block. This page answers what you do with them: how to **assemble a complete image classifier**, how to **train** it, how to stop it **overfitting**, why it beats a fully connected network so decisively, and how **AlexNet** proved all of this at scale in 2012.
 
-**Training**
-- Multi-class loss: **softmax** $\pred{p_i} = e^{\pred{z_i}}/\sum_j e^{\pred{z_j}}$ + **cross-entropy** $\loss{\mathcal{L}} = -\sum_i \data{y_i} \log \pred{p_i} = -\log \pred{p_{\text{true}}}$.
-- `nn.CrossEntropyLoss` = **LogSoftmax + NLLLoss**. Feed it **raw logits** `(N, C)` and **integer class indices** `(N,)`. **Never softmax first.**
-- The CE gradient w.r.t. the logits is simply **$\pred{p} - \data{y}$** (predicted probabilities − one-hot).
-- Starting loss ≈ **$\ln C$** (2.30 for 10 classes) = a uniform guess. If it doesn't fall below that, the model is learning nothing.
-- Backprop is identical to an ANN. **Weight sharing ⇒ each kernel's gradient is summed over all spatial positions.**
-- Too-high LR blows up: Adam at **lr = 0.1** jumped the loss from 2.3 to **177** (the notebook saw 2333). Adam's sensible default is **1e-3**.
+The good news is that very little here is new mathematics. A CNN classifier is a feature extractor (the conv blocks) followed by an ordinary classifier (fully connected layers). It is trained with the same loss, the same `backward()` and the same optimizer as any ANN. What changes is where the parameters live, which layers overfit, and what the architecture assumes about images. Those are exactly the points interviews probe.
 
-**Dropout**
-- Training: each activation is zeroed with probability $\hyper{p}$ and the survivors are scaled by $\frac{1}{1-\hyper{p}}$ (**inverted dropout**). Eval: **identity**.
-- Prevents **co-adaptation** (no neuron can rely on a specific partner) ≈ training an **ensemble** of thinned sub-networks.
-- Placed mostly **around the FC layers** (where the parameters are). `model.train()` turns it ON, `model.eval()` turns it OFF.
-- Higher $p$ → stronger regularization, noisier and slower training, and eventual underfitting. Typical: **0.5 for FC**, 0.1–0.3 for conv.
+| New concept | One-line meaning |
+|---|---|
+| **Feature extractor** | The conv/pool part: turns pixels into a stack of feature maps |
+| **Classifier head** | The flatten + fully connected part: turns features into class scores |
+| **Logits** | Raw, unbounded class scores output by the last layer |
+| **Softmax** | Converts logits into probabilities that sum to 1 |
+| **Cross-entropy** | The multi-class loss: minus the log of the probability given to the true class |
+| **Dropout** | Randomly zeroing activations during training to prevent overfitting |
+| **Global average pooling** | Averaging each feature map to one number, replacing a big flatten + FC |
+| **Inductive bias** | An assumption built into an architecture (for CNNs: locality, weight sharing) |
+| **Top-5 error** | ImageNet metric: wrong only if the true class is not among the 5 highest scores |
 
-**CNN vs ANN**
-- One FC layer 3,072 → 1,000 = **3.07 M** params. One `Conv2d(3, 32, 3)` = 32 × (27 + 1) = **896**. Full notebook models: ANN **3.08 M** vs CNN **82.8 K**.
-- Double the resolution: ANN's first layer ×4. The conv layer is **unchanged**.
-- **Inductive biases**: **locality**, **translation equivariance** (via weight sharing), and **pooling** for some invariance. These let a CNN generalize with far fewer parameters.
+## 1. The Full CNN Architecture
 
-**AlexNet (Krizhevsky, Sutskever, Hinton, 2012)**
-- ImageNet ILSVRC: **~1.2 M** training images, **1,000** classes, metric = **top-5 error**. ~**26% → ~15%**.
-- Innovations: **ReLU**, **depth** (5 conv + 3 FC = 8 learnable layers), **2 GPUs**, **data augmentation** (crops, flips, colour), **dropout** (FC layers).
-- Input 227×227×3 → conv/pool → **6×6×256 = 9,216** features → FC 4096 → 4096 → 1000. **~60 M** params, **~94% in the FC layers**.
-- Hierarchy: **edges → textures → parts → objects**. Successors: **VGG (2014), GoogLeNet (2014), ResNet (2015)**.
+A complete CNN classifier has two halves with different jobs. The **feature extractor** is a stack of Conv → ReLU → Pool blocks. Each block increases the number of channels and shrinks the height and width, so an image of shape $(3, 32, 32)$ becomes, after two blocks, a deep but small stack such as $(32, 8, 8)$: 32 feature maps, each describing where a learned pattern occurs. The **classifier head** then **flattens** that stack into one long vector (here $32 \times 8 \times 8 = 2{,}048$ numbers) and passes it through fully connected layers, the last of which outputs one **logit** per class.
 
-## 📐 Formula Sheet
+The surprise, and a favourite interview question, is where the parameters end up. The convolutions, the part that actually looks at the image, need only about 5 K parameters in the notebook's `SmallCNN`, because conv parameters do not depend on the image size. The first fully connected layer needs **131 K**, because it connects every one of the 2,048 flattened values to each of its 64 units. That single layer holds 96% of the model. It is where a CNN overfits, which is why dropout is placed there, and it is why modern architectures replace flatten + FC with **global average pooling**: average each feature map to a single number, and the head shrinks to `Linear(32, 10)`.
 
-Every equation on this page in one place. Each one is explained in a card further down.
-
-| Concept | Formula | In plain words |
-|---|---|---|
-| Conv output size | $\left\lfloor \frac{\hyper{H} + 2\hyper{P} - \hyper{K}}{\hyper{S}} \right\rfloor + 1$ | Positions the kernel fits into |
-| Conv parameters | $\hyper{C_{out}}(\hyper{C_{in}}\hyper{K}^2 + 1)$ | Independent of image size |
-| FC parameters | $d_{out}(d_{in} + 1)$ | Grows with the flattened size |
-| Global average pooling | $\pred{g_c} = \frac{1}{HW}\sum_{i,j}\pred{A_{c,i,j}}$ | One average per feature map |
-| Softmax | $\pred{p_i} = \dfrac{e^{\pred{z_i}}}{\sum_j e^{\pred{z_j}}}$ | Scores → probabilities that sum to 1 |
-| Cross-entropy | $\loss{\mathcal{L}} = -\log \pred{p_{\text{true}}}$ | Surprise at the right answer |
-| Starting loss | $\loss{\mathcal{L}_0} \approx \ln C$ | Uniform guessing over $C$ classes |
-| CE gradient | $\partial\loss{\mathcal{L}}/\partial\pred{z} = \pred{p} - \data{y}$ | Predicted minus true |
-| Shared-kernel gradient | $\dfrac{\partial\loss{\mathcal{L}}}{\partial\param{K}} = \sum_{i,j}\dfrac{\partial\loss{\mathcal{L}}}{\partial\pred{Y_{i,j}}}\,\data{X_{\text{patch}(i,j)}}$ | Every position adds its vote |
-| Dropout (train) | $\pred{\tilde h} = \dfrac{\data{m}\odot\pred{h}}{1-\hyper{p}},\; \data{m_i} \sim \text{Bernoulli}(1-\hyper{p})$ | Zero some, boost the rest |
-| Dropout expectation | $\mathbb{E}[\pred{\tilde h}] = \pred{h}$ | Same scale in train and eval |
-
-## The Mental Model
-
-### 1. A complete CNN classifier (the notebook's SmallCNN)
+Shapes still follow the fundamentals page's formulas, and a single change early on ripples through everything after it: make the first conv stride 2 and every later shape, including the flatten size, halves.
 
 ```mermaid
 flowchart TB
@@ -81,30 +51,6 @@ flowchart TB
     E -->|"FC 2048→64 + ReLU (+ Dropout)"| F["(N, 64)"]
     F -->|"FC 64→10"| G(["Logits (N, 10)<br/>one score per class"])
 ```
-
-### 2. From logits to loss to update
-
-```mermaid
-flowchart TB
-    Z["Logits z<br/>(N, C) raw scores"] -->|"softmax (inside the loss)"| P["Probabilities p<br/>each row sums to 1"]
-    P -->|"−log p[true class]"| L(["Cross-entropy loss<br/>scalar"])
-    L -->|"loss.backward()<br/>∂L/∂z = p − y"| G["Gradients for every<br/>conv kernel and FC weight"]
-    G -->|"optimizer.step()"| U["Updated weights"]
-```
-
-### 3. What the layers learn: the feature hierarchy
-
-```mermaid
-flowchart TB
-    IMG["Raw pixels"] --> L1["Early conv layers<br/>edges · gradients · colour contrasts"]
-    L1 --> L2["Middle conv layers<br/>textures · corners · simple shapes"]
-    L2 --> L3["Deep conv layers<br/>object parts: eyes · wheels · faces"]
-    L3 --> CLS["FC classifier<br/>combines parts → 'cat' / 'car' / ..."]
-```
-
-## The Paradigm / Core Concepts
-
-### Part A: The full CNN architecture
 
 | Component | Role | What it changes |
 |---|---|---|
@@ -163,11 +109,29 @@ $$
 
 A **stride-2 first conv** (K=3, P=1) on 32×32 gives $\lfloor 31/2 \rfloor + 1 = 16$: it **halves** the spatial size, and every later shape (including the flatten size) changes with it.
 
-### Part B: Training a CNN
+:::tip[🎯 Interview angle]
+**"Where are most of the parameters in a CNN?"** In the first fully connected layer after flatten (96% of `SmallCNN`, ~94% of AlexNet in its FC layers), because FC parameters scale with the flattened feature size while conv parameters don't depend on the image size. Mention **global average pooling** as the modern fix: tiny head, fewer parameters, and any input size works.
+:::
 
-#### Loss: softmax + cross-entropy
+## 2. Training a CNN: Softmax, Cross-Entropy and Backprop
 
-The network outputs **logits** $z \in \mathbb{R}^{N \times C}$: unbounded raw scores, one per class.
+Training a CNN classifier follows exactly the recipe from the ANN page: forward pass, loss, `backward()`, optimizer step. Two pieces are specific to multi-class classification and deserve care.
+
+The network outputs **logits**: one unbounded score per class. **Softmax** turns them into probabilities: exponentiate each score (so all are positive and larger scores pull further ahead), then divide by the total so they sum to 1. **Cross-entropy** then looks only at the probability assigned to the correct class and takes minus its log. Giving the true class 90% costs 0.105; giving it 1% costs 4.6. Two facts make this pair the standard choice. First, before training a model with $C$ classes assigns about $1/C$ to every class, so the loss starts near $\ln C$ (2.30 for 10 classes): a built-in sanity check. Second, the gradient of the loss with respect to each logit is simply **predicted probability minus target**, $p - y$, so the correct class is pushed up and the wrong ones down, in proportion to how wrong they are.
+
+In PyTorch, `nn.CrossEntropyLoss` applies the softmax for you (as a numerically stable `LogSoftmax`). You give it **raw logits** and **integer class indices**. Adding your own softmax first is one of the most common bugs in deep learning.
+
+Backpropagation through the conv layers needs nothing new either. Convolution is linear, so the chain rule passes straight through it. The only twist is weight sharing: a kernel weight was used at every position of the image, so its gradient is the **sum** of the contributions from every position. Finally, read loss curves with suspicion: a model that can drive the loss on a single fixed batch close to zero is at least capable of learning, a learning rate that is far too high makes the loss explode, and random labels keep it at chance level no matter what the model does.
+
+```mermaid
+flowchart TB
+    Z["Logits z<br/>(N, C) raw scores"] -->|"softmax (inside the loss)"| P["Probabilities p<br/>each row sums to 1"]
+    P -->|"−log p[true class]"| L(["Cross-entropy loss<br/>scalar"])
+    L -->|"loss.backward()<br/>∂L/∂z = p − y"| G["Gradients for every<br/>conv kernel and FC weight"]
+    G -->|"optimizer.step()"| U["Updated weights"]
+```
+
+### Loss: softmax + cross-entropy
 
 <Formula name="Softmax" tag="Logits → probabilities" words="Exponentiate every score so all are positive and bigger scores pull further ahead, then divide by the total so they add up to 1." remember="Exponentiate, then share out of 100%.">
 
@@ -220,7 +184,7 @@ The gradient pushes the true class's logit **up** and the others **down**, in pr
 `nn.CrossEntropyLoss` **already contains** `LogSoftmax` + `NLLLoss`. Adding your own softmax applies it **twice**: the probabilities get squashed towards uniform, the loss is wrong (0.417 becomes **0.802** in the example above), and the gradients shrink, so training slows or stalls. Feed **raw logits**. Apply softmax only **at inference**, when you want human-readable probabilities. (`LogSoftmax` is also numerically safer than `log(softmax(z))`: it uses the log-sum-exp trick, so no overflow and no $\log 0$.)
 :::
 
-#### Backpropagation through a CNN
+### Backpropagation through a CNN
 
 - Forward $x \rightarrow f(x) \rightarrow \mathcal{L}$, backward $\partial\mathcal{L}/\partial W$: **exactly the ANN procedure** (`loss.backward()`, `optimizer.step()`).
 - Convolution is linear in both its input and its kernel, so the chain rule passes straight through it.
@@ -239,7 +203,7 @@ $$
 
 </Formula>
 
-#### What a training step shows (notebook, one batch of 8)
+### What a training step shows (notebook, one batch of 8)
 
 | Parameter | Mean \|grad\| | Note |
 |---|---|---|
@@ -252,7 +216,7 @@ $$
 - Magnitudes differ per layer. Layers far from the loss get smaller signals, and in **deeper** CNNs that becomes **vanishing gradients**.
 - The initial loss **2.34 ≈ ln 10 = 2.30** is what a 10-class model guessing uniformly should give: a useful sanity check.
 
-#### Reading a loss curve honestly
+### Reading a loss curve honestly
 
 | Setup | What happens | Lesson |
 |---|---|---|
@@ -260,15 +224,25 @@ $$
 | Same batch, Adam **lr = 0.1** | 2.30 → **177** → 2.05 | LR far too high: updates overshoot and the loss explodes |
 | **Fresh random images + random labels every step** (notebook demo) | stays ≈ **2.30** | There's nothing to learn: random labels give chance-level loss whatever the model |
 
-### Part C: Dropout
+:::tip[🎯 Interview angle]
+**"What loss do you use for multi-class classification, and what does PyTorch expect?"** Softmax + cross-entropy; `nn.CrossEntropyLoss` takes **raw logits** `(N, C)` and **class indices** `(N,)` of dtype `long`, and must not be preceded by a softmax. The gradient w.r.t. the logits is $p - y$, and an untrained model should start near $\ln C$.
+:::
 
-#### Why CNNs still overfit
+## 3. Dropout
+
+CNNs have far fewer parameters than fully connected image models, but they still overfit, and as Chapter 1 showed, the excess capacity concentrates in the fully connected head. On small datasets with many epochs, features become over-specialized to the training images: training loss keeps falling while validation loss stalls or rises.
+
+**Dropout** is a simple, effective remedy. During training, every activation in a dropout layer is independently set to zero with probability $p$ (typically 0.5 in FC layers), and the survivors are scaled up by $1/(1-p)$. The scaling is the "inverted" part: it keeps the **expected** value of each activation unchanged, so at test time dropout can simply be switched off and the layer becomes the identity, with nothing to rescale.
+
+Why does randomly breaking the network help? Because no unit can rely on a particular partner being present, each one has to learn features that are useful on their own, which prevents **co-adaptation** and builds in redundancy. Another way to see it: every training step trains a different randomly thinned sub-network, and the full network at test time behaves like an average over that enormous ensemble. Dropout must be **off** during evaluation, so predictions are deterministic and use every learned feature. In PyTorch that switch is `model.train()` / `model.eval()`, which is why forgetting `model.eval()` makes test accuracy noisy and lower.
+
+### Why CNNs still overfit
 
 - CNNs have far fewer parameters than an image ANN, **but** the FC head can still have hundreds of thousands, and memorization concentrates there.
 - Small datasets, noisy labels and many epochs let features become **over-specialized** to the training images.
 - **Signature:** training loss keeps falling while **validation loss stalls or rises**.
 
-#### How dropout works
+### How dropout works
 
 During training, sample a random mask for each activation and scale the survivors:
 
@@ -319,7 +293,15 @@ If the same star player is always on the field, everyone else learns to just pas
 
 **Raising $p$:** more regularization, but a **noisier training signal**. Training loss falls more slowly and ends higher, and too large a $p$ (e.g. 0.9) makes the network **underfit**.
 
-### Part D: CNN vs ANN: parameter efficiency
+:::tip[🎯 Interview angle]
+**"How does dropout work, and what changes at test time?"** In training, zero each activation with probability $p$ and scale the survivors by $1/(1-p)$ (inverted dropout keeps the expectation); at test time it is the identity. It prevents co-adaptation and acts like an ensemble of thinned networks. Put it in the FC head (p ≈ 0.5), and remember `model.eval()` turns it off.
+:::
+
+## 4. CNN vs ANN: Parameter Efficiency and Inductive Bias
+
+Put the numbers side by side and the case for convolution is overwhelming. On a 32×32 RGB image, a single fully connected layer to 1,000 units needs about 3.07 million parameters. A conv layer with 32 filters of size 3×3 needs 896. The notebook's full models differ by a factor of nearly 40 (3.08 M for the ANN vs 82.8 K for the CNN). Double the image resolution and the ANN's first layer grows four-fold, while the conv layer does not change at all.
+
+Fewer parameters is only half of the story. The deeper reason CNNs generalize better is their **inductive bias**: assumptions built into the architecture rather than learned from data. A CNN assumes **locality** (nearby pixels belong together, so small kernels suffice), **translation equivariance** (the same pattern can appear anywhere, so the same detector is reused everywhere and its response moves with the pattern) and, through pooling, some **translation invariance** (the answer shouldn't change if the object shifts slightly). These assumptions happen to be true of natural images, so the CNN does not have to spend data discovering them. The flip side is that when they are false, for example when absolute position matters, a CNN needs extra help.
 
 | | ANN (flatten → FC) | CNN |
 |---|---|---|
@@ -339,21 +321,31 @@ These assumptions are **true for natural images**, so the CNN doesn't have to le
 A new hire who is told "most problems come from nearby components, and the same fault looks the same in every room" learns the job much faster than one who must work all of that out alone. A CNN starts with exactly those two rules (locality and weight sharing), so it needs far fewer examples than an ANN that starts with no assumptions.
 :::
 
-### Part E: AlexNet: the breakthrough CNN
+:::tip[🎯 Interview angle]
+**"Why do CNNs beat fully connected networks on images?"** Far fewer parameters (896 vs 3.07 M for a first layer on 32×32×3, and conv cost is independent of resolution) **and** the right inductive biases: locality, translation equivariance from weight sharing, and some invariance from pooling. Those assumptions match natural images, so less data is needed.
+:::
 
-#### Before 2012
+## 5. AlexNet: The Breakthrough CNN
+
+Before 2012, computer vision ran on **hand-engineered features**: experts designed descriptors such as SIFT and HOG, and a classical classifier like an SVM sat on top. Neural networks existed (LeNet-5 read handwritten digits in 1998), but they didn't scale. Sigmoid and tanh activations caused vanishing gradients in deep stacks, training on CPUs was far too slow, and labeled datasets were small.
+
+**ImageNet** removed the data barrier: about 1.2 million labeled training images in 1,000 classes, with an annual competition (ILSVRC) scored by **top-5 error**. In 2012 **AlexNet** (Krizhevsky, Sutskever and Hinton) cut that error from about 26% to about 15%, while the runner-up stayed near 26%. That ten-point gap convinced the field almost overnight.
+
+AlexNet's ingredients are worth knowing by name, because each one answers one of the old barriers. **ReLU** activations avoided saturation and trained several times faster. **Depth** (5 conv + 3 FC layers) gave room for hierarchical features. **Two GPUs** made 60 million parameters and 1.2 million images trainable in under a week. **Data augmentation** (random crops, flips, colour shifts) effectively enlarged the dataset. **Dropout** in the big FC layers controlled overfitting where most of the parameters lived (about 94% of them). The lasting lesson was not any one trick but the recipe: **a deep CNN, a large labeled dataset and GPU compute**, with features learned rather than designed. VGG, GoogLeNet and ResNet kept that recipe and fixed its limits.
+
+### Before 2012
 
 - Pipeline: **Image → hand-crafted features → classical classifier** (e.g. SVM).
 - Features were **manually engineered**: **SIFT**, **HOG**, **SURF**. Progress meant humans designing better features.
 - Deep networks existed (LeNet-5, 1998, read digits) but were hard to scale: **saturating sigmoid/tanh** activations (vanishing gradients), **no GPU training**, and **small labeled datasets**.
 
-#### ImageNet / ILSVRC
+### ImageNet / ILSVRC
 
 - **~1.2 million** training images, **1,000** classes.
 - Metric: **top-5 error**, where a prediction counts as correct if the true label is among the model's **5 highest-scoring** classes.
 - **2011** best ≈ **26%** → **AlexNet 2012** ≈ **15%** (second place was ~26%). A ~10-point jump, unheard of at the time.
 
-#### The five innovations (plus two you may be asked about)
+### The five innovations (plus two you may be asked about)
 
 | Innovation | What | Why it mattered |
 |---|---|---|
@@ -365,7 +357,7 @@ A new hire who is told "most problems come from nearby components, and the same 
 | *Overlapping max-pool* | 3×3 windows with stride 2 | Slightly lower error, less overfitting |
 | *Local Response Normalization* | Normalizes across neighbouring channels | Small gain at the time. Later replaced by **BatchNorm** |
 
-#### Architecture (original paper, 227×227×3 input)
+### Architecture (original paper, 227×227×3 input)
 
 | Stage | Layer | Output | Notes |
 |---|---|---|---|
@@ -380,7 +372,7 @@ A new hire who is told "most problems come from nearby components, and the same 
 
 Roughly **60 million** parameters; a plain re-implementation counts 62.4 M, **94% of them in the three FC layers**. The convolutions **progressively extract** edges → textures → object parts → object concepts. (The notebook's `MiniAlexNet` uses torchvision's single-GPU channel widths 64/192/384/256/256.)
 
-#### Why it was revolutionary
+### Why it was revolutionary
 
 **Deep CNN + large labeled dataset + GPU compute** beat decades of hand-engineered vision. Features were **learned**, not designed. The successors kept that recipe and fixed its limits:
 
@@ -391,15 +383,23 @@ Roughly **60 million** parameters; a plain re-implementation counts 62.4 M, **94
 | 2014 | **GoogLeNet / Inception** | Parallel multi-scale filters, 1×1 "bottleneck" convs, global average pooling instead of big FC layers |
 | 2015 | **ResNet** | **Skip (residual) connections**, making 100+ layer nets trainable. Covered with transfer learning later |
 
-### Part F: Conceptual closure
+:::tip[🎯 Interview angle]
+**"Why was AlexNet important?"** It cut ImageNet top-5 error from ~26% to ~15% in 2012 with ReLU, depth (5 conv + 3 FC), GPU training, data augmentation and dropout, and showed that learned features beat hand-engineered ones given enough data and compute. Know the successors: VGG (small 3×3 stacks), GoogLeNet (Inception, 1×1 convs, GAP), ResNet (skip connections).
+:::
 
-**The core idea:** a CNN is a sequence of **structured linear operations + non-linearities**:
+## 6. Putting It Together: The Feature Hierarchy
 
-$$
-x \rightarrow \text{Conv} \rightarrow \text{ReLU} \rightarrow \text{Pool} \rightarrow \text{Conv} \rightarrow \cdots \rightarrow \text{FC}
-$$
+Step back and the whole page reduces to one line: a CNN is a sequence of **structured linear operations and non-linearities**, $x \to$ Conv $\to$ ReLU $\to$ Pool $\to \cdots \to$ FC, trained by gradient descent like any network. What makes it work is what it learns along the way: a **hierarchy of features**.
 
-It learns its own filters (edges, corners, textures, object parts) instead of relying on hand-crafted features.
+Early layers have tiny receptive fields, a few pixels across, so they can only learn simple local patterns: edges, gradients, colour contrasts. Each conv and pool enlarges the receptive field, so middle layers combine edges into textures, corners and simple shapes, and deep layers, whose neurons see a large part of the image, respond to object parts such as eyes or wheels. The fully connected head combines those parts into a decision. Along the way, spatial resolution falls and the number of channels rises, because deeper layers need **more kinds** of features but **less precise location**. Pooling and strides trade "where" for "what".
+
+```mermaid
+flowchart TB
+    IMG["Raw pixels"] --> L1["Early conv layers<br/>edges · gradients · colour contrasts"]
+    L1 --> L2["Middle conv layers<br/>textures · corners · simple shapes"]
+    L2 --> L3["Deep conv layers<br/>object parts: eyes · wheels · faces"]
+    L3 --> CLS["FC classifier<br/>combines parts → 'cat' / 'car' / ..."]
+```
 
 **Hierarchical feature learning**
 
@@ -422,7 +422,11 @@ In the notebook's `HierarchyCNN` (conv → pool → conv → pool → conv on 32
 
 **Why not use FC layers from the start?** Millions of parameters in the first layer, no notion of neighbouring pixels, every pattern learned separately at every position, and an input size baked into the weights: slow, data-hungry and overfit-prone.
 
-## ⚙️ Under the Hood (The Math & PyTorch Internals)
+:::tip[🎯 Interview angle]
+**"What does each layer of a CNN learn?"** Early: edges and colour contrasts; middle: textures, corners, shapes; deep: object parts; head: whole objects. The mechanism is the growing receptive field, and the trade of spatial resolution for channels as you go deeper.
+:::
+
+## ⚙️ Going Deeper (The Math & PyTorch Internals)
 
 **`CrossEntropyLoss` internals**
 - Computes `nll_loss(log_softmax(z), y)`. `log_softmax` uses $z_i - \log\sum_j e^{z_j}$ with the **max subtracted first** (log-sum-exp trick), so huge logits never overflow and $\log 0$ never happens.
@@ -696,9 +700,63 @@ for name, fmap in captured.items():
 - **"Pooling makes CNNs fully shift-invariant"**: only approximately. Strides and pooling windows can make outputs change under 1-pixel shifts.
 - **Top-5 vs top-1 error**: AlexNet's famous ~15% is **top-5** error (true label anywhere in the top 5 guesses). Its **top-1** error was far higher, around 37–40%.
 
-### Concept-Check Answers (from the notebook)
+## ⚡ Essential Interview Recall
 
-#### Full architecture
+A one-screen revision list. Every point is explained in the chapters above.
+
+**Full architecture**
+- Pipeline: **Conv → ReLU → Pool → Conv → ReLU → Pool → Flatten → FC → ReLU → FC (logits)**. Conv/pool = **feature extractor**, FC = **classifier**.
+- Shape flow (32×32 RGB): `(N,3,32,32)` → `(N,16,32,32)` → `(N,16,16,16)` → `(N,32,16,16)` → `(N,32,8,8)` → flatten `(N,2048)` → `(N,64)` → `(N,10)`.
+- $H_{out} = \lfloor (H + 2P - K)/S \rfloor + 1$. Conv params $= C_{out}(C_{in}K^2 + 1)$. FC params $= d_{out}(d_{in} + 1)$.
+- **Conv params don't depend on H, W; FC params do.** In the notebook's SmallCNN, `fc1` alone holds **131 K of 137 K params (96%)**. Modern nets replace flatten + big FC with **global average pooling**.
+- Convolution = **linear transformation with structured sparsity + weight sharing** = a constrained FC layer.
+
+**Training**
+- Multi-class loss: **softmax** $\pred{p_i} = e^{\pred{z_i}}/\sum_j e^{\pred{z_j}}$ + **cross-entropy** $\loss{\mathcal{L}} = -\sum_i \data{y_i} \log \pred{p_i} = -\log \pred{p_{\text{true}}}$.
+- `nn.CrossEntropyLoss` = **LogSoftmax + NLLLoss**. Feed it **raw logits** `(N, C)` and **integer class indices** `(N,)`. **Never softmax first.**
+- The CE gradient w.r.t. the logits is simply **$\pred{p} - \data{y}$** (predicted probabilities − one-hot).
+- Starting loss ≈ **$\ln C$** (2.30 for 10 classes) = a uniform guess. If it doesn't fall below that, the model is learning nothing.
+- Backprop is identical to an ANN. **Weight sharing ⇒ each kernel's gradient is summed over all spatial positions.**
+- Too-high LR blows up: Adam at **lr = 0.1** jumped the loss from 2.3 to **177** (the notebook saw 2333). Adam's sensible default is **1e-3**.
+
+**Dropout**
+- Training: each activation is zeroed with probability $\hyper{p}$ and the survivors are scaled by $\frac{1}{1-\hyper{p}}$ (**inverted dropout**). Eval: **identity**.
+- Prevents **co-adaptation** (no neuron can rely on a specific partner) ≈ training an **ensemble** of thinned sub-networks.
+- Placed mostly **around the FC layers** (where the parameters are). `model.train()` turns it ON, `model.eval()` turns it OFF.
+- Higher $p$ → stronger regularization, noisier and slower training, and eventual underfitting. Typical: **0.5 for FC**, 0.1–0.3 for conv.
+
+**CNN vs ANN**
+- One FC layer 3,072 → 1,000 = **3.07 M** params. One `Conv2d(3, 32, 3)` = 32 × (27 + 1) = **896**. Full notebook models: ANN **3.08 M** vs CNN **82.8 K**.
+- Double the resolution: ANN's first layer ×4. The conv layer is **unchanged**.
+- **Inductive biases**: **locality**, **translation equivariance** (via weight sharing), and **pooling** for some invariance. These let a CNN generalize with far fewer parameters.
+
+**AlexNet (Krizhevsky, Sutskever, Hinton, 2012)**
+- ImageNet ILSVRC: **~1.2 M** training images, **1,000** classes, metric = **top-5 error**. ~**26% → ~15%**.
+- Innovations: **ReLU**, **depth** (5 conv + 3 FC = 8 learnable layers), **2 GPUs**, **data augmentation** (crops, flips, colour), **dropout** (FC layers).
+- Input 227×227×3 → conv/pool → **6×6×256 = 9,216** features → FC 4096 → 4096 → 1000. **~60 M** params, **~94% in the FC layers**.
+- Hierarchy: **edges → textures → parts → objects**. Successors: **VGG (2014), GoogLeNet (2014), ResNet (2015)**.
+
+## 📐 Formula Sheet
+
+Every equation on this page in one place. Each one is explained in the chapters above.
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Conv output size | $\left\lfloor \frac{\hyper{H} + 2\hyper{P} - \hyper{K}}{\hyper{S}} \right\rfloor + 1$ | Positions the kernel fits into |
+| Conv parameters | $\hyper{C_{out}}(\hyper{C_{in}}\hyper{K}^2 + 1)$ | Independent of image size |
+| FC parameters | $d_{out}(d_{in} + 1)$ | Grows with the flattened size |
+| Global average pooling | $\pred{g_c} = \frac{1}{HW}\sum_{i,j}\pred{A_{c,i,j}}$ | One average per feature map |
+| Softmax | $\pred{p_i} = \dfrac{e^{\pred{z_i}}}{\sum_j e^{\pred{z_j}}}$ | Scores → probabilities that sum to 1 |
+| Cross-entropy | $\loss{\mathcal{L}} = -\log \pred{p_{\text{true}}}$ | Surprise at the right answer |
+| Starting loss | $\loss{\mathcal{L}_0} \approx \ln C$ | Uniform guessing over $C$ classes |
+| CE gradient | $\partial\loss{\mathcal{L}}/\partial\pred{z} = \pred{p} - \data{y}$ | Predicted minus true |
+| Shared-kernel gradient | $\dfrac{\partial\loss{\mathcal{L}}}{\partial\param{K}} = \sum_{i,j}\dfrac{\partial\loss{\mathcal{L}}}{\partial\pred{Y_{i,j}}}\,\data{X_{\text{patch}(i,j)}}$ | Every position adds its vote |
+| Dropout (train) | $\pred{\tilde h} = \dfrac{\data{m}\odot\pred{h}}{1-\hyper{p}},\; \data{m_i} \sim \text{Bernoulli}(1-\hyper{p})$ | Zero some, boost the rest |
+| Dropout expectation | $\mathbb{E}[\pred{\tilde h}] = \pred{h}$ | Same scale in train and eval |
+
+## Concept-Check Answers (from the notebook)
+
+### Full architecture
 
 <details>
 <summary><strong>Input (N, 3, 32, 32), conv1 (out=16, K=3, S=1, P=1): output shape? What does MaxPool2d(2,2) do to H and W?</strong></summary>
@@ -724,7 +782,7 @@ A kernel's weights are defined per **input channel × kernel position** ($C_{in}
 $\lfloor (32 + 2 - 3)/2 \rfloor + 1 = 16$: it **halves**, and every later shape (and the flatten size feeding fc1) halves accordingly.
 </details>
 
-#### Training
+### Training
 
 <details>
 <summary><strong>Why NOT apply softmax before CrossEntropyLoss in PyTorch?</strong></summary>
@@ -750,7 +808,7 @@ One small kernel is reused at all positions instead of learning a separate weigh
 **Vanishing gradients**: early layers barely update and learn slowly or not at all. Deeper nets multiply more chain-rule factors (vanishing or exploding), have more parameters to fit and overfit, and need more compute. BatchNorm, good initialization and residual connections address this.
 </details>
 
-#### Dropout
+### Dropout
 
 <details>
 <summary><strong>What exactly does dropout randomize during training?</strong></summary>
@@ -776,7 +834,7 @@ Predictions must be **deterministic** and use the **full** network. Random zeroi
 **Around the FC layers** (after flatten or after fc1), where most parameters and most memorization live. Higher $p$ → stronger regularization but noisier and slower training, and too high → underfitting.
 </details>
 
-#### CNN vs ANN
+### CNN vs ANN
 
 <details>
 <summary><strong>Why does an FC ANN need so many parameters for images?</strong></summary>
@@ -802,7 +860,7 @@ Built-in assumptions about images: **locality** (nearby pixels are related) and 
 ANN's first layer grows **4×** (3.07 M → 12.3 M). The conv layers' params are **unchanged** (only a flatten-FC head would grow, which global average pooling avoids).
 </details>
 
-#### AlexNet
+### AlexNet
 
 <details>
 <summary><strong>What major limitation did pre-2012 vision systems have?</strong></summary>
@@ -822,7 +880,7 @@ ReLU doesn't saturate for positive inputs (gradient 1), so it avoids vanishing g
 The FC layers hold ~94% of its parameters, the main overfitting risk, so dropout regularized exactly there. Hierarchical feature learning means early layers learn simple features (edges), later layers combine them into textures, parts and finally objects.
 </details>
 
-#### Conceptual closure
+### Conceptual closure
 
 <details>
 <summary><strong>Why do CNNs learn hierarchical features?</strong></summary>

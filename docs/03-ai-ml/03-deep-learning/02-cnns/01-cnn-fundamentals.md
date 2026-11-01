@@ -14,93 +14,38 @@ A **Convolutional Neural Network (CNN)** processes an image **without flattening
 **Next page:** [CNN Architecture, Training, Dropout & AlexNet](./02-cnn-architecture-training-alexnet.md) assembles them into a full classifier, trains it, regularizes it, and walks through AlexNet.
 :::
 
-## ⚡ Essential Interview Recall
+## 🧭 Start Here
 
-**Why not a fully connected network?**
-- 32×32×3 image → **3,072** inputs. One FC layer to 100 neurons = **307,300** params. At 128×128×3 → **4.9 M** params for **one** layer.
-- FC params scale with **H × W**: double the height and width → **4×** the parameters.
-- Two problems: **parameter explosion** (memory, compute, overfitting) and **loss of spatial structure** (flattening forgets which pixels were neighbours).
+The previous pages built fully connected networks: flatten the input into a vector, multiply by a weight matrix, apply an activation, repeat. That recipe works for tables of numbers, but images break it in two ways: the parameter count explodes, and flattening throws away which pixels were next to each other. A **Convolutional Neural Network (CNN)** fixes both with one idea: instead of connecting every pixel to every neuron, slide a **small learnable filter** across the image and reuse it everywhere.
 
-**Images as tensors**
-- Grayscale = 1 channel, RGB = 3 channels. Libraries such as PIL and OpenCV store images as **HWC**; **PyTorch expects NCHW**: `(batch, channels, height, width)`.
-- 20 RGB images of 64×64 → `(20, 3, 64, 64)`. One grayscale 28×28 image → `(1, 1, 28, 28)`.
+This page builds that idea from the ground up, in the order you'd explain it at a whiteboard: why fully connected layers fail on images, how images are stored as tensors, what a convolution computes, how stride and padding control the output size, how many filters produce many feature maps, how pooling shrinks them, and how the three combine into the basic **Conv → ReLU → Pool** block. The [next page](./02-cnn-architecture-training-alexnet.md) stacks these blocks into a full classifier and trains it.
 
-**Convolution**
-- At each position: **element-wise multiply patch × kernel, then sum** → one output number = a **dot product** $w^\top x$. Then slide.
-- Convolution is **linear** (it's a dot product) and **local** (it only sees a small patch).
-- Kernel = **pattern detector**. `[[1,0,-1],[1,0,-1],[1,0,-1]]` responds to **vertical edges**.
-- **Weight sharing**: the **same kernel at every position**. Built-in assumption: *a pattern is the same pattern wherever it appears*.
-- PyTorch's "convolution" is mathematically **cross-correlation** (the kernel is not flipped). It makes no difference for learning.
+| New concept | One-line meaning |
+|---|---|
+| **Kernel / filter** | A small grid of learnable weights (e.g. 3×3×C) that slides over the image |
+| **Feature map** | The grid of outputs one filter produces: where its pattern appears, and how strongly |
+| **Local connectivity** | Each output looks only at a small patch of the input |
+| **Weight sharing** | The same kernel is used at every position |
+| **Stride** | How many pixels the kernel jumps between positions |
+| **Padding** | A border of zeros added around the input |
+| **Channels** | The depth dimension: 3 for RGB input, one per filter after a conv layer |
+| **Pooling** | Shrinking each feature map by summarizing small windows (max or average) |
+| **NCHW** | PyTorch's tensor layout: (batch, channels, height, width) |
+| **Receptive field** | The region of the original image that can influence one neuron |
 
-**Stride, padding, output size**
-- $\text{Out} = \left\lfloor \frac{\hyper{W} - \hyper{F} + 2\hyper{P}}{\hyper{S}} \right\rfloor + 1$, applied to height and width separately.
-- **Stride** $S$ = step size. Larger stride → smaller output, cheaper, acts like **downsampling**. Stride does **not** change the parameter count.
-- **Padding** $P$ = zeros around the border. It keeps the size and protects border pixels. **$F=3, P=1, S=1$ → output size = input size** ("same" padding).
+## 1. Why Fully Connected Networks Fail on Images
 
-**Filters & feature maps**
-- Each filter spans **all input channels**: shape $(C_{in}, F, F)$. **One filter → one feature map**. $K$ filters → output depth $K$.
-- PyTorch weight shape: **`(out_channels, in_channels, kH, kW)`**.
-- **Params = $\hyper{C_{out}}(\hyper{C_{in}}\hyper{F}^2 + 1)$**. It is independent of image size. `Conv2d(3, 5, 3)` = 5 × (27 + 1) = **140**.
+A fully connected layer treats its input as a plain list of numbers. For tabular data that's fine, but an image is not a list: it is a grid in which a pixel's meaning depends on its neighbours. Feed an image to an ANN and you have to flatten it first, and that single step causes both of the problems below.
 
-**Pooling**
-- **Max pool 2×2, stride 2** → H and W halve, **channels unchanged**, **zero parameters**.
-- Keeps the strongest activation, which gives **small translation tolerance**. It discards exact position and the non-max values.
+The first is **size**. Every input pixel needs its own weight to every neuron, so the parameter count grows with the image's area. A small 32×32 RGB image already has 3,072 inputs; connect them to just 100 neurons and you need over 300,000 parameters for one layer. At 128×128 it's nearly 5 million. That is a computational problem (memory, speed) and a statistical one: a model with that much freedom memorizes the training images instead of learning general patterns, unless you have enormous amounts of data.
 
-**The block & the big picture**
-- **Conv → ReLU → Pool**: extract features → add non-linearity → shrink space. Depth goes **up** (3 → 8), space goes **down** (32 → 16).
-- What makes a CNN special: **locality**, **weight sharing**, **parameter efficiency**, **hierarchical features**. It's still linear + non-linear layers trained by gradient descent: a **structured ANN**.
-- A conv layer is **translation-equivariant** (shift the input → the feature map shifts the same way). **Pooling** adds a little **invariance**.
-
-## 📐 Formula Sheet
-
-Every equation on this page in one place. Each one is explained in a card further down. Sizes and counts you choose ($\hyper{F}, \hyper{S}, \hyper{P}, \hyper{C}$) are violet.
-
-| Concept | Formula | In plain words |
-|---|---|---|
-| FC layer parameters | $d_{in}\cdot d_{out} + d_{out}, \quad d_{in} = H\cdot W\cdot C$ | Every pixel connects to every neuron |
-| One conv output pixel | $\pred{Y}_{i,j} = \sum_{c,u,v} \param{K}_{c,u,v}\,\data{X}_{c,\,i\hyper{S}+u,\,j\hyper{S}+v} + \param{b}$ | Dot product of the kernel with one patch |
-| Convolution is linear | $\text{conv}(a\data{x_1} + b\data{x_2}) = a\,\text{conv}(\data{x_1}) + b\,\text{conv}(\data{x_2})$ | It's a dot product, so it's linear |
-| Output size | $\left\lfloor \frac{\hyper{W} - \hyper{F} + 2\hyper{P}}{\hyper{S}} \right\rfloor + 1$ | Positions that fit, per dimension |
-| "Same" padding | $\hyper{P} = (\hyper{F} - 1)/2$ with $\hyper{S} = 1$ | Keeps output size = input size |
-| Conv parameters | $\hyper{C_{out}}\,(\hyper{C_{in}}\hyper{F}^2 + 1)$ | Kernel weights + one bias, per filter |
-| Max pooling | $\pred{Y}_{i,j} = \max_{u,v \in \lbrace 0,1 \rbrace} \data{X}_{2i+u,\,2j+v}$ | Keep the biggest value in each 2×2 block |
-| Receptive field | $r_\ell = r_{\ell-1} + (\hyper{F_\ell} - 1)\prod_{i<\ell}\hyper{S_i}$ | How much of the image one neuron sees |
-| Compute (MACs) | $H_{out} W_{out}\,\hyper{C_{out}}\,\hyper{C_{in}}\hyper{F}^2$ | Few params, but they run at every position |
-
-## The Mental Model
-
-### 1. Fully connected vs convolution on the same image
+The second is **structure**. After flattening, two pixels that sat directly above one another end up a full row apart in the vector. The layer has no idea they were neighbours, so it cannot easily learn edges or shapes, and a pattern learned in one corner of the image has to be learned again, separately, for every other position. What we want is a layer that looks at **local neighbourhoods**, **reuses** the same pattern detector everywhere, and needs **far fewer parameters**. That layer is the convolution.
 
 ```mermaid
 flowchart LR
     I1["32×32×3 image"] -->|"flatten"| V["vector of 3072<br/>neighbours forgotten"] -->|"Linear(3072, 100)"| F1["307,300 params<br/>for ONE layer"]
     I2["32×32×3 image"] -->|"keep the grid"| K["one 3×3×3 kernel<br/>slides everywhere"] -->|"Conv2d(3, 1, 3)"| F2["28 params<br/>spatial layout kept"]
 ```
-
-### 2. What a convolution does at one location
-
-```mermaid
-flowchart LR
-    P["3×3 image patch"] --> M["⊙ multiply element-wise<br/>with the 3×3 kernel"]
-    M --> S["Σ sum the 9 products<br/>(+ bias)"]
-    S --> O["ONE output pixel"]
-    O -->|"slide by stride S, repeat"| P
-```
-
-### 3. The minimal CNN block: shape flow
-
-```mermaid
-flowchart TB
-    X["Input<br/>(1, 3, 32, 32)"] -->|"Conv2d(3→8, k=3, p=1)<br/>detect 8 patterns"| C["(1, 8, 32, 32)<br/>depth ↑, size kept"]
-    C -->|"ReLU<br/>keep positive responses"| R["(1, 8, 32, 32)<br/>shape unchanged"]
-    R -->|"MaxPool2d(2, 2)<br/>keep strongest in each 2×2"| P["(1, 8, 16, 16)<br/>space ↓ by half"]
-```
-
-## The Paradigm / Core Concepts
-
-### Part A: Why fully connected networks fail on images
-
-The ANN recipe is **Flatten → Linear → Activation → repeat**. Apply it to images and two things break.
 
 **Problem 1: parameter explosion**
 
@@ -136,7 +81,15 @@ Imagine cutting a photo into rows and taping them end to end into one long strip
 
 **Key insight.** Images have **local patterns** (edges, corners), **repeated structures** (the same texture in many places) and a **spatial hierarchy** (edges → shapes → objects). We want a layer that **preserves locality**, **reuses patterns**, and **uses far fewer parameters**. That layer is the convolution.
 
-### Part B: Images as tensors
+:::tip[🎯 Interview angle]
+**"Why not use a fully connected network for images?"** Two reasons: **parameter explosion** (params scale with $H \times W$; 32×32×3 → 100 neurons is already 307,300 weights, which costs memory and invites overfitting) and **loss of spatial structure** (flattening forgets which pixels were neighbours, so every pattern must be relearned at every position).
+:::
+
+## 2. Images as Tensors
+
+Before convolving anything we need to agree on how an image is stored. A grayscale image is a grid of brightness values; a colour image stores three values per pixel (red, green and blue), so it is three grids stacked on top of each other. Each of these grids is a **channel**.
+
+Image libraries (PIL, OpenCV, NumPy) store pixels as **HWC**: height, width, then channels. PyTorch expects **NCHW**: a batch dimension first, then channels, then height and width. The reason is how convolution works: a filter covers **all channels at once** but slides only over height and width, so channels describe "what is at this location" and height/width describe "where". Getting this layout right is the first step of every CNN pipeline, and `ToTensor()` (or `permute(2, 0, 1)`) does the conversion. Even a single image needs the batch dimension, added with `unsqueeze(0)`.
 
 | | Grayscale | RGB |
 |---|---|---|
@@ -152,7 +105,25 @@ Imagine cutting a photo into rows and taping them end to end into one long strip
 
 **The batch dimension $N$** lets the GPU process many images in parallel and gives a gradient **averaged over many samples** (more stable). `nn.Conv2d` expects a batch: a lone `(3, 32, 32)` image is interpreted as an *unbatched* input in recent PyTorch versions, and other layers and loss functions often break on it, so add the dimension with `img.unsqueeze(0)`.
 
-### Part C: Convolution, intuition first
+:::tip[🎯 Interview angle]
+Know the layouts cold: images from PIL/OpenCV are **HWC**, PyTorch wants **NCHW**. A batch of 20 RGB 64×64 images is `(20, 3, 64, 64)`. Channels come first because a filter spans all channels but slides only over H and W.
+:::
+
+## 3. Convolution: The Sliding Pattern Detector
+
+A convolution is a **sliding pattern detector**. Take a small grid of weights, the **kernel** (say 3×3), lay it over the top-left patch of the image, multiply each kernel weight by the pixel underneath, and add the nine products (plus a bias). That single number says how strongly the patch matches the kernel's pattern. Slide the kernel one step to the right and repeat, row by row, until it has visited every position. The grid of results is a new image, the **feature map**, which lights up wherever the pattern appears.
+
+The kernel's numbers decide what it detects. A kernel whose left column is +1 and right column is −1 computes "left brightness minus right brightness": zero on flat regions and on patches without left/right contrast, large wherever brightness drops from left to right, i.e. on a **vertical edge**. In a CNN nobody hand-designs these numbers; they are **learned by backpropagation**, and the network discovers its own edge, colour and texture detectors.
+
+Two consequences are worth stating plainly. The output is **smaller** than the input unless you pad: a 3×3 kernel fits only $W - 2$ positions across a $W$-wide image. And the operation is **local**: each output pixel depends only on the patch beneath it, and output position $(i, j)$ describes the neighbourhood of input position $(i, j)$, so the spatial layout survives.
+
+```mermaid
+flowchart LR
+    P["3×3 image patch"] --> M["⊙ multiply element-wise<br/>with the 3×3 kernel"]
+    M --> S["Σ sum the 9 products<br/>(+ bias)"]
+    S --> O["ONE output pixel"]
+    O -->|"slide by stride S, repeat"| P
+```
 
 **The sliding window.** Place a small window (the **kernel** or **filter**, e.g. 3×3) on the image. At each position:
 1. Take the 3×3 **patch** under the window.
@@ -203,7 +174,15 @@ The kernel is a **pattern detector**: a large output means "my pattern is here".
 
 **Convolution is local, not global**: each output pixel depends only on the $F \times F$ patch under it. Spatial structure survives because the output is still a grid in which **position $(i, j)$ describes the neighbourhood of input position $(i, j)$**.
 
-### Part D: Convolution is a linear operation
+:::tip[🎯 Interview angle]
+**"Explain convolution."** A small learnable kernel slides over the image; at each position it multiplies element-wise with the patch underneath and sums (plus a bias) into one output pixel; the grid of outputs is a feature map. A kernel like `[[1,0,-1]]*3` detects vertical edges. Bonus point: PyTorch actually computes cross-correlation (no kernel flip), which makes no difference for learning.
+:::
+
+## 4. Convolution Is a Linear Operation (with Shared Weights)
+
+Unroll the 3×3 patch into a list of 9 numbers and the kernel into another list of 9: multiplying them pairwise and summing is exactly a **dot product**, $w^\top x$. That is precisely what a neuron in a fully connected layer computes. A convolution is therefore a **linear** operation, and a conv layer is a fully connected layer with two constraints imposed on its weight matrix.
+
+The first constraint is **local connectivity**: each output connects only to the $F \times F$ patch beneath it, not to every pixel, so most of the would-be weight matrix is zero. The second is **weight sharing**: every output position uses the **same** kernel, so the non-zero weights repeat. Together these encode two assumptions about images: nearby pixels matter together, and a pattern means the same thing wherever it appears. The payoff is dramatic: one 3×3 filter on an RGB image has 28 parameters, regardless of the image size, against 307,300 for a modest fully connected layer. Fewer parameters also means less capacity to memorize, and because every position trains the same kernel, each weight effectively learns from every patch of every image.
 
 Flatten the 3×3 patch into $x \in \mathbb{R}^9$ and the kernel into $w \in \mathbb{R}^9$:
 
@@ -248,7 +227,17 @@ Only for a **single-channel** input. A filter always spans **all** input channel
 A fully connected layer hires a separate guard for every spot in the building, and each must learn on their own what a burglar looks like. A convolution trains **one** guard and walks them through every room. They learn faster (they see every room's examples) and there's only one salary to pay (far fewer parameters).
 :::
 
-### Part E: Stride and padding
+:::tip[🎯 Interview angle]
+**"How is a conv layer related to a fully connected layer?"** It is an FC layer with **local connectivity** (each output sees only a patch) and **weight sharing** (the same kernel everywhere): a sparse, repeated weight matrix. Both are dot products, so both are linear. Weight sharing is why parameters don't depend on image size.
+:::
+
+## 5. Stride, Padding and the Output-Size Formula
+
+Two settings control how the kernel moves and therefore how big the output is. **Stride** is how many pixels the kernel jumps between positions. Stride 1 visits every position; stride 2 skips every other one, roughly halving the output's height and width. A larger stride is a cheap way to **downsample**, and it does not change the number of parameters, only how many times they are applied.
+
+**Padding** adds a border of zeros around the input before convolving. Without it, every 3×3 convolution shaves two pixels off the height and width, and pixels on the border are seen by fewer windows than those in the middle (a corner pixel by just one). With padding 1 and a 3×3 kernel at stride 1, the output is exactly the input's size, which is called **"same" padding** and is the default choice in most architectures.
+
+Both settings, plus the kernel size, feed into the one formula interviewers ask about most: the output size. Count how much room the kernel has to move (input + padding on both sides − kernel), divide by the stride, round down, and add one for the starting position. The rounding matters: when the stride doesn't divide evenly, the last partial window is simply dropped.
 
 | | **Stride $S$** | **Padding $P$** |
 |---|---|---|
@@ -298,7 +287,15 @@ Applied separately to height and width. The **floor** matters: when the stride d
 
 <Animation src="cnn/stride-padding" caption="Same 5×5 input and 3×3 kernel. Stride 2 skips positions (3×3 → 2×2 output); padding 1 adds a ring of zeros so the output stays 5×5." />
 
-### Part F: Multiple filters and feature maps
+:::tip[🎯 Interview angle]
+**The output-size formula is the most-asked CNN question:** $\lfloor (W - F + 2P)/S \rfloor + 1$. Know the shortcuts: $F = 3, P = 1, S = 1$ keeps the size; $S = 2$ halves it. Stride and padding never change the parameter count.
+:::
+
+## 6. Multiple Filters and Feature Maps
+
+One filter detects one pattern. Real images contain edges at every angle, corners, textures and colour changes, so a conv layer uses **many** filters side by side, each with its own weights. Each filter produces its own feature map, and the maps are stacked into the output's channel dimension: $K$ filters give $K$ output channels. That is why the output depth of a conv layer is set by `out_channels`, not by the input.
+
+The part people get wrong is the depth of a single filter. A filter always spans **all** input channels: on an RGB image a "3×3" filter is really 3×3×3, with one 3×3 slice per colour channel. At each position it computes a dot product in each channel and **adds them together** (plus one bias) into a single number, so one filter still makes one feature map. This is also how channels get mixed: a filter can respond to "red on the left, green on the right", which no single-channel filter could. The parameter count follows directly: $C_{out}$ filters, each with $C_{in} \cdot F^2$ weights and one bias. Image height and width never appear.
 
 One filter detects **one** pattern. Images contain edges at many angles, corners, textures and colour transitions, so a layer uses **many** filters.
 
@@ -337,7 +334,15 @@ Tasting a dish, a judge uses taste, smell and look (three channels) at the same 
 
 <Animation src="cnn/multichannel-filter" caption="One filter has one 3×3 slice per input channel. At each position the R, G and B dot products plus one bias are summed into a single number, so one filter makes one feature map." />
 
-### Part G: Pooling
+:::tip[🎯 Interview angle]
+**"How many parameters in `Conv2d(3, 64, 3)`?"** $64 \times (3 \cdot 9 + 1) = 1{,}792$. A filter spans all input channels, so a 3×3 filter on RGB has 27 weights + 1 bias, not 9. Weight shape is `(out_channels, in_channels, kH, kW)`; parameters never depend on the image size.
+:::
+
+## 7. Pooling
+
+Each conv layer usually adds channels, and if height and width stay large every later layer becomes expensive. **Pooling** shrinks the feature maps while keeping the important signal. The standard version, **max pooling 2×2 with stride 2**, splits each feature map into non-overlapping 2×2 blocks and keeps only the largest value from each, which halves the height and width.
+
+Three properties matter. Pooling has **no learnable parameters**: it is a fixed rule. It works on each channel **independently**, so the number of channels never changes. And it gives a little **translation tolerance**: if a feature moves by a pixel but stays inside the same 2×2 window, the maximum is unchanged. The price is information: pooling discards the exact position of the feature within each window and the three non-maximum values. For classification ("is there a cat?") that is a good trade; for tasks that need precise locations, such as segmentation, it is a real loss.
 
 After convolutions the depth grows, and if H and W stay large, every later layer is expensive. **Pooling** shrinks H and W while keeping the important signal.
 
@@ -373,7 +378,22 @@ Split a classroom into groups of four and ask each group "did anyone spot a cat?
 
 <Animation src="cnn/max-pooling" caption="Each 2×2 block keeps only its maximum: 4×4 → 2×2, channels unchanged, no parameters. Moving the 8 one pixel inside its window leaves the output unchanged (translation tolerance)." />
 
-### Part H: The minimal CNN block
+:::tip[🎯 Interview angle]
+**"What does pooling do, and what does it cost?"** Halves H and W (2×2, stride 2), keeps channels, has zero parameters, and adds a little translation tolerance. It discards exact positions and non-max values, which hurts tasks that need precise localization. Modern nets often use stride-2 convs or global average pooling instead.
+:::
+
+## 8. The Minimal CNN Block
+
+Put the three operations together and you get the building block that every classic CNN repeats: **Conv → ReLU → Pool**. The convolution detects patterns (a linear step), ReLU adds the non-linearity (without it, stacked convolutions would collapse into one linear map, exactly as with fully connected layers), and pooling shrinks the spatial size.
+
+Watch the shapes as data passes through a few blocks: the number of channels goes **up** while height and width go **down**. That is deliberate. Deeper layers need to recognise more kinds of more complex patterns (more channels), but they need less positional precision (smaller maps). Halving height and width cuts the number of positions by four, which pays for doubling the channels, so the compute per layer stays roughly balanced. Meanwhile each neuron's **receptive field**, the patch of the original image it can see, grows with every block, which is how a CNN moves from edges, to textures, to parts, to whole objects.
+
+```mermaid
+flowchart TB
+    X["Input<br/>(1, 3, 32, 32)"] -->|"Conv2d(3→8, k=3, p=1)<br/>detect 8 patterns"| C["(1, 8, 32, 32)<br/>depth ↑, size kept"]
+    C -->|"ReLU<br/>keep positive responses"| R["(1, 8, 32, 32)<br/>shape unchanged"]
+    R -->|"MaxPool2d(2, 2)<br/>keep strongest in each 2×2"| P["(1, 8, 16, 16)<br/>space ↓ by half"]
+```
 
 | Component | Role | Shape effect | Params |
 |---|---|---|---|
@@ -385,7 +405,7 @@ Shape flow for the notebook's `SimpleCNNBlock`: `(1, 3, 32, 32)` → Conv(3→8,
 
 **Why depth goes up while space goes down:** later layers detect **more kinds** of more complex patterns (more channels), and they need less positional precision (smaller H, W). Halving H and W cuts the positions by 4×, which pays for doubling the channels. The cost per layer stays roughly balanced.
 
-### Conceptual closure: what makes a CNN special
+### What makes a CNN special
 
 | Property | Mechanism | Benefit |
 |---|---|---|
@@ -396,7 +416,11 @@ Shape flow for the notebook's `SimpleCNNBlock`: `(1, 3, 32, 32)` → Conv(3→8,
 
 A CNN is still **linear operations + non-linear activations + gradient-based learning**: a **structured ANN** whose weight matrices are constrained to suit images.
 
-## ⚙️ Under the Hood (The Math & PyTorch Internals)
+:::tip[🎯 Interview angle]
+**"Walk me through a CNN block and its shapes."** `(1, 3, 32, 32)` → Conv(3→8, k=3, p=1) → `(1, 8, 32, 32)` → ReLU → same → MaxPool(2) → `(1, 8, 16, 16)`. Depth goes up, space goes down, receptive field grows. Then name the four properties that make CNNs work: locality, weight sharing, parameter efficiency, hierarchical features.
+:::
+
+## ⚙️ Going Deeper (The Math & PyTorch Internals)
 
 **Convolution vs cross-correlation**
 - Mathematical convolution **flips** the kernel before sliding. `nn.Conv2d` / `F.conv2d` **don't flip**: they compute **cross-correlation**. On the same patch, the edge kernel gives −6 unflipped (PyTorch) and +6 flipped.
@@ -654,9 +678,64 @@ print(torch.allclose(w.grad[0, 0], manual))                       # True
 - **Removing pooling** keeps H and W large, so compute and memory grow and the receptive field grows slowly. Downsampling is usually still done with strided convs.
 - **Convolution alone is linear**: without ReLU between them, stacked convs collapse into a single (bigger) linear filter, exactly like stacked linear layers in an ANN.
 
-### Concept-Check Answers (from the notebook)
+## ⚡ Essential Interview Recall
 
-#### Section 1: Why FC networks fail
+A one-screen revision list. Every point is explained in the chapters above.
+
+**Why not a fully connected network?**
+- 32×32×3 image → **3,072** inputs. One FC layer to 100 neurons = **307,300** params. At 128×128×3 → **4.9 M** params for **one** layer.
+- FC params scale with **H × W**: double the height and width → **4×** the parameters.
+- Two problems: **parameter explosion** (memory, compute, overfitting) and **loss of spatial structure** (flattening forgets which pixels were neighbours).
+
+**Images as tensors**
+- Grayscale = 1 channel, RGB = 3 channels. Libraries such as PIL and OpenCV store images as **HWC**; **PyTorch expects NCHW**: `(batch, channels, height, width)`.
+- 20 RGB images of 64×64 → `(20, 3, 64, 64)`. One grayscale 28×28 image → `(1, 1, 28, 28)`.
+
+**Convolution**
+- At each position: **element-wise multiply patch × kernel, then sum** → one output number = a **dot product** $w^\top x$. Then slide.
+- Convolution is **linear** (it's a dot product) and **local** (it only sees a small patch).
+- Kernel = **pattern detector**. `[[1,0,-1],[1,0,-1],[1,0,-1]]` responds to **vertical edges**.
+- **Weight sharing**: the **same kernel at every position**. Built-in assumption: *a pattern is the same pattern wherever it appears*.
+- PyTorch's "convolution" is mathematically **cross-correlation** (the kernel is not flipped). It makes no difference for learning.
+
+**Stride, padding, output size**
+- $\text{Out} = \left\lfloor \frac{\hyper{W} - \hyper{F} + 2\hyper{P}}{\hyper{S}} \right\rfloor + 1$, applied to height and width separately.
+- **Stride** $S$ = step size. Larger stride → smaller output, cheaper, acts like **downsampling**. Stride does **not** change the parameter count.
+- **Padding** $P$ = zeros around the border. It keeps the size and protects border pixels. **$F=3, P=1, S=1$ → output size = input size** ("same" padding).
+
+**Filters & feature maps**
+- Each filter spans **all input channels**: shape $(C_{in}, F, F)$. **One filter → one feature map**. $K$ filters → output depth $K$.
+- PyTorch weight shape: **`(out_channels, in_channels, kH, kW)`**.
+- **Params = $\hyper{C_{out}}(\hyper{C_{in}}\hyper{F}^2 + 1)$**. It is independent of image size. `Conv2d(3, 5, 3)` = 5 × (27 + 1) = **140**.
+
+**Pooling**
+- **Max pool 2×2, stride 2** → H and W halve, **channels unchanged**, **zero parameters**.
+- Keeps the strongest activation, which gives **small translation tolerance**. It discards exact position and the non-max values.
+
+**The block & the big picture**
+- **Conv → ReLU → Pool**: extract features → add non-linearity → shrink space. Depth goes **up** (3 → 8), space goes **down** (32 → 16).
+- What makes a CNN special: **locality**, **weight sharing**, **parameter efficiency**, **hierarchical features**. It's still linear + non-linear layers trained by gradient descent: a **structured ANN**.
+- A conv layer is **translation-equivariant** (shift the input → the feature map shifts the same way). **Pooling** adds a little **invariance**.
+
+## 📐 Formula Sheet
+
+Every equation on this page in one place. Each one is explained in the chapters above. Sizes and counts you choose ($\hyper{F}, \hyper{S}, \hyper{P}, \hyper{C}$) are violet.
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| FC layer parameters | $d_{in}\cdot d_{out} + d_{out}, \quad d_{in} = H\cdot W\cdot C$ | Every pixel connects to every neuron |
+| One conv output pixel | $\pred{Y}_{i,j} = \sum_{c,u,v} \param{K}_{c,u,v}\,\data{X}_{c,\,i\hyper{S}+u,\,j\hyper{S}+v} + \param{b}$ | Dot product of the kernel with one patch |
+| Convolution is linear | $\text{conv}(a\data{x_1} + b\data{x_2}) = a\,\text{conv}(\data{x_1}) + b\,\text{conv}(\data{x_2})$ | It's a dot product, so it's linear |
+| Output size | $\left\lfloor \frac{\hyper{W} - \hyper{F} + 2\hyper{P}}{\hyper{S}} \right\rfloor + 1$ | Positions that fit, per dimension |
+| "Same" padding | $\hyper{P} = (\hyper{F} - 1)/2$ with $\hyper{S} = 1$ | Keeps output size = input size |
+| Conv parameters | $\hyper{C_{out}}\,(\hyper{C_{in}}\hyper{F}^2 + 1)$ | Kernel weights + one bias, per filter |
+| Max pooling | $\pred{Y}_{i,j} = \max_{u,v \in \lbrace 0,1 \rbrace} \data{X}_{2i+u,\,2j+v}$ | Keep the biggest value in each 2×2 block |
+| Receptive field | $r_\ell = r_{\ell-1} + (\hyper{F_\ell} - 1)\prod_{i<\ell}\hyper{S_i}$ | How much of the image one neuron sees |
+| Compute (MACs) | $H_{out} W_{out}\,\hyper{C_{out}}\,\hyper{C_{in}}\hyper{F}^2$ | Few params, but they run at every position |
+
+## Concept-Check Answers (from the notebook)
+
+### Section 1: Why FC networks fail
 
 <details>
 <summary><strong>If image height and width double, how does an FC layer's parameter count change?</strong></summary>
@@ -682,7 +761,7 @@ More parameters means more capacity to memorize noise in a finite dataset, and m
 **Spatial structure / locality**: neighbouring pixels are strongly related and patterns repeat across positions.
 </details>
 
-#### Section 2: Images as tensors
+### Section 2: Images as tensors
 
 <details>
 <summary><strong>Shape of a grayscale image in PyTorch? 20 RGB images of 64×64?</strong></summary>
@@ -702,7 +781,7 @@ Channels describe **what** is at a location (colour or feature type), so a filte
 It lets the GPU process many images in parallel and gives averaged, less noisy gradients. Without it, layers expecting `(N, C, H, W)` misinterpret the dimensions or error, and you'd have to train one image at a time (slow, noisy). Use `unsqueeze(0)` for single images.
 </details>
 
-#### Section 3: Convolution intuition
+### Section 3: Convolution intuition
 
 <details>
 <summary><strong>Why does convolution preserve spatial structure? Is it local or global?</strong></summary>
@@ -722,7 +801,7 @@ It's a learnable **pattern detector**: its dot product with a patch is large whe
 The kernel can't extend past the border, so only $W - F + 1$ positions fit. A larger kernel → fewer positions → a **smaller output**.
 </details>
 
-#### Section 4: Convolution as a linear operation
+### Section 4: Convolution as a linear operation
 
 <details>
 <summary><strong>Why is convolution linear?</strong></summary>
@@ -742,7 +821,7 @@ That a useful pattern is useful **anywhere** in the image (stationarity / transl
 Both are $Wx + b$. In conv, $W$ is **sparse** (local) and **tied** (repeated kernel); in FC it's dense and free. Without sharing, every output position needs its own kernel, and the params multiply by the number of positions (e.g. 30×30 = 900×), back to FC scale.
 </details>
 
-#### Section 5: Stride & padding
+### Section 5: Stride & padding
 
 <details>
 <summary><strong>Stride ↑ → output? Why pad? Does stride change the parameter count?</strong></summary>
@@ -762,7 +841,7 @@ $(10 - 3 + 0)/1 + 1 = $ **8**.
 The output becomes **bigger** than the input and its borders are computed mostly from **zeros**: wasted computation, possible edge artifacts, and no extra information.
 </details>
 
-#### Section 6: Multiple filters
+### Section 6: Multiple filters
 
 <details>
 <summary><strong>What sets the output depth? Does a filter see one channel or all?</strong></summary>
@@ -782,7 +861,7 @@ Depth **16**. Doubling the filters **doubles** the parameter count (and the comp
 One filter detects one pattern. Images need many: edges at several orientations, corners, textures, colour transitions. Each filter adds one feature map that the next layer can combine.
 </details>
 
-#### Section 7: Pooling
+### Section 7: Pooling
 
 <details>
 <summary><strong>Does pooling change the channels? Does it add parameters?</strong></summary>
@@ -802,7 +881,7 @@ If a strong activation shifts slightly but stays inside the same window, the win
 **(8, 16, 32, 32)**. Pooling discards the exact location within each window and the non-maximum values (3 out of 4 numbers).
 </details>
 
-#### Section 8: The minimal CNN block
+### Section 8: The minimal CNN block
 
 <details>
 <summary><strong>Why ReLU after convolution? Is convolution alone enough?</strong></summary>
