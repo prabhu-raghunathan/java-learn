@@ -3,6 +3,8 @@ title: "CNN Fundamentals: Convolution, Stride, Padding, Filters & Pooling"
 sidebar_position: 1
 ---
 
+import {ConvShapeCalculator} from '@site/src/components/Widgets';
+
 :::tip[TL;DR (30-Second Interview Pitch)]
 A **Convolutional Neural Network (CNN)** processes an image **without flattening it**. A small learnable **kernel** (e.g. 3×3) slides over the image and computes a **dot product** at every position, producing a **feature map** that lights up wherever its pattern (an edge, a texture) appears. Because the **same kernel is reused everywhere** (**weight sharing**) and each output only looks at a **small neighbourhood** (**local connectivity**), a conv layer needs a few hundred parameters where a fully connected layer needs hundreds of thousands, and it **keeps the spatial structure** that flattening destroys. Stack **Conv → ReLU → Pool** blocks and the network learns edges → textures → parts → objects.
 :::
@@ -287,6 +289,11 @@ Applied separately to height and width. The **floor** matters: when the stride d
 
 <Animation src="cnn/stride-padding" caption="Same 5×5 input and 3×3 kernel. Stride 2 skips positions (3×3 → 2×2 output); padding 1 adds a ring of zeros so the output stays 5×5." />
 
+
+**Try it yourself.** Set the input size, kernel, stride and padding and read off the output size and the layer's parameter count.
+
+<ConvShapeCalculator />
+
 :::tip[🎯 Interview angle]
 **The output-size formula is the most-asked CNN question:** $\lfloor (W - F + 2P)/S \rfloor + 1$. Know the shortcuts: $F = 3, P = 1, S = 1$ keeps the size; $S = 2$ halves it. Stride and padding never change the parameter count.
 :::
@@ -394,6 +401,10 @@ flowchart TB
     C -->|"ReLU<br/>keep positive responses"| R["(1, 8, 32, 32)<br/>shape unchanged"]
     R -->|"MaxPool2d(2, 2)<br/>keep strongest in each 2×2"| P["(1, 8, 16, 16)<br/>space ↓ by half"]
 ```
+
+![The Conv, ReLU, Pool block with tensor shapes](/img/deep-learning/diagrams/cnn-block.svg)
+
+*How to read it:* each stack of sheets is a tensor (one sheet per channel). The conv turns 3 channels into 8 at the same 32 × 32 size; ReLU keeps the shape; max-pooling halves height and width to 16 × 16.
 
 | Component | Role | Shape effect | Params |
 |---|---|---|---|

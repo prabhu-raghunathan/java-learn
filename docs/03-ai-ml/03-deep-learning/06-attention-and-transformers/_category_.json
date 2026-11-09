@@ -1,0 +1,8 @@
+{
+  "label": "Attention and Transformers",
+  "position": 7,
+  "link": {
+    "type": "generated-index",
+    "description": "Why recurrence became the bottleneck, the fixed-context problem in seq2seq, soft alignment and weighted context vectors, Query-Key-Value, the self-attention matrix, and the big picture of the Transformer from Attention Is All You Need."
+  }
+}

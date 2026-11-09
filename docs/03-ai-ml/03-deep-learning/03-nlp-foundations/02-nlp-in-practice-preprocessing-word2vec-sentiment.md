@@ -3,6 +3,8 @@ title: "NLP in Practice: Text Preprocessing, Word2Vec, TF-IDF & Sentiment Classi
 sidebar_position: 2
 ---
 
+import {TfidfPlayground} from '@site/src/components/Widgets';
+
 :::tip[TL;DR (30-Second Interview Pitch)]
 A classical NLP pipeline is: **clean** (lowercase, strip punctuation/numbers/extra spaces) → **tokenize** → remove **stop words** → **POS-aware lemmatization**, wrapped in **one function** used identically at training and prediction time. **Word2Vec** (gensim) turns words into vectors, but it needs a large corpus and gives *word* vectors, not document features. For classifying whole reviews, **TF-IDF** (term frequency × inverse document frequency) gives every document a sparse vector that up-weights words that are frequent in it but rare elsewhere. **Multinomial Naive Bayes** and a **linear SVM** on TF-IDF are the classic text-classification baselines. Evaluate honestly: **split before fitting the vectorizer** (or use a `Pipeline`), keep **negations** like *not* for sentiment, and with tiny data use **cross-validation**, not a single 16-review test set.
 :::
@@ -281,9 +283,18 @@ $$
 Highlighting every word in a review is useless, and so is highlighting "product", which every review contains. TF-IDF highlights what is said *a lot here* but *rarely elsewhere*, like *crushed* or *refund*: the words that make this review different from the rest.
 :::
 
+
+**Try it yourself.** Type your own short documents, one per line, to see the TF-IDF weights and cosine similarities scikit-learn would compute.
+
+<TfidfPlayground />
+
 :::tip[🎯 Interview angle]
 **"Explain TF-IDF."** Term frequency in the document × inverse document frequency across the corpus, so words frequent in this document but rare overall score highest; common words are down-weighted; rows are L2-normalized. **"Why does it pair well with NB and SVM?"** It produces sparse, high-dimensional, mostly independent features in which a few words carry the signal, which is exactly where linear models and Naive Bayes shine. **"Weakness?"** No word order or semantics; fix negation with bigrams (`ngram_range=(1, 2)`).
 :::
+
+![Sentiment pipeline: preprocess, TF-IDF, classifier](/img/deep-learning/diagrams/sentiment-pipeline.svg)
+
+*How to read it:* a review becomes tokens, then a sparse TF-IDF vector (one dimension per vocabulary word, L2-normalized), and a Naive Bayes or linear SVM classifier maps that vector to positive or negative.
 
 ## 8. Preparing the Sentiment Dataset
 

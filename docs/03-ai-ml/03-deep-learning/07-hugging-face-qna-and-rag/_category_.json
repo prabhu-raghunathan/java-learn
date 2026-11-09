@@ -1,0 +1,8 @@
+{
+  "label": "Hugging Face, Document QnA and RAG",
+  "position": 8,
+  "link": {
+    "type": "generated-index",
+    "description": "Using pre-trained Transformers with Hugging Face: what a pipeline hides, extractive question answering over PDFs, retriever-reader search with embeddings and FAISS, and generative RAG with FLAN-T5."
+  }
+}

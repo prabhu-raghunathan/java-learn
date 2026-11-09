@@ -3,6 +3,8 @@ title: "CNN in Practice: Cats vs Dogs, End to End"
 sidebar_position: 3
 ---
 
+import {CnnShapeTracer} from '@site/src/components/Widgets';
+
 :::tip[TL;DR (30-Second Interview Pitch)]
 A real image classifier is **80% data pipeline**: turn a folder of JPEGs into a labelled table, make a **balanced, stratified train / validation / test split**, preprocess every image the same way (**resize → BGR→RGB → scale → HWC→CHW**), and feed **shuffled mini-batches** through a `DataLoader` to a model on the **same device**. A 3-block CNN trained from scratch on 8,400 cat/dog images reaches only **~81% validation accuracy** while its training accuracy climbs past 90%. That gap is **overfitting**. You judge the model on a **held-out test set**, using a **confusion matrix, precision, recall and F1**, never on training accuracy.
 :::
@@ -325,6 +327,10 @@ After the third block, each image is a `(128, 16, 16)` stack of feature maps. `x
 
 Now count the parameters, because it explains this model's behaviour. The three conv layers together have only **93,248** parameters. `fc1` alone has $128 \times (32{,}768 + 1)$ = **4,194,432**, which is **97.8%** of the whole model. That giant, data-hungry layer is where the memorization happens, and it is why this model overfits 8,400 images. (A global-average-pooling head, `AdaptiveAvgPool2d(1)` + `Linear(128, 2)`, would shrink the whole model to **93,506** parameters.)
 
+![SimpleCNN for cats vs dogs](/img/deep-learning/diagrams/simplecnn-architecture.svg)
+
+*How to read it:* three identical conv blocks halve the image (128 → 64 → 32 → 16) while doubling the channels (32 → 64 → 128). Flatten produces the 32,768-long vector, and `fc1` connects all of it to 128 units, which is where 97.8% of the parameters sit.
+
 :::warning[The notebook's dimension-flow notes don't match its code]
 The markdown cell describes channels 16 → 32 → 64 (flatten 16,384), but the `SimpleCNN` that was actually trained uses **32 → 64 → 128** (flatten **32,768**, 4.29 M params), as `print(model)` confirms. The 16/32/64 version is notebook 7's `SmallCNN` (flatten 16,384, **2,121,122** params). The table below is the real trained model.
 :::
@@ -359,6 +365,11 @@ $$
 :::danger[Interview Trap: the flatten size is tied to the input size]
 `fc1 = nn.Linear(128 * 16 * 16, 128)` silently assumes **128×128** inputs. Feed 224×224 images (as you might for ResNet) and the flatten becomes 128 × 28 × 28 = 100,352, and you get `mat1 and mat2 shapes cannot be multiplied (2x100352 and 32768x128)`. Fixes: compute the size with a dummy forward pass, use `nn.LazyLinear(128)`, or use global average pooling so the head no longer cares about H and W.
 :::
+
+
+**Try it yourself.** The same table, live: try a 224 × 224 input and see how much bigger `fc1` becomes.
+
+<CnnShapeTracer preset="SimpleCNN" />
 
 :::tip[🎯 Interview angle]
 **"Where are this model's parameters, and what does that tell you?"** Conv layers: 93 K; `fc1`: 4.19 M (97.8%). The flatten-FC head dominates, which is where overfitting comes from, and it hard-codes the input size. Global average pooling would cut the model to ~93.5 K parameters and accept any resolution.

@@ -3,6 +3,8 @@ title: "The Calculus Behind PyTorch: Derivatives, Chain Rule & Autograd by Hand"
 sidebar_position: 2
 ---
 
+import {ActivationExplorer, ChainRuleExplorer, GradientDescentPlayground} from '@site/src/components/Widgets';
+
 :::tip[TL;DR (30-Second Interview Pitch)]
 Everything PyTorch does in training is **high-school calculus applied mechanically**. The forward pass computes numbers; `loss.backward()` computes **derivatives**: how much the loss would change if each input or weight were nudged. It breaks the big function into tiny steps (add, multiply, square…), knows the **local derivative** of each step, and multiplies them backwards with the **chain rule**. When a value feeds into two places, the gradients from both paths are **added**. The optimizer then moves every weight a small step **against** its gradient: $\param{w} \leftarrow \param{w} - \hyper{\eta}\,\loss{\partial L/\partial w}$. If you can differentiate $f = (a+b)\,ab + ab$ by hand, you understand autograd.
 :::
@@ -214,6 +216,10 @@ flowchart TB
     D --> F
 ```
 
+![Computation graph for f with forward values and backward gradients](/img/deep-learning/diagrams/comp-graph.svg)
+
+*How to read it:* black arrows and numbers are the forward pass ($c = 5$, $d = 6$, $e = 30$, $f = 36$). Red labels are the backward pass: each edge multiplies by its local derivative, and $d$, which feeds both $e$ and $f$, sums its two gradients ($c + 1 = 6$). That is how $\partial f / \partial a = 24$ and $\partial f / \partial b = 18$ arise.
+
 **Stage 1: the forward pass.** Just compute the values from the inputs to the output and remember them, because the backward pass will need them.
 
 | Node | Formula | Value |
@@ -274,6 +280,11 @@ Why not always expand? For four nodes it's easy. For a network with millions of 
 :::analogy[Backprop is splitting a restaurant bill backwards]
 The total bill (the loss) arrives at the end. Each person traces back what they ordered, and each dish traces back its ingredients. If one ingredient (like $d$) went into two dishes, it gets charged for **both**. At the end, every original ingredient knows exactly how much of the bill it caused. That's each input's gradient.
 :::
+
+
+**Try it yourself.** Move $a$ and $b$ and every value and gradient in the graph above updates. Notice that $\partial f / \partial d$ always has two parts, because $d$ is used twice.
+
+<ChainRuleExplorer />
 
 :::tip[🎯 Interview angle]
 Be ready to do this exact kind of graph on a whiteboard: forward pass for the values, then backward with *upstream × local* at every node, **adding** where a value is used twice. The add, multiply and square rules cover almost every toy question.
@@ -364,6 +375,11 @@ $$
 You can't see the valley floor, only the slope under your feet. So you take a step downhill, feel the slope again, and take another. Steps scaled by the steepness are a natural safety rule: stride when it's steep, shuffle when it's nearly flat. But if your stride (the learning rate) is too long, you leap clean over the valley and land higher up the other side.
 :::
 
+
+**Try it yourself.** The same example, live: start at $w = 0$ and try $\eta = 0.1$, $1.0$ and $1.1$.
+
+<GradientDescentPlayground />
+
 :::tip[🎯 Interview angle]
 **"What happens if the learning rate is too large?"** Steps overshoot the minimum: on $(w-3)^2$, $\eta = 1.0$ bounces between 0 and 6 forever and $\eta = 1.1$ diverges. Too small converges correctly but slowly. The steps shrink near the minimum by themselves because the slope shrinks.
 :::
@@ -435,6 +451,10 @@ Take a single **sigmoid** neuron, $\sigma(z) = \frac{1}{1 + e^{-z}}$, with squar
 
 PyTorch reproduces every one of these numbers.
 
+![A sigmoid neuron with forward values and backward gradients](/img/deep-learning/diagrams/sigmoid-neuron-backprop.svg)
+
+*How to read it:* the top row is the forward pass ($z = 0.5$, $a = 0.6225$, $L = 0.1425$). The red row walks back one link at a time: $-0.7551$ from the loss, times the sigmoid slope $0.2350$, gives $\partial L / \partial z = -0.1774$, which is also $\partial L / \partial w$ and $\partial L / \partial b$ because $x = 1$.
+
 The sigmoid's derivative has a convenient form, $\sigma(1 - \sigma)$, and an important weakness: it is **at most 0.25** (at $z = 0$) and almost 0 for large $|z|$ (0.0177 at $z = \pm 4$). In a deep network, the chain rule multiplies one such factor per layer. Five sigmoid layers can shrink the gradient by $0.25^5 \approx 0.001$; ten layers by about $10^{-6}$. The early layers then barely learn: the **vanishing gradient problem**. **ReLU**, $\max(0, z)$, has derivative exactly **1** for positive inputs, so it passes gradients through undiminished, which is a big reason it replaced sigmoid in hidden layers. Its weakness is the other side: for negative inputs the derivative is 0, and a neuron stuck there receives no gradient at all ("dead ReLU").
 
 <Formula name="Activation derivatives" tag="Local slopes of non-linearities" words="Sigmoid's slope is sigma times one minus sigma, never more than 0.25. ReLU's slope is 1 for positive inputs and 0 otherwise. Tanh's slope is one minus tanh squared, at most 1." remember="Sigmoid shrinks, ReLU passes or blocks.">
@@ -464,6 +484,11 @@ $$
 :::analogy[Vanishing gradients are a whisper game]
 A message passes along a line of people, and each one repeats it at a quarter of the volume (sigmoid's best case). After five people it's a thousandth of the original: the people at the front of the line (the early layers) can't hear what to change. ReLU is a person who repeats the message at full volume, or not at all.
 :::
+
+
+**Try it yourself.** Slide $z$ and watch the sigmoid's slope (dashed): it peaks at 0.25 at $z = 0$ and is almost 0 at $z = \pm 4$.
+
+<ActivationExplorer initial="sigmoid" />
 
 :::tip[🎯 Interview angle]
 **"Why do sigmoids cause vanishing gradients, and why does ReLU help?"** $\sigma' = \sigma(1-\sigma) \le 0.25$, so each sigmoid layer multiplies the gradient by at most a quarter; five layers give at most 0.001. ReLU's derivative is exactly 1 for positive inputs, so the gradient passes through undiminished (but is 0 for negative inputs, the "dying ReLU" risk).

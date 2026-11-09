@@ -3,6 +3,8 @@ title: "NLP Foundations: From Words to Vectors"
 sidebar_position: 1
 ---
 
+import {ContextWindowExplorer} from '@site/src/components/Widgets';
+
 :::tip[TL;DR (30-Second Interview Pitch)]
 Neural networks only do arithmetic, so NLP starts by turning text into numbers. First **preprocess** (tokenize, lowercase, drop stop words, reduce words to a root by stemming or lemmatization), then build a **vocabulary** that gives every word an index. Raw indices invent a fake order, and **one-hot vectors** fix that but are huge and make every pair of words equally unrelated (cosine similarity 0). **Word embeddings** solve both problems: short, dense, *learned* vectors in which words used in similar contexts sit close together. **Word2Vec** learns them by predicting neighbouring words (**skip-gram**: word → context; **CBOW**: context → word). The **co-occurrence matrix** (and **GloVe**, built on it) learns from global counts instead. All of this rests on one idea: *a word is known by the company it keeps*.
 :::
@@ -95,6 +97,10 @@ Put together on the notebook's sentence, "I am learning machine learning and lov
 | Remove stop words | `['learning', 'machine', 'learning', 'loving']` |
 | Porter stemming | `['learn', 'machin', 'learn', 'love']` |
 | POS-aware lemmatization | `['learn', 'machine', 'learn', 'love']` |
+
+![The text preprocessing pipeline](/img/deep-learning/diagrams/nlp-preprocessing-pipeline.svg)
+
+*How to read it:* the sentence flows left to right through the three processing boxes, and the grey text under each box is the notebook's output after that step.
 
 The payoff: a smaller vocabulary, more examples per word, less noise, less computation. But **every step throws information away**, and the right amount of preprocessing depends on the model. Classical models (TF-IDF + Naive Bayes, Word2Vec on a small corpus) benefit from aggressive normalization. Modern Transformers are trained on raw, cased text with their own subword tokenizer, and you usually feed them text almost untouched.
 
@@ -288,6 +294,10 @@ The softmax over the entire vocabulary is too slow for 100,000+ words, so real W
 
 One more classic surprise: **antonyms come out similar**. On Brown, the nearest neighbour of *good* is *bad* (similarity 0.60). "A good movie" and "a bad movie" share contexts, so Word2Vec can't separate them. That matters for sentiment, where good vs bad is the whole point.
 
+![Word2Vec skip-gram and CBOW](/img/deep-learning/diagrams/word2vec.svg)
+
+*How to read it:* left, skip-gram: the centre word's input vector $v_c$ is scored against every output vector with $\operatorname{softmax}(u_o \cdot v_c)$ to predict each neighbour. Right, CBOW: the neighbours' vectors are averaged and the average predicts the centre word. In both, the input vectors $v$ become the embeddings.
+
 <Animation src="nlp/context-window" caption="A window of size 1 slides over i love deep learning. At each centre word it emits one training pair per neighbour, six pairs in total, which skip-gram uses to predict the context from the centre word." />
 
 <Formula name="Number of training pairs" tag="Context window" words="Each word is paired with every neighbour up to w positions away on each side, so a sentence of n words gives roughly 2w pairs per word, fewer at the edges." remember="Two-w neighbours per word, minus the edges.">
@@ -326,6 +336,11 @@ $$
 :::analogy[Word2Vec is learning a language by guessing the blanked-out word]
 Imagine reading millions of sentences with a word blanked out and guessing what fits: "I drink ___ every morning." You'd soon learn that coffee, tea and juice are interchangeable here, without anyone defining them. CBOW plays exactly this game; skip-gram plays the reverse ("given *coffee*, what words are nearby?"). The embeddings are what your brain stores to get good at the game.
 :::
+
+
+**Try it yourself.** Type a sentence, change the window and click a word to see its context and the training pairs it produces.
+
+<ContextWindowExplorer />
 
 :::tip[🎯 Interview angle]
 **"How does Word2Vec work?"** Self-supervised: slide a context window, make (centre, context) pairs, train a shallow network to predict context from centre (skip-gram) or centre from context (CBOW) with dot-product scores and softmax (in practice negative sampling). Words with shared contexts get pushed towards the same context vectors, so they end up similar. **"Skip-gram or CBOW for a small dataset?"** Skip-gram (better for rare words); CBOW is faster and good for big corpora. **"Limitations?"** Static vectors, needs lots of text, out-of-vocabulary words, antonyms look similar.

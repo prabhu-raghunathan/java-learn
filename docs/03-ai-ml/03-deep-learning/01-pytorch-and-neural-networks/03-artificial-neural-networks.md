@@ -3,6 +3,8 @@ title: "Artificial Neural Networks: Architecture, Activations, Backprop & Genera
 sidebar_position: 3
 ---
 
+import {ActivationExplorer, GradientDescentPlayground} from '@site/src/components/Widgets';
+
 :::tip[TL;DR (30-Second Interview Pitch)]
 An **Artificial Neural Network (ANN)** is a stack of layers. Each layer does a **matrix multiplication** ($Z = XW^\top + b$) followed by a **non-linear activation** ($A = \phi(Z)$). Without the activation, any number of layers **collapses into one linear layer**. With it, the network can approximate curved functions like $y = x^2$. Training means **minimizing a loss** $L(W, b)$: **backpropagation** (the chain rule applied layer by layer) computes $\partial L/\partial W$, **gradient descent** moves the weights downhill, and the real goal is low loss on **unseen** data, not just training data.
 :::
@@ -54,6 +56,10 @@ flowchart LR
     P --> A(["output a = φ(z)"])
 ```
 
+![A single neuron: weights, sum, bias, activation](/img/deep-learning/diagrams/neuron.svg)
+
+*How to read it:* each input $\data{x_j}$ travels along a line scaled by its weight $\param{w_j}$; the pink $\Sigma$ adds them and the bias, giving $\pred{z} = \param{w}^\top\data{x} + \param{b}$; the yellow box applies the activation, $\pred{a} = \phi(\pred{z})$.
+
 | Symbol | Shape | Meaning |
 |---|---|---|
 | $x$ | $(d)$ | One input sample with $d$ features |
@@ -104,6 +110,10 @@ flowchart TB
     A1 -->|"× W₂ᵀ + b₂"| Y["ŷ = Z⁽²⁾ · prediction<br/>(N, o)"]
     Y -->|"compare with y (MSE)"| L(["Loss L · one scalar"])
 ```
+
+![Two-layer network, forward pass with shapes](/img/deep-learning/diagrams/mlp-forward.svg)
+
+*How to read it:* left to right is the forward pass: $\data{X}\,(N, d)$ → first linear layer → $\pred{Z^{(1)}}$ → ReLU → $\pred{A^{(1)}}\,(N, h)$ → second linear layer → $\pred{\hat y}\,(N, o)$, compared with $\data{y}$ by MSE to give $\loss{L}$.
 
 | Quantity | Formula | Shape |
 |---|---|---|
@@ -217,6 +227,11 @@ $$
 
 </Formula>
 
+
+**Try it yourself.** Switch between ReLU, sigmoid and tanh and compare the slopes backprop will multiply by.
+
+<ActivationExplorer initial="relu" />
+
 :::tip[🎯 Interview angle]
 **"Compare sigmoid, tanh and ReLU."** Answer through the slope: sigmoid's maximum is 0.25 and it saturates, so deep sigmoid stacks suffer vanishing gradients; tanh is zero-centred with max slope 1 but still saturates; ReLU has slope 1 on the positive side and is cheap, at the risk of dying neurons (fix: Leaky ReLU, smaller LR, He init). Hidden layers → ReLU; output → identity / sigmoid / softmax depending on the task.
 :::
@@ -291,6 +306,10 @@ flowchart TB
     DA --> D1["④ δ₁ = ∂L/∂A⁽¹⁾ ⊙ φ′(Z⁽¹⁾)<br/>(N, h) · the activation gates the gradient"]
     D1 --> G1["⑤ ∂L/∂W₁ = δ₁ᵀ · X   (h, d)<br/>∂L/∂b₁ = Σ δ₁ over batch"]
 ```
+
+![Backpropagation through a two-layer network](/img/deep-learning/diagrams/mlp-backprop.svg)
+
+*How to read it:* the black row is the forward pass; the red dashed row is backprop, right to left. It starts from $\loss{\delta_2}$, takes each weight gradient as error × what flowed in ($\loss{\delta_2}^\top\pred{A^{(1)}}$, $\loss{\delta_1}^\top\data{X}$), and moves one layer back by multiplying by the weights and the ReLU slope.
 
 <Animation src="ann/forward-backward" caption="Forward pass computes ŷ and the loss; the backward pass sends δ from the loss towards the inputs. Unit 3 has z < 0, so ReLU′ = 0 blocks its gradient and its incoming weights do not change." />
 
@@ -371,6 +390,11 @@ The "right" learning rate is problem-specific (it depends on the data scale and 
 | **Divergence** | Loss explodes, `nan` | LR too large, unscaled inputs | Lower LR, normalize features, gradient clipping |
 | **Oscillation** | Loss bounces up and down | LR slightly too large, ill-conditioned surface | Lower LR, momentum/Adam |
 | **Plateau** | Loss stops decreasing early | Vanishing gradients, dead ReLUs, poor init, LR too small | ReLU/Leaky ReLU, better init, raise LR |
+
+
+**Try it yourself.** Try the three regimes from this chapter: $\eta = 0.05$ (factor 0.9), $0.4$ (factor 0.2) and $1.05$ (factor $-1.1$).
+
+<GradientDescentPlayground />
 
 :::tip[🎯 Interview angle]
 **"Your loss is exploding / flat / bouncing. What do you check?"** Exploding → lower the learning rate, normalize inputs, clip gradients. Bouncing → LR slightly too high, try momentum or Adam. Flat early → vanishing gradients or dead ReLUs (check the gradient norm and the fraction of active units), or an LR that is too small. Always mention monitoring the **gradient norm**.

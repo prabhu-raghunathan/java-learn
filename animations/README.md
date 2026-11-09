@@ -6,7 +6,7 @@ and embedded with the `<Animation>` component.
 | File | What it holds |
 |---|---|
 | `style.py` | Shared colours, fonts and helpers. Every scene subclasses `WikiScene` |
-| `pytorch_scenes.py`, `calculus_scenes.py`, `ann_scenes.py`, `cnn_scenes.py`, `transfer_scenes.py`, `nlp_scenes.py`, `rnn_scenes.py` | One file per topic, several `Scene` classes each |
+| `pytorch_scenes.py`, `calculus_scenes.py`, `ann_scenes.py`, `cnn_scenes.py`, `transfer_scenes.py`, `nlp_scenes.py`, `rnn_scenes.py`, `lstm_scenes.py` | One file per topic, several `Scene` classes each |
 | `render.py` | Renders scenes → `static/animations/<topic>/<name>.{mp4,webm,jpg}` |
 
 ## Render
@@ -46,3 +46,7 @@ No import needed: the component is registered in `src/theme/MDXComponents.js`.
 ## RNN scenes
 
 `rnn_scenes.py` holds the 6 animations for `docs/03-ai-ml/03-deep-learning/04-rnns/` (keys `rnn/...`). They use text labels with a small `sym()` subscript helper instead of `MathTex`, so they render without LaTeX/dvisvgm. Numbers come from the pages' verified runs: the notebook-12 toy weights (hidden-state flow), the padded batch ids, the measured BPTT gradient norms (`BPTT_NORMS`, W_hh = 0.5 × orthogonal, T = 20) and the 0.5/1.5/0.95 repeated-multiplication sequences.
+
+## LSTM scenes
+
+`lstm_scenes.py` holds the 5 animations for `docs/03-ai-ml/03-deep-learning/05-lstm-and-gru/` (keys `lstm/...`). It reuses `sym()`, `chip()`, `cell_box()` and `PARAM` from `rnn_scenes.py` and, like it, uses text labels only (no LaTeX). Numbers come from the pages' verified runs: the notebook-13 cell-update and GRU demo vectors, the measured input-gradient norms for untrained `nn.RNN` / `nn.LSTM` / `nn.LSTM` with forget bias +3 (`G_RNN`, `G_LSTM`, `G_LSTM_FB3`; T = 50, D = 8, H = 32, seeds 0 and 1), the trained character LSTM's greedy top-1 probabilities (`GEN_STEPS`), and the softmax of the notebook's logits [2.5, 1.2, 0.5, -0.3] at four temperatures.

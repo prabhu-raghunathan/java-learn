@@ -3,6 +3,8 @@ title: "CNN Architecture, Training, Dropout & AlexNet"
 sidebar_position: 2
 ---
 
+import {CnnShapeTracer, SoftmaxPlayground} from '@site/src/components/Widgets';
+
 :::tip[TL;DR (30-Second Interview Pitch)]
 A CNN classifier stacks **Conv → ReLU → Pool** blocks to turn an image into a small, deep stack of feature maps, then **flattens** them and lets **fully connected layers** output one **logit per class**. It trains exactly like an ANN: **cross-entropy on raw logits** → backprop → optimizer step. The only difference is that each shared kernel **sums its gradient over every position**. It still overfits, so **dropout** randomly zeroes activations during training (and is switched off at test time). **AlexNet (2012)** proved the recipe at scale: deep CNN + **ReLU** + **GPUs** + **data augmentation** + **dropout** cut ImageNet top-5 error from ~26% to ~15% and started the deep-learning era.
 :::
@@ -51,6 +53,10 @@ flowchart TB
     E -->|"FC 2048→64 + ReLU (+ Dropout)"| F["(N, 64)"]
     F -->|"FC 64→10"| G(["Logits (N, 10)<br/>one score per class"])
 ```
+
+![SmallCNN: feature extractor and classifier head](/img/deep-learning/diagrams/smallcnn-architecture.svg)
+
+*How to read it:* the left half (green banner) is the feature extractor: conv and pool blocks that make the stack deeper and smaller. The right half is the head: flatten to a 2,048-long vector, then two fully connected layers down to 10 logits. The tall 2,048 bar feeding `fc1` is why that one layer holds 96% of the parameters.
 
 | Component | Role | What it changes |
 |---|---|---|
@@ -108,6 +114,11 @@ $$
 </Formula>
 
 A **stride-2 first conv** (K=3, P=1) on 32×32 gives $\lfloor 31/2 \rfloor + 1 = 16$: it **halves** the spatial size, and every later shape (including the flatten size) changes with it.
+
+
+**Try it yourself.** Change the input image size and watch which numbers move: the conv parameters stay fixed while `fc1` grows.
+
+<CnnShapeTracer preset="SmallCNN" />
 
 :::tip[🎯 Interview angle]
 **"Where are most of the parameters in a CNN?"** In the first fully connected layer after flatten (96% of `SmallCNN`, ~94% of AlexNet in its FC layers), because FC parameters scale with the flattened feature size while conv parameters don't depend on the image size. Mention **global average pooling** as the modern fix: tiny head, fewer parameters, and any input size works.
@@ -223,6 +234,11 @@ $$
 | Fixed batch, Adam **lr = 1e-3**, 30 steps | 2.30 → **0.013** | The model *can* learn (it memorizes the batch). A classic sanity check |
 | Same batch, Adam **lr = 0.1** | 2.30 → **177** → 2.05 | LR far too high: updates overshoot and the loss explodes |
 | **Fresh random images + random labels every step** (notebook demo) | stays ≈ **2.30** | There's nothing to learn: random labels give chance-level loss whatever the model |
+
+
+**Try it yourself.** Move the logits and pick the true class: cross-entropy is small only when the true class's bar is tall.
+
+<SoftmaxPlayground mode="crossentropy" />
 
 :::tip[🎯 Interview angle]
 **"What loss do you use for multi-class classification, and what does PyTorch expect?"** Softmax + cross-entropy; `nn.CrossEntropyLoss` takes **raw logits** `(N, C)` and **class indices** `(N,)` of dtype `long`, and must not be preceded by a softmax. The gradient w.r.t. the logits is $p - y$, and an untrained model should start near $\ln C$.

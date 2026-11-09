@@ -3,6 +3,8 @@ title: "PyTorch Fundamentals: Tensors, Autograd & the Training Loop"
 sidebar_position: 1
 ---
 
+import {BroadcastingChecker, GradientDescentPlayground} from '@site/src/components/Widgets';
+
 :::tip[TL;DR (30-Second Interview Pitch)]
 A **PyTorch tensor** is a multi-dimensional array that stores numbers **plus** the history of how it was computed, and it can live on a **CPU or a GPU**. **Autograd** records every operation on tensors with `requires_grad=True` in a **dynamic computational graph** and applies the **chain rule in reverse** (`loss.backward()`) to fill each parameter's `.grad`. Training is always the same five-beat loop: **zero_grad → forward → loss → backward → step**. `backward()` *computes* gradients, the **optimizer** *uses* them, and gradients **accumulate** unless you clear them.
 :::
@@ -116,6 +118,11 @@ c      :     4   ❌  (3 vs 4 — neither is 1)  → RuntimeError
 :::analogy[Broadcasting is a rubber stamp]
 `b = [10, 20, 30]` is a stamp. To add it to each of the 4 rows of `A`, PyTorch doesn't carve 4 stamps (copies). It presses the **same** stamp on every row. That's why it costs no extra memory, and why the stamp must be exactly as wide as the rows (3 vs 4 won't fit).
 :::
+
+
+**Try it yourself.** Type two shapes and see, dimension by dimension, whether they broadcast and what the result shape is.
+
+<BroadcastingChecker />
 
 :::tip[🎯 Interview angle]
 **"Explain broadcasting."** Align shapes from the right; dimensions are compatible if equal, 1, or missing; size-1 dimensions are stretched as stride-0 views, so no data is copied. The textbook use is adding a bias to every row of a batch. The interview trap is the silent one: `(N, 1)` vs `(N,)` broadcasts to `(N, N)` and gives a wrong loss with no error.
@@ -244,6 +251,11 @@ $$
 | **Autograd** | Applies the chain rule through the recorded graph | ✅ **Yes** | `loss.backward()` |
 | **Optimizer** | Uses `.grad` to move parameters downhill | ❌ **No**, it only reads `.grad` | `optim.SGD(model.parameters(), lr=0.02)` |
 
+
+**Try it yourself.** Change the learning rate and watch the steps on the loss curve: a small rate creeps, a good one converges in a few steps, and a rate above 1 overshoots further every step.
+
+<GradientDescentPlayground />
+
 :::tip[🎯 Interview angle]
 **"What does each piece do?"** Model → predictions; loss → one scalar error; `loss.backward()` → gradients in `.grad`; `optimizer.step()` → $\theta \leftarrow \theta - \eta\nabla L$. Say it as: *"autograd computes, the optimizer updates."* **"Learning rate too high?"** The loss oscillates or diverges to `inf`/`nan`; too low and it converges slowly.
 :::
@@ -270,6 +282,10 @@ flowchart TB
     B --> S["⑤ optimizer.step()<br/>θ ← θ − η·∇L"]
     S -->|next batch / epoch| Z
 ```
+
+![The five-step PyTorch training loop](/img/deep-learning/diagrams/training-loop.svg)
+
+*How to read it:* the yellow boxes are the five calls, in order, left to right; the top arrow is the loop back for the next batch. `X` feeds the forward pass and `y` feeds the loss. `loss.backward()` computes $\loss{\nabla L}$ into every `.grad`, and `optimizer.step()` applies $\param{\theta} \leftarrow \param{\theta} - \hyper{\eta}\,\loss{\nabla L}$.
 
 <Animation src="pytorch/zero-grad" caption="Three iterations side by side. With zero_grad() .grad holds only the current gradient (4, 3, 2.5). Without it, backward() keeps ADDING: 4 → 7 → 9.5, so every step() overshoots more." />
 
@@ -304,6 +320,10 @@ Stack two linear layers and you might expect a more powerful model. It isn't. Su
 In PyTorch you package a model as a subclass of **`nn.Module`**. In `__init__` you declare the layers (after calling `super().__init__()`), and assigning a layer to `self.something` automatically **registers** its parameters, so `model.parameters()` can hand all of them to the optimizer. In `forward(x)` you describe how data flows through them. You then call `model(x)`, never `model.forward(x)` directly, because `__call__` also runs hooks before calling `forward`. The module also gives you `model.to(device)` for all parameters at once, `model.train()` / `model.eval()` to switch layers like dropout, and `state_dict()` for saving.
 
 The notebook's `SimpleNN` is the smallest real network: `Linear(1, 8)` → ReLU → `Linear(8, 1)`, 25 parameters in total, trained on the curve $y = x^2$ that a single linear layer could never fit.
+
+![A two-layer network: Linear, ReLU, Linear](/img/deep-learning/diagrams/mlp-forward.svg)
+
+*How to read it:* data flows left to right through `Linear` → ReLU → `Linear`, exactly `SimpleNN`'s layers. Each yellow box is a learned layer ($\param{W}, \param{b}$); ReLU is the bend between them that stops the two linear layers collapsing into one.
 
 <Formula name="Linear layer (nn.Linear)" tag="Building block" words="Every output is a weighted sum of all the inputs, plus its own bias. Doing it as one matrix multiply processes the whole batch at once." remember="Inputs times weights, plus bias.">
 

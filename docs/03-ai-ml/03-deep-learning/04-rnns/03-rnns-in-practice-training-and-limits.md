@@ -3,6 +3,8 @@ title: "RNNs in Practice: Many-to-One, Many-to-Many, Training and Limits"
 sidebar_position: 3
 ---
 
+import {GradientDecayExplorer} from '@site/src/components/Widgets';
+
 :::tip[TL;DR (30-Second Interview Pitch)]
 A **many-to-one** RNN reads the whole sequence and predicts from the **final hidden state** ($\pred{y} = \param{W_{hy}}\pred{h_T} + \param{b_y}$); a **many-to-many** RNN emits an output, usually a **softmax** over the vocabulary, at **every** step. Untrained, both give random answers; training needs a loss, **full BPTT** (the gradient must reach $\param{W_{hh}}$ and every time step, not just the last one) and gradient descent, or simply `nn.RNN` + autograd. Pick the loss to match the output: **`BCEWithLogitsLoss`** for a binary label, never MSE followed by a sigmoid at prediction time. Basic RNNs then hit three walls: a **fixed-size memory** must compress the whole sequence, old information **fades** under repeated tanh updates, and gradients **vanish** ($0.5^{15} = 0.000031$) or **explode** ($1.5^{15} = 437.89$) through time. **LSTM** and **GRU** fix this with **gates** that learn what to keep, forget and output, along an additive memory path.
 :::
@@ -12,7 +14,7 @@ A **many-to-one** RNN reads the whole sequence and predicts from the **final hid
 :::info[Where this page sits]
 **Before:** [RNN Architecture, Forward Pass and BPTT](./02-rnn-architecture-forward-pass-bptt.md) derived the equations, shapes, weight sharing and backpropagation through time.
 **This page:** the practical notebook (*12 RNN 3*): many-to-one and many-to-many RNNs from scratch in NumPy, training from scratch (with a corrected, gradient-checked BPTT), training `nn.RNN` in PyTorch (with a corrected loss), what the notebook's long-sequence test really shows, vanishing and exploding gradients, and why we need LSTM and GRU.
-**Next:** the LSTM notebook (*13 LSTM Implementation*): the gated cell in full.
+**Next:** [LSTM and GRU: Gated Memory for Long Sequences](../05-lstm-and-gru/01-lstm-and-gru-gated-memory.md) (notebook *13 LSTM Implementation*): the gated cell in full.
 :::
 
 ## 🧭 Start Here
@@ -237,6 +239,10 @@ Writing loops and gradients by hand is great for understanding, but in practice 
 | 6 | Backprop | `loss.backward()` |
 | 7 | Update | `optimizer.step()` (Adam, lr 0.01) |
 
+![Many-to-one RNN for sentiment in PyTorch](/img/deep-learning/diagrams/rnn-many-to-one-model.svg)
+
+*How to read it:* each word id is embedded and fed to the same RNN cell; only the final hidden state $\pred{h_T}$ goes to the linear layer, which produces one logit $\pred{z}$, and `BCEWithLogitsLoss` applies the sigmoid inside the loss.
+
 **The loss must match the output.** The notebook trains the model with **MSE** on the raw output (so it learns to output exactly 1.0 for positive and 0.0 for negative), then at prediction time passes that output through a **sigmoid**. But $\sigma(1) = 0.731$ and $\sigma(0) = 0.5$, so after training, every "positive" prediction shows up as 0.731 and every "negative" one as 0.5. The model is right, but the reported probabilities are wrong, and a 0.5 threshold misclassifies every negative.
 
 <Formula name="Binary cross-entropy with logits" tag="The right loss for a yes/no label" words="Treat the model's raw score as a logit, turn it into a probability with the sigmoid, and penalise the log of the probability given to the true class. The fused version applies the sigmoid inside the loss in a numerically stable way." remember="Logit in, sigmoid inside, log loss.">
@@ -320,6 +326,11 @@ $$
 | $1.5^k$ | 1.5 | 7.5938 | 57.665 | 437.8939 |
 
 **What happens when the gradient is near zero?** The weight updates driven by early time steps are near zero, so **learning slows down** and the model never learns to use information from far back: **memory fading**, **learning difficulty**, **long-term dependency failure**. Long sequences suffer more simply because there are more factors in the product. Note that the model still *trains*: short-range patterns (few factors) get healthy gradients, so the loss goes down while long-range patterns are silently ignored.
+
+
+**Try it yourself.** Reproduce $0.5^{15} = 0.000031$ and $1.5^{15} = 437.89$, then try the tanh slope at large $z$.
+
+<GradientDecayExplorer />
 
 :::tip[🎯 Interview angle]
 **"What is the vanishing gradient problem in RNNs?"** In BPTT the gradient to step $k$ is a product of $T - k$ Jacobians $\text{diag}(1 - h^2) W_{hh}$; when their norms are below 1 it shrinks exponentially with distance, so early steps get almost no signal and long-term dependencies aren't learned. tanh's slope ($\le 1$, near 0 when saturated) makes it worse. Fixes: LSTM/GRU, orthogonal init, skip connections, attention.

@@ -128,6 +128,10 @@ $$
 
 </Formula>
 
+![A ResNet BasicBlock with its identity shortcut](/img/deep-learning/diagrams/residual-block.svg)
+
+*How to read it:* the dashed box is $F(\data{x};\param{W})$, the learned residual (conv, BN, ReLU, conv, BN). The line over the top carries $\data{x}$ unchanged to the pink $+$, so the block outputs $F(\data{x}) + \data{x}$; on the way back, that line is the $+I$ in $\partial \pred{y} / \partial \data{x} = \partial F / \partial \data{x} + I$.
+
 | Stage | Output (C, H, W) | Parameters | Share of 11.18 M |
 |---|---|---|---|
 | Stem (conv1 + bn1, maxpool) | (64, 112, 112) → (64, 56, 56) | 9,536 | 0.1% |
@@ -175,6 +179,10 @@ Which layers to unfreeze follows the hierarchy: early layers are generic and alm
 | Overfitting risk | Very low | Moderate: watch val loss, stop early |
 | Best when | Small data, similar to ImageNet | More data, or domain differs |
 | Notebook best val acc | **0.9819** (5 epochs) | **0.9874** (stopped at epoch 8) |
+
+![Feature extraction vs fine-tuning on ResNet18](/img/deep-learning/diagrams/transfer-learning.svg)
+
+*How to read it:* grey boxes are frozen (`requires_grad = False`), yellow boxes are trained. Feature extraction trains only the new `fc` (1,026 parameters); fine-tuning also unfreezes `layer4` (8,394,754 trainable parameters) with a small learning rate.
 
 <Formula name="What freezing does to the update" tag="requires_grad = False" words="Frozen parameters receive no gradient, so the optimizer leaves them exactly as pretrained. Only the trainable parameters take gradient steps." remember="No gradient, no change.">
 

@@ -1,0 +1,8 @@
+{
+  "label": "Deep Learning",
+  "position": 1,
+  "link": {
+    "type": "generated-index",
+    "description": "Start with the last-hour sheet, then the topic sheets: PyTorch and neural networks, CNNs and transfer learning, NLP foundations, RNNs, LSTM and GRU."
+  }
+}

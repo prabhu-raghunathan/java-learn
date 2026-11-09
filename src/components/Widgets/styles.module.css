@@ -1,0 +1,367 @@
+.widget {
+  --w-accent: #0ca678;
+  --w-bar: #74c0fc;
+  --w-hl: #f59f00;
+  margin: 1.6rem 0;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-left: 5px solid var(--w-accent);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(12, 166, 120, 0.06), rgba(28, 126, 214, 0.03) 60%, transparent);
+  overflow: hidden;
+}
+
+[data-theme='dark'] .widget {
+  --w-accent: #38d9a9;
+  --w-bar: #4dabf7;
+  --w-hl: #ffc078;
+  border-color: rgba(255, 255, 255, 0.08);
+  border-left-color: var(--w-accent);
+  background: linear-gradient(135deg, rgba(56, 217, 169, 0.08), rgba(116, 192, 252, 0.04) 60%, rgba(255, 255, 255, 0.01));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px dashed var(--ifm-color-emphasis-300);
+}
+
+.badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: var(--w-accent);
+  color: #fff;
+}
+
+[data-theme='dark'] .badge {
+  color: #1b1b1d;
+}
+
+.title {
+  font-weight: 700;
+}
+
+.body {
+  padding: 0.8rem 1rem 0.4rem;
+}
+
+.hint {
+  padding: 0.55rem 1rem 0.7rem;
+  font-size: 0.86rem;
+  color: var(--ifm-color-emphasis-700);
+  border-top: 1px dashed var(--ifm-color-emphasis-200);
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 0.35rem 1.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.slider {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+}
+
+.slider > input[type='range'] {
+  flex: 1 1 auto;
+  min-width: 110px;
+}
+
+.sliderLabel {
+  flex: 0 0 9rem;
+  font-weight: 600;
+}
+
+.slider input[type='range'] {
+  width: 100%;
+  accent-color: var(--w-accent);
+}
+
+.sliderValue {
+  flex: 0 0 3.4rem;
+  font-family: var(--ifm-font-family-monospace);
+  text-align: right;
+}
+
+.select,
+.textIn {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.select select,
+.textIn input,
+.textarea {
+  flex: 1;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 6px;
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.86rem;
+}
+
+.textarea {
+  width: 100%;
+  margin-bottom: 0.6rem;
+}
+
+.readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 0.4rem 0.6rem;
+  margin: 0.4rem 0 0.6rem;
+}
+
+.readoutItem {
+  display: flex;
+  flex-direction: column;
+  padding: 0.3rem 0.65rem;
+  border-radius: 8px;
+  background: var(--ifm-color-emphasis-100);
+  min-width: 7.5rem;
+}
+
+.readoutKey {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.readoutVal {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.92rem;
+}
+
+.twoCol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.6rem;
+}
+
+.plot,
+.bars {
+  width: 100%;
+  display: block;
+  margin: 0.2rem 0 0.4rem;
+}
+
+.axis {
+  stroke: var(--ifm-color-emphasis-400);
+  stroke-width: 1;
+}
+
+.vline {
+  stroke: var(--ifm-color-emphasis-400);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.axisText,
+.barLabel {
+  fill: var(--ifm-color-emphasis-700);
+  font-size: 11px;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.barText {
+  fill: var(--ifm-font-color-base);
+  font-size: 12px;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.point {
+  fill: var(--eq-param);
+}
+
+.pointGrad {
+  fill: var(--eq-loss);
+}
+
+.pathLine {
+  stroke: var(--eq-param);
+  stroke-width: 1.4;
+  stroke-dasharray: 3 3;
+}
+
+.seq,
+.note {
+  font-size: 0.84rem;
+  color: var(--ifm-color-emphasis-700);
+  margin-bottom: 0.5rem;
+  word-break: break-word;
+}
+
+.seq {
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.button {
+  padding: 0.3rem 0.8rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--w-accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+[data-theme='dark'] .button {
+  color: #1b1b1d;
+}
+
+.table {
+  display: table;
+  width: 100%;
+  margin: 0.3rem 0 0.6rem;
+  font-size: 0.84rem;
+}
+
+.table td,
+.table th {
+  padding: 0.25rem 0.5rem;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.zero {
+  color: var(--ifm-color-emphasis-500);
+}
+
+.bad td {
+  color: var(--ifm-color-danger);
+}
+
+.hlRow td,
+.hlCell {
+  background: rgba(245, 159, 0, 0.16);
+  font-weight: 600;
+}
+
+.good {
+  color: var(--ifm-color-success-darker);
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+[data-theme='dark'] .good {
+  color: var(--ifm-color-success-lighter);
+}
+
+.badText {
+  color: var(--ifm-color-danger);
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0.6rem;
+}
+
+.word,
+.wordCtx,
+.wordCentre {
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--ifm-color-emphasis-300);
+  background: transparent;
+  color: var(--ifm-font-color-base);
+  font-family: var(--ifm-font-family-monospace);
+  cursor: pointer;
+}
+
+.wordCtx {
+  border-color: var(--eq-pred);
+  background: rgba(43, 138, 62, 0.12);
+}
+
+.wordCentre {
+  border-color: var(--eq-data);
+  background: rgba(25, 113, 194, 0.18);
+  font-weight: 700;
+}
+
+.track {
+  position: relative;
+  height: 46px;
+  margin: 0.6rem 0.8rem 2.2rem;
+  border-bottom: 2px solid var(--ifm-color-emphasis-400);
+}
+
+.trackOld,
+.trackCand,
+.trackNew {
+  position: absolute;
+  bottom: -9px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  transition: left 0.25s ease;
+}
+
+.trackOld {
+  background: var(--eq-data);
+}
+
+.trackCand {
+  background: var(--eq-hyper);
+}
+
+.trackNew {
+  bottom: 8px;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  background: var(--eq-pred);
+  box-shadow: 0 0 0 3px rgba(43, 138, 62, 0.25);
+}
+
+.trackTick {
+  position: absolute;
+  bottom: -26px;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  font-family: var(--ifm-font-family-monospace);
+  color: var(--ifm-color-emphasis-700);
+}
+
+.bText {
+  fill: var(--ifm-font-color-base);
+  font-size: 22px;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.bLabel {
+  fill: var(--ifm-color-emphasis-700);
+  font-size: 20px;
+  font-family: var(--ifm-font-family-monospace);
+}

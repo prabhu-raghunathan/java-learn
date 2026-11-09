@@ -1,0 +1,8 @@
+{
+  "label": "LSTM and GRU",
+  "position": 6,
+  "link": {
+    "type": "generated-index",
+    "description": "Why vanilla RNN memory is fragile, the LSTM cell gate by gate, why its additive cell path keeps gradients alive (with measurements), GRU, and a character-level LSTM text generator with greedy decoding and temperature sampling."
+  }
+}

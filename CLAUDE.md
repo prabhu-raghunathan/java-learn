@@ -7,7 +7,7 @@ This is an interview preparation wiki built on Docusaurus v3. It covers deep-div
 - **Group pages into sub-topic folders** once a section has more than ~5 pages or mixes clearly different topics. Each sub-folder gets a `_category_.json` (`label`, `position`, generated-index `description`); `sidebar_position` inside it restarts at 1. Current groups:
   - Core Java: `01-language-basics/`, `02-oop/`, `03-jvm-internals/`, `04-hashing/`
   - Data Exploration: `01-numpy/`, `02-pandas/`, `03-visualization/` (overview and capstone stay at the top)
-  - Deep Learning: `01-pytorch-and-neural-networks/`, `02-cnns/`, `03-nlp-foundations/`, `04-rnns/` (overview at the top)
+  - Deep Learning: `01-pytorch-and-neural-networks/`, `02-cnns/`, `03-nlp-foundations/`, `04-rnns/`, `05-lstm-and-gru/` (overview at the top)
   - DSA Java toolkit: `02-arrays-and-strings/`, `03-collections/`, `04-sorting-math-and-io/`
   - DSA topics: `02-hashing/` (basics, hash functions & collisions, patterns)
 - Number prefixes are stripped from URLs, so a page's URL is `/docs/<folder path without NN- prefixes>/<file without NN->`. Moving a page changes its URL; cross-links must be **relative file links** (`../02-pandas/05-pandas-groupby-apply-transform.md`) so the build catches broken ones.
@@ -73,6 +73,27 @@ Every page under `docs/03-ai-ml/` gets **2–4 Manim animations** for the concep
 - **Content rules:** numbers shown in an animation must come from real computation (numpy or the page's verified results), never invented. Keep clips **8–20 s** and quiet at the end (2–3 s hold) so the final frame works as the poster. One idea per clip.
 - **Layout rules:** 16:9 at 720p. Keep everything inside the frame; `title()` and `caption_bar()` auto-shrink long text, but grids and diagrams don't. Don't let labels sit on top of lines; use `add_background_rectangle` or move them.
 - **Always verify before embedding:** extract frames (`ffmpeg -i clip.mp4 -vf "fps=6/<duration>,scale=640:-1,tile=2x3" -frames:v 1 sheet.png`) and check for overlaps, cut-off text and wrong numbers. Then build the site and confirm the clip plays.
+
+# Block Diagrams (REQUIRED for every Deep Learning page)
+Every page under `docs/03-ai-ml/03-deep-learning/` gets **at least one block diagram** in the Colah "Understanding LSTMs" visual style, for each architecture, cell, data flow or computation it explains (a cell, a layer stack, a training loop, a pipeline, a gradient path). They are **added alongside** the Mermaid diagrams and Manim animations, never instead of them.
+- **Style (fixed, shared by all diagrams):** white card; green rounded box = cell/module; yellow box = learned layer (σ, tanh, Linear, Conv…); pink circle/ellipse = pointwise op (×, +, tanh, 1−, mean); blue circle = input; purple circle = output; thick black lines with clear filled arrowheads = forward flow (merges = concatenate, forks = copy); red dashed = gradients. Keep each diagram simple: one idea, few labels.
+- **Generate, don't copy:** draw them with `scripts/diagrams/dl_diagrams.py` (primitives in `scripts/diagrams/blockdiag.py`: `cell`, `layer`, `op`, `node`, `line`, `curve`, `note`, `legend`, label markup `x_t`, `h_{t-1}`, `W^T`, `c~_t`, `zero\_grad`). Add a `@diagram("name")` function, run `python scripts/diagrams/dl_diagrams.py name`, which writes `static/img/deep-learning/diagrams/<name>.svg`. Do not paste images from the web (licensing).
+- **Notation:** labels and equations must use the page's own symbols and the source notes' formulas; numbers drawn must come from the page's verified results. For multi-part cells (LSTM, GRU…), add highlighted step diagrams (the active path at full strength, the rest dimmed) with the step's equations in a side panel, one per chapter.
+- **Embed** right after the paragraph, Formula card or Mermaid block it illustrates: `![alt text](/img/deep-learning/diagrams/<name>.svg)` followed by a `*How to read it:*` line that maps each part of the drawing to the formula.
+- **Verify:** render to PNG (`cairosvg`) and look at it for overlapping labels or cut-off text before embedding, then build the site.
+
+# Interactive Widgets (REQUIRED for Deep Learning pages, wherever a concept has a knob to turn)
+Small "Try it" playgrounds that run in the browser, complementary to the prose, diagrams and animations (never a replacement).
+- **Code:** components in `src/components/Widgets/index.js`, maths as pure functions in `src/components/Widgets/math.js`, styles in `styles.module.css`. Every default value must match a verified number on the page that embeds the widget, and `node src/components/Widgets/math.test.mjs` must pass (add a check for every new function).
+- **Existing widgets:** `GradientDescentPlayground`, `ActivationExplorer`, `ChainRuleExplorer`, `BroadcastingChecker`, `ConvShapeCalculator`, `CnnShapeTracer` (`preset="SmallCNN" | "SimpleCNN"`), `SoftmaxPlayground` (`mode="crossentropy" | "temperature"`), `TfidfPlayground`, `ContextWindowExplorer`, `GradientDecayExplorer`, `LstmCellPlayground`, `GruBlendPlayground`. Reuse before writing a new one.
+- **Embed (per page, no global registration):** one import line right after the frontmatter, `import {Name} from '@site/src/components/Widgets';`, then in the chapter it belongs to, just before that chapter's `:::tip[🎯 Interview angle]`: a `**Try it yourself.** <one sentence saying what to change and what to watch>` line followed by `<Name />`.
+- **Rules:** no `window` access at import time (pages are server-rendered); light and dark mode via Infima / `--eq-*` CSS variables; verify in a headless browser (no page errors) before shipping.
+
+# Cheat Sheets (REQUIRED: keep in sync with every new or changed Deep Learning page)
+The `docs/05-cheat-sheets/` tab holds pre-interview revision sheets, one sub-folder per subject (`01-deep-learning/`; add `02-…` for other subjects later, each with a `_category_.json`).
+- **When a new topic page is added**, update (or create) its topic sheet and add its best questions and numbers to `00-last-hour-before-the-interview.md`.
+- **Sheet layout:** frontmatter → `:::tip[What this sheet covers]` with relative links to the full notes → `## 🎤 Answer These Out Loud` (each question a `<details><summary><strong>…</strong></summary>` with a 3–6 line model answer) → `## 📐 Formulas` (one table, page notation and colour macros) → `## 🔢 Numbers to Quote` → `## 📏 Shapes` (if relevant) → `## ⚖️ Quick Comparisons` (tables) → `## 💻 Code You Should Be Able to Write` (small, verified snippets with output comments) → `## 🚨 Traps`.
+- **Content rules:** a cheat sheet only summarizes the full notes; every number and formula must already appear (verified) on a notes page, and every snippet must be run. Keep it scannable; no new teaching material.
 
 # Math & Memorability (REQUIRED for every AI/ML page)
 Equations are the most important part of the AI/ML notes. Every page under `docs/03-ai-ml/` uses these devices (components live in `src/components/Formula/`, registered globally, so no imports needed):

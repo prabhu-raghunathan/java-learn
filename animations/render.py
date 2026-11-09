@@ -90,6 +90,36 @@ MANIFEST = {
     "rnn/bptt-gradient-flow":      ("rnn_scenes.py", "BpttGradientFlow"),
     "rnn/vanishing-exploding":     ("rnn_scenes.py", "VanishingExploding"),
     "rnn/gated-memory":            ("rnn_scenes.py", "GatedMemory"),
+    # LSTM and GRU
+    "lstm/cell-update":            ("lstm_scenes.py", "CellUpdate"),
+    "lstm/gradient-highway":       ("lstm_scenes.py", "GradientHighway"),
+    "lstm/gru-blend":              ("lstm_scenes.py", "GruBlend"),
+    "lstm/autoregressive-loop":    ("lstm_scenes.py", "AutoregressiveLoop"),
+    "lstm/temperature":            ("lstm_scenes.py", "TemperatureBars"),
+    # Attention and Transformers
+    "attention/soft-alignment":    ("attention_scenes.py", "SoftAlignment"),
+    "attention/path-length":       ("attention_scenes.py", "PathLength"),
+    "attention/heatmap-row":       ("attention_scenes.py", "HeatmapRow"),
+    # Full self-attention
+    "self-attention/scaling":      ("self_attention_scenes.py", "ScalingVariance"),
+    "self-attention/sharpness":    ("self_attention_scenes.py", "SoftmaxSharpness"),
+    "self-attention/z-equals-av":  ("self_attention_scenes.py", "ZEqualsAV"),
+    # Multi-head attention
+    "multi-head/split-concat":     ("multi_head_scenes.py", "MultiHeadSplit"),
+    "multi-head/specialization":   ("multi_head_scenes.py", "HeadSpecialization"),
+    # The Transformer (Figure 1)
+    "transformer/positional-encoding": ("transformer_scenes.py", "PositionalEncodingWaves"),
+    "transformer/causal-mask":         ("transformer_scenes.py", "CausalMask"),
+    "transformer/decoding":            ("transformer_scenes.py", "AutoregressiveDecoding"),
+    "bert/input-embeddings":           ("bert_scenes.py", "InputRepresentation"),
+    "bert/masking":                    ("bert_scenes.py", "MaskingProcedure"),
+    "bert/left-vs-bidirectional":      ("bert_scenes.py", "LeftVsBidirectional"),
+    "bert/span-scoring":               ("bert_scenes.py", "SpanScoring"),
+    "stacked-encoder/depth-refinement":  ("stacked_encoder_scenes.py", "DepthRefinement"),
+    "stacked-encoder/masked-pooling":    ("stacked_encoder_scenes.py", "MaskedPooling"),
+    "stacked-encoder/attention-by-layer": ("stacked_encoder_scenes.py", "AttentionByLayer"),
+    "hf/pipeline-steps":               ("hf_scenes.py", "PipelineSteps"),
+    "hf/confidence-saturation":        ("hf_scenes.py", "ConfidenceSaturation"),
     # Core Java
     "jvm/gc-generations":          ("java_scenes.py", "GcGenerations"),
     "oop/init-order":              ("java_scenes.py", "InitOrder"),

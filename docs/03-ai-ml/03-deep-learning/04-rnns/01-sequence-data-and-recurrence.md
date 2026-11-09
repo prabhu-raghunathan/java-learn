@@ -279,6 +279,10 @@ $$
 
 The two terms have clear roles: $\param{W_x}\data{x_t}$ is the **influence of the current input**, and $\param{W_h}\pred{h_{t-1}}$ is the **influence of past memory**. The model *learns* how much of each to use.
 
+![One step of a vanilla RNN](/img/deep-learning/diagrams/rnn-cell.svg)
+
+*How to read it:* $\pred{h_{t-1}}$ enters from the left and $\data{x_t}$ from below; they merge and pass through one tanh layer, which computes $\tanh(\param{W_x}\data{x_t} + \param{W_h}\pred{h_{t-1}} + \param{b})$. The result $\pred{h_t}$ is copied: up as the output, and right as the memory for the next step.
+
 <Animation src="rnn/hidden-state-flow" caption="Four inputs pass through the same tanh cell. Watch each new hidden vector form from the current input and the previous hidden vector; h4 summarises the whole sequence." />
 
 **Why tanh?** The expression inside the brackets is **linear**. Without a non-linearity, stacking time steps would still be one big linear function, far too limited to learn language or dynamics. tanh is the classic choice for three reasons:
@@ -312,6 +316,10 @@ flowchart LR
     b0(["one image"]) --> b1["h1 → 'a'"] --> b2["h2 → 'dog'"] --> b3["h3 → 'runs'<br/>one-to-many: captioning"]
     c1["'dogs' → h1 → NOUN"] --> c2["'run' → h2 → VERB<br/>many-to-many: tagging"]
 ```
+
+![RNN input-output patterns](/img/deep-learning/diagrams/rnn-patterns.svg)
+
+*How to read it:* blue circles are inputs, green boxes are RNN steps sharing one set of weights, purple circles are outputs. Where the inputs and outputs attach decides the pattern.
 
 | Pattern | Input → output | How the RNN is used | Examples |
 |---|---|---|---|

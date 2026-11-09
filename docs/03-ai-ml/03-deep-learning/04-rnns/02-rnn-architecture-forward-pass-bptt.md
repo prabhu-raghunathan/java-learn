@@ -3,6 +3,8 @@ title: "RNN Architecture, Forward Pass and Backpropagation Through Time"
 sidebar_position: 2
 ---
 
+import {GradientDecayExplorer} from '@site/src/components/Widgets';
+
 :::tip[TL;DR (30-Second Interview Pitch)]
 An RNN cell does two things at every time step: update the memory, $\pred{h_t} = \tanh(\param{W_x}\data{x_t} + \param{W_h}\pred{h_{t-1}} + \param{b})$, and optionally emit an output, $\pred{y_t} = \param{W_y}\pred{h_t} + \param{b_y}$. **Unrolling** draws the loop as a chain of copies, one per time step, that all use the **same weights** (weight sharing). That keeps the parameter count independent of sequence length (700 vs 7,000 for 10 steps in the notebook example) and lets one model handle any length. Training uses **Backpropagation Through Time (BPTT)**: run backprop on the unrolled chain, so gradients flow from later steps to earlier ones and the gradient of each shared weight is the **sum of its contributions from every step**. Along the way the gradient is multiplied by $\text{diag}(1 - \pred{h_t}^2)\,\param{W_h}$ once per step, which is why it **vanishes** or **explodes** over long sequences.
 :::
@@ -69,6 +71,10 @@ $$
 **Example:** notebook-12 toy weights, step 2. $\param{W_x}\data{x_2} = [0.05, 0.95, -0.2]$ and $\param{W_h}\pred{h_1} = [0.321, -0.015, -0.346]$. Sum $= [0.371, 0.935, -0.546]$, so $\pred{h_2} = \tanh(\cdot) = [0.355, 0.733, -0.498]$.
 
 </Formula>
+
+![One step of a vanilla RNN](/img/deep-learning/diagrams/rnn-cell.svg)
+
+*How to read it:* the merge of $\pred{h_{t-1}}$ (left) and $\data{x_t}$ (bottom) feeding one tanh layer is Step 1, $\pred{h_t} = \tanh(\param{W_x}\data{x_t} + \param{W_h}\pred{h_{t-1}} + \param{b})$. The upward copy of $\pred{h_t}$ is what Step 2 reads with $\param{W_y}$; the rightward copy is the memory passed to step $t + 1$.
 
 **Step 2: output generation.**
 
@@ -145,6 +151,10 @@ flowchart TB
     c3 --> y3["h3 / y3"]
     c4 --> y4["h4 / y4"]
 ```
+
+![An RNN folded and unrolled over four words](/img/deep-learning/diagrams/rnn-unrolled.svg)
+
+*How to read it:* left, the folded cell with its loop; right, the same cell copied once per word. Every copy uses the same $\param{W_x}$, $\param{W_h}$ and $\param{b}$, and each arrow between copies is $\pred{h_t}$ passed forward.
 
 Writing the cell as a function $f$, the unrolled computation is a chain:
 
@@ -292,6 +302,10 @@ $$
 
 </Formula>
 
+![Backpropagation through time on the unrolled RNN](/img/deep-learning/diagrams/rnn-bptt.svg)
+
+*How to read it:* black arrows are the forward pass, left to right. Each loss $\loss{L_t}$ sends its gradient into its own step (red, from the top), and the red arrows underneath carry the gradient one step back at a time, multiplying by $\operatorname{diag}(1 - \pred{h_t}^2)\,\param{W_h}$ each time. That repeated factor is why it vanishes or explodes.
+
 <Animation src="rnn/bptt-gradient-flow" caption="The forward pass runs left to right, then the loss sends its gradient back right to left. Watch the bars: each step back halves the gradient, from 4.0 at h20 down to 0.0000067 at h1." />
 
 **Shared weights collect gradient from every step.** $\param{W_h}$ is used at every time step, so it receives a gradient contribution from each use, and the total gradient is their **sum**:
@@ -357,6 +371,11 @@ Consequences: with vanishing gradients, early time steps learn almost nothing, s
 :::analogy[Gradient clipping is a speed limiter]
 A delivery van's speed limiter doesn't change where the driver is going, only how fast. Gradient clipping does the same: if the gradient's length exceeds the limit, it is scaled down to the limit but keeps its direction, so one bad batch can't launch the weights off a cliff.
 :::
+
+
+**Try it yourself.** Change the per-step factor and the number of steps: below 1 the gradient vanishes, above 1 it explodes.
+
+<GradientDecayExplorer />
 
 :::tip[🎯 Interview angle]
 **"Why do RNN gradients vanish or explode?"** BPTT multiplies the gradient by $\text{diag}(1 - h_t^2) W_h$ once per step; over $T - k$ steps that's a product of $T - k$ matrices, which shrinks exponentially if their scale is below 1 and grows exponentially if above 1. **Fixes:** clipping for explosions; orthogonal init, LSTM/GRU, truncated BPTT, and attention for vanishing. Mention that ReLU/identity-initialized RNNs (IRNN) and careful init help, but gating is the standard fix.
