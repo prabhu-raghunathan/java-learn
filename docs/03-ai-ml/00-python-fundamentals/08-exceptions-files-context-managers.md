@@ -9,33 +9,52 @@ Python reports errors with **exceptions**: `try` runs risky code, `except` handl
 
 <PriorityKey lang="Python" v="3.11" />
 
-## ⚡ Essential Interview Recall
 
-- 🔴 **`try`** risky code → **`except`** handle specific errors → **`else`** runs **only if no exception** → **`finally`** runs **no matter what** (even after `return`, `break` or an unhandled exception).
-- 🔴 **Catch specific exceptions**, most specific **first**: handlers are checked top to bottom and the first match wins (`except Exception` before `except ValueError` makes the second unreachable).
-- 🔴 **Never write a bare `except:`** (or `except BaseException`): it also catches **`KeyboardInterrupt`** and **`SystemExit`**, so Ctrl+C can't stop your training job. Catch `Exception` at most.
-- 🔴 **`raise`** alone re-raises the current exception with its traceback; **`raise NewError(...) from e`** chains the cause (`__cause__`); `from None` hides it.
-- 🔴 **Custom exceptions** subclass `Exception` (build a small hierarchy: `AIPipelineError` → `TokenLimitExceededError`) and can carry data as attributes.
-- 🔴 **A `return` in `finally` overrides** the `try`'s return and swallows any in-flight exception. Since **3.14** it triggers `SyntaxWarning: 'return' in a 'finally' block` (PEP 765).
-- 🔴 File modes: **`r`** read (default; `FileNotFoundError`), **`w`** write (**truncates**), **`a`** append, **`x`** create (`FileExistsError` if it exists), **`b`** binary, **`+`** read and write.
-- 🔴 **Always use `with open(...)`**: the file is closed even if an exception is raised. Always pass **`encoding="utf-8"`** for text.
-- 🔴 `read()` → one string, `readline()` → one line, `readlines()` → list of lines; **iterating over the file object** streams line by line (O(1) memory).
-- 🟠 **Context manager protocol**: `__enter__` (its return value is bound by `as`) and `__exit__(exc_type, exc, tb)`; returning `True` from `__exit__` **suppresses** the exception. `@contextlib.contextmanager` builds one from a generator.
-- 🟠 The `as e` name is **deleted at the end of the `except` block** (to avoid reference cycles): using `e` afterwards raises `NameError`.
-- 🟠 **EAFP** ("easier to ask forgiveness than permission": `try`/`except KeyError`) is idiomatic Python; LBYL (`if key in d`) is fine when failure is common.
-- 🟠 Use **`pathlib.Path`** for paths, **`json`** for configs, **JSONL** for datasets (one JSON object per line), and write checkpoints **atomically** (temp file + `os.replace`).
-- 🟡 **Never `pickle.load` untrusted data**: unpickling can execute arbitrary code. `torch.load` defaults to `weights_only=True` since PyTorch 2.6 for this reason; prefer **safetensors** for model weights.
-- 🟡 **`ExceptionGroup` + `except*`** <Since v="3.11" lang="Python" /> handle several concurrent failures (e.g. from `asyncio.TaskGroup`); **`e.add_note(...)`** <Since v="3.11" lang="Python" /> adds context to an exception.
-- 🟡 **`assert` is removed with `python -O`**: never use it for input validation in production code.
-
-:::speak[How do you handle errors in a data pipeline or an LLM service?]
-"First, I only catch exceptions I can actually handle, and I catch them **narrowly**: `json.JSONDecodeError` for a bad record, `FileNotFoundError` for a missing shard, the SDK's `RateLimitError` for a 429. I never use a bare `except:` because it also traps `KeyboardInterrupt` and `SystemExit`. For a bad record in a batch job I **log it with context** and **count it**, and if the skip rate crosses a threshold I fail the job instead of silently training on half the data. When I translate a low-level error into a domain error I use **`raise ConfigError(...) from e`** so the original traceback is preserved. Transient failures like timeouts and rate limits get a retry with exponential backoff; permanent ones like a 400 don't. Cleanup always goes in a **context manager** or `finally`: closing files, releasing GPU memory or locks, and writing checkpoints atomically so a crash can't leave a half-written file."
+:::info[Where this page sits]
+**Before:** [OOP in Python](./07-oop-in-python.md): exceptions are classes, and context managers are objects with `__enter__` and `__exit__` dunder methods.
+**This page:** the `try`/`except`/`else`/`finally` statement, how exceptions travel up the call stack, raising and chaining, custom exceptions, the exception hierarchy, file modes and reading methods, context managers, and serialization formats.
+**Next:** [Concurrency, Memory & Performance](./09-concurrency-memory-performance.md).
 :::
 
-## The Mental Model
+## 🧭 Start Here
 
-### 1. The four blocks
+Real programs meet failure constantly: a file is missing, a record is malformed, a network call times out, an API returns a rate-limit error, the GPU runs out of memory. Python reports these situations with **exceptions**, objects that interrupt normal flow and travel up the call stack until some code handles them. Writing robust code is mostly about deciding **where** each failure should be handled and **how narrowly**, so that expected problems are dealt with and unexpected ones still surface loudly.
 
+Files are the second half of this page because they are the most common source of both failures and resource leaks. Opening a file grabs an operating-system resource that must be released, even when an exception interrupts the code that was using it. Python's answer is the **context manager** and the `with` statement, a pattern that also covers locks, database transactions, temporary directories and PyTorch's `torch.no_grad()`. The page ends with the formats you'll use to save data, and the one you must never load from strangers (pickle).
+
+Coming from Java, the shape is familiar (`try`/`catch`/`finally`, an exception class hierarchy) with three differences: there are no checked exceptions, Python adds an `else` block for success-only code, and the idiomatic style is **EAFP** ("easier to ask forgiveness than permission"): try the operation and handle the exception, rather than checking every precondition first.
+
+The chapters build up in this order:
+
+1. **`try` / `except` / `else` / `finally`**: what each block does and the order they run in.
+2. **How exceptions travel, and raising them**: propagation, `raise`, chaining with `from`, custom exceptions.
+3. **The exception hierarchy**: what to catch, and why never a bare `except:`.
+4. **Files: modes and reading**: the six modes, the reading methods and safe opening.
+5. **Context managers**: the `with` protocol and the ones you already use.
+6. **Serialization formats**: JSON, JSONL, CSV, YAML, pickle and safetensors.
+
+| New concept | One-line meaning |
+|---|---|
+| **Exception** | An object that signals an error and unwinds the call stack until handled |
+| **Handler** | An `except` clause that matches an exception type and deals with it |
+| **Propagation** | An unhandled exception moving up from frame to frame |
+| **Exception chaining** | `raise New(...) from e` records the original cause |
+| **EAFP** | Try it and handle the exception, instead of checking first (LBYL) |
+| **Context manager** | An object with `__enter__`/`__exit__` that guarantees cleanup in a `with` block |
+| **Serialization** | Turning objects into bytes or text to store or send, and back |
+| **JSONL** | One JSON object per line; streamable dataset format |
+
+:::analogy[Exceptions are a fire alarm system]
+When something goes wrong deep inside a building, the alarm doesn't wait for the person who caused it to fix it: it goes up floor by floor until it reaches someone trained for that kind of emergency. Each floor still closes its fire doors on the way (`finally`). A bare `except:` is a security guard who silences every alarm, including the one meaning "evacuate now" (Ctrl+C).
+:::
+
+## 🔴 1. `try` / `except` / `else` / `finally`
+
+The `try` statement has up to four blocks, and each has one job. **`try`** holds the code that might fail. Each **`except SomeError`** clause is a handler for one kind of failure; Python checks the handlers from top to bottom and runs the **first** one whose type matches, so more specific exceptions must come first. **`else`** runs only if the `try` block finished **without** an exception; it's the place for code that should happen only on success, kept out of `try` so its own errors aren't caught by the handlers by mistake. **`finally`** runs **no matter what**: after success, after a handled exception, after an unhandled one, and even when the `try` block executes `return` or `break`.
+
+That guarantee makes `finally` the place for cleanup, such as closing a connection or releasing a lock. It also creates a trap: a `return` inside `finally` overrides any value the `try` returned and silently swallows an exception that was in flight. Python 3.14 now warns about it with a `SyntaxWarning`.
+
+Inside a handler, `except ValueError as e` binds the exception object to `e` so you can log it or inspect its attributes. That name is deliberately **deleted** when the handler ends, to avoid reference cycles, so using `e` after the block raises `NameError`. You can catch several types in one clause with a tuple, `except (KeyError, IndexError):`.
 ```mermaid
 flowchart TB
     T["try: risky code"] -->|"no exception"| E["else: success-only code"]
@@ -54,8 +73,17 @@ flowchart TB
 `try` is cooking the dish. `except` is the plan for specific accidents: burnt it, remake it; out of an ingredient, offer a substitute. `else` is plating and garnishing, done only if cooking went fine. `finally` is cleaning the station, which happens whether the dish succeeded or ended in the bin.
 :::
 
-### 2. How an exception travels
+:::tip[🎯 Interview angle]
+**"When does `else` run, and when does `finally` run?"** `else` runs only if `try` raised no exception; `finally` always runs, even after `return`, `break` or an unhandled exception. Handlers are checked top to bottom, so put specific exceptions first. Warn that a `return` in `finally` overrides the result and swallows any in-flight exception (a `SyntaxWarning` since 3.14).
+:::
 
+## 🔴 2. How Exceptions Travel, and Raising Them
+
+When an exception is raised and the current function has no matching handler, the function's frame **unwinds**: it stops executing, runs any `finally` blocks, and the exception is re-raised in the caller. This continues frame by frame up the call stack until some frame handles it. If none does, the program stops and prints a **traceback** listing every frame the exception passed through. This is why you don't need to handle errors where they happen: you handle them at the level that knows what to do, for example skipping one bad record in the training loop rather than inside the JSON parser.
+
+You signal errors yourself with `raise`. `raise ValueError("lr must be positive")` creates and raises a new exception. A bare `raise` inside a handler re-raises the current exception with its original traceback, which is how you log something and let the failure continue. To translate a low-level error into a meaningful one without losing the original, use **chaining**: `raise ConfigError("bad config") from e` stores the original as `__cause__`, and the traceback shows both. `from None` suppresses the original when it's just noise.
+
+For your own code, define **custom exceptions** by subclassing `Exception`, ideally as a small hierarchy (a base `AIPipelineError` with specific children such as `TokenLimitExceededError`). Callers can then catch the whole family or one specific case, and the exception can carry useful data as attributes. Python 3.11 also added `add_note()` to attach context to an exception, and `ExceptionGroup` with `except*` for handling several concurrent failures at once.
 ```mermaid
 flowchart TB
     M["main()"] --> T["train()"]
@@ -68,10 +96,15 @@ flowchart TB
 
 <Animation src="python/exception-propagation" caption="An exception raised deep in the call stack unwinds one frame at a time, running each frame's finally blocks on the way, until a frame with a matching except handles it. If no frame does, the program stops and prints the traceback." />
 
-## The Paradigm / Core Concepts
+:::tip[🎯 Interview angle]
+**"What's the difference between `raise`, `raise e` and `raise New() from e`?"** A bare `raise` re-raises the current exception with its original traceback; `raise New(...) from e` raises a new, more meaningful exception and records the original as `__cause__`, so both appear in the traceback (`from None` hides it). Exceptions propagate up the stack, running `finally` blocks, until a matching handler catches them; define custom exceptions as a small hierarchy under `Exception`.
+:::
 
-### 🔴 The exception hierarchy (the parts you need)
+## 🔴 3. The Exception Hierarchy
 
+All exceptions are classes arranged in a tree, and an `except` clause matches the named class **and all its subclasses**. At the top is `BaseException`. Directly under it sit a few special exceptions that aren't really errors: `SystemExit` (raised by `sys.exit()`), `KeyboardInterrupt` (Ctrl+C) and `GeneratorExit`. Everything that represents an actual error lives under **`Exception`**, grouped into families such as `LookupError` (for `KeyError` and `IndexError`), `ArithmeticError` and `OSError` (for file and network problems).
+
+This structure is why a **bare `except:`** (or `except BaseException`) is a serious bug: it also catches `KeyboardInterrupt` and `SystemExit`, so pressing Ctrl+C can't stop a stuck training job and a deliberate exit is ignored. The widest net you should ever cast is `except Exception`, and usually only at the very top of a program or request handler, to log and report. Everywhere else, catch the **narrowest** type you can actually handle, so unexpected bugs still crash loudly instead of being silently swallowed.
 ```mermaid
 flowchart TB
     BE["BaseException"] --> SE["SystemExit (sys.exit)"]
@@ -96,8 +129,17 @@ flowchart TB
 | `RuntimeError` | Generic run-time failure: CUDA out of memory and device mismatches surface as `RuntimeError` (`torch.OutOfMemoryError` subclasses it) | Read the message |
 | `RecursionError` | Exceeded the recursion limit | Iterate instead |
 
-### 🔴 File modes
+:::tip[🎯 Interview angle]
+**"Why shouldn't you write a bare `except:`?"** It catches everything under `BaseException`, including `KeyboardInterrupt` and `SystemExit`, so Ctrl+C and `sys.exit()` stop working, and it hides real bugs. Catch the narrowest exception you can handle (`json.JSONDecodeError`, `FileNotFoundError`), and use `except Exception` only at a top-level boundary to log and report.
+:::
 
+## 🔴 4. Files: Modes and Reading
+
+`open(path, mode)` returns a file object, and the **mode** decides what you can do with it. `"r"` (the default) reads and fails with `FileNotFoundError` if the file is missing. `"w"` writes and, crucially, **truncates** an existing file to empty the moment it's opened, which is the most common way people destroy data by accident. `"a"` appends to the end, `"x"` creates a new file and fails if one already exists (a safe way to avoid overwriting), and `"+"` adds the other direction (`"r+"` reads and writes without truncating). Adding `"b"` switches to **binary** mode, where you read and write `bytes` rather than text; images, audio, model weights and pickles need it.
+
+There are several ways to read. `read()` returns the whole file as one string, `readline()` returns the next line, and `readlines()` returns a list of every line. All three are fine for small files, but for anything large the right tool is to **iterate over the file object** with `for line in f:`, which reads one line at a time and keeps memory constant. That's how you process a large JSONL dataset or a log file.
+
+Two habits prevent most file bugs. Always open files with a `with` statement, so the file is closed even if an exception interrupts your code (chapter 5 explains why that works). And always pass `encoding="utf-8"` in text mode, because otherwise the default encoding depends on the operating system, and the same code can read a file correctly on Linux and garble it on Windows.
 | Mode | Meaning | If the file exists | If it doesn't |
 |:---:|---|---|---|
 | `"r"` | Read text (default) | Read from the start | `FileNotFoundError` |
@@ -106,8 +148,6 @@ flowchart TB
 | `"x"` | Exclusive create | `FileExistsError` | Created |
 | `"r+"` | Read **and** write, no truncation | Position at the start | `FileNotFoundError` |
 | `"b"` (`"rb"`, `"wb"`) | Binary: bytes in, bytes out | Images, audio, model weights, pickles | |
-
-### 🔴 Reading methods
 
 | Method | Returns | Memory | Use for |
 |---|---|---|---|
@@ -123,8 +163,15 @@ flowchart TB
 
 </RuleCard>
 
-### 🟠 Context managers you already use
+:::tip[🎯 Interview angle]
+**"How would you read a 50 GB text file?"** Iterate over the file object, `for line in f:`, which streams one line at a time in constant memory; `read()` and `readlines()` load everything. Open it with `with open(path, encoding="utf-8") as f:` so it's closed even on errors, and remember that mode `"w"` truncates an existing file immediately while `"x"` refuses to overwrite.
+:::
 
+## 🟠 5. Context Managers
+
+A **context manager** is an object that sets something up when a `with` block starts and guarantees to tear it down when the block ends, however it ends. The protocol has two dunder methods. `__enter__` runs at the start, and whatever it returns is bound to the name after `as`. `__exit__(exc_type, exc, tb)` runs at the end, receiving details of any exception that occurred (or three `None`s on success). If `__exit__` returns `True`, the exception is **suppressed**; otherwise it continues propagating after cleanup.
+
+In effect, `with` is a reusable `try`/`finally`. Writing `with open(path) as f:` guarantees `f.close()` runs even if the code inside raises. The same pattern releases locks, commits or rolls back database transactions, deletes temporary directories, and switches PyTorch modes on and off (`torch.no_grad()` and `torch.autocast` restore the previous setting on exit). You can write your own context manager as a class with `__enter__` and `__exit__`, or more simply as a generator function decorated with `@contextlib.contextmanager`: code before the `yield` is setup, and code after it (in a `finally`) is teardown.
 | Context manager | `__enter__` does | `__exit__` does |
 |---|---|---|
 | `open(path)` | Opens the file, returns it | Flushes and closes |
@@ -139,8 +186,15 @@ flowchart TB
 Walking in (`__enter__`) switches the room's power on; walking out (`__exit__`) switches it off, whether you leave calmly, run out during a fire alarm (an exception) or check out early (a `return`). You never have to remember to turn the lights off, and that's exactly the guarantee `with open(...)`, locks and `torch.no_grad()` give you.
 :::
 
-### 🟠 Serialization formats
+:::tip[🎯 Interview angle]
+**"What does the `with` statement guarantee, and how would you write your own context manager?"** It guarantees that `__exit__` runs when the block ends, normally or by exception, so resources are always released; it's a reusable `try`/`finally`. Implement `__enter__` and `__exit__` (returning `True` suppresses the exception) or decorate a generator with `@contextlib.contextmanager`, putting the teardown after `yield` in a `finally`.
+:::
 
+## 🟠 6. Serialization Formats
+
+**Serialization** turns objects into text or bytes so they can be saved to disk or sent over a network, and **deserialization** turns them back. The right format depends on who will read the data and whether you trust where it came from. **JSON** is the default for configs, API payloads and LLM structured output: human-readable and safe to parse. **JSONL** puts one JSON object per line, so a dataset can be streamed line by line and appended to, which is why fine-tuning datasets and logs use it. **CSV** is the universal tabular format, with one catch: everything comes back as strings unless a library such as pandas converts types. **YAML** is popular for experiment configs, but must be loaded with `yaml.safe_load`.
+
+**Pickle** can serialize almost any Python object, which is exactly what makes it dangerous: unpickling can execute arbitrary code, so you must **never unpickle data you didn't create**. That's why `torch.load` now defaults to `weights_only=True`, and why model weights are increasingly distributed as **safetensors**, a format that stores only tensors and can't run code. When writing checkpoints, write to a temporary file and then `os.replace` it into place, so a crash mid-write never leaves a half-written file.
 | Format | Module | Human-readable | Safe with untrusted data | Use for |
 |---|---|:---:|:---:|---|
 | JSON | `json` | ✅ | ✅ | Configs, API payloads, LLM structured output |
@@ -150,7 +204,11 @@ Walking in (`__enter__`) switches the room's power on; walking out (`__exit__`) 
 | Pickle | `pickle` | ❌ | ❌ **executes code** | Python objects you created yourself |
 | safetensors | `safetensors` | ❌ | ✅ | Model weights (Hugging Face default) |
 
-## ⚙️ Under the Hood (CPython Internals)
+:::tip[🎯 Interview angle]
+**"Why is pickle unsafe, and what would you use instead?"** Unpickling can execute arbitrary code, so loading an untrusted pickle (or an untrusted `torch.load` with `weights_only=False`) can run an attacker's code. Use JSON or JSONL for data and configs, `yaml.safe_load` for YAML, and safetensors for model weights; keep pickle for objects you created yourself.
+:::
+
+## ⚙️ Going Deeper (CPython Internals)
 
 - **Zero-cost `try`** (3.11+): entering a `try` block costs nothing; the compiler builds an **exception table** that maps bytecode ranges to handlers, consulted only when something is raised. Raising and catching is relatively expensive, so don't use exceptions for the common path of a hot loop.
 - **Raising unwinds frames**: the interpreter walks up the call stack looking for a handler whose type matches (`isinstance(exc, HandlerType)`), running `finally` blocks and `__exit__` methods along the way and building the **traceback** (`exc.__traceback__`).
@@ -684,3 +742,28 @@ A training job on preemptible GPUs wrote `torch.save(state, "last.pt")` every 30
 - **Windows paths and encodings**: always pass `encoding="utf-8"` (the Windows default is often `cp1252`, which garbles Hindi, Chinese or emoji text), use `newline=""` with the `csv` module, and build paths with `pathlib`.
 - **`json` can't serialize everything**: NumPy floats, `datetime`, sets and tensors raise `TypeError: Object of type ... is not JSON serializable`. Convert with `.item()` / `.tolist()`, or pass `default=str`.
 - **`torch.load` and `pickle` on downloaded files**: since PyTorch 2.6 `torch.load` defaults to `weights_only=True`; don't override it for files you didn't create. Prefer `.safetensors`.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **`try`** risky code → **`except`** handle specific errors → **`else`** runs **only if no exception** → **`finally`** runs **no matter what** (even after `return`, `break` or an unhandled exception).
+- 🔴 **Catch specific exceptions**, most specific **first**: handlers are checked top to bottom and the first match wins (`except Exception` before `except ValueError` makes the second unreachable).
+- 🔴 **Never write a bare `except:`** (or `except BaseException`): it also catches **`KeyboardInterrupt`** and **`SystemExit`**, so Ctrl+C can't stop your training job. Catch `Exception` at most.
+- 🔴 **`raise`** alone re-raises the current exception with its traceback; **`raise NewError(...) from e`** chains the cause (`__cause__`); `from None` hides it.
+- 🔴 **Custom exceptions** subclass `Exception` (build a small hierarchy: `AIPipelineError` → `TokenLimitExceededError`) and can carry data as attributes.
+- 🔴 **A `return` in `finally` overrides** the `try`'s return and swallows any in-flight exception. Since **3.14** it triggers `SyntaxWarning: 'return' in a 'finally' block` (PEP 765).
+- 🔴 File modes: **`r`** read (default; `FileNotFoundError`), **`w`** write (**truncates**), **`a`** append, **`x`** create (`FileExistsError` if it exists), **`b`** binary, **`+`** read and write.
+- 🔴 **Always use `with open(...)`**: the file is closed even if an exception is raised. Always pass **`encoding="utf-8"`** for text.
+- 🔴 `read()` → one string, `readline()` → one line, `readlines()` → list of lines; **iterating over the file object** streams line by line (O(1) memory).
+- 🟠 **Context manager protocol**: `__enter__` (its return value is bound by `as`) and `__exit__(exc_type, exc, tb)`; returning `True` from `__exit__` **suppresses** the exception. `@contextlib.contextmanager` builds one from a generator.
+- 🟠 The `as e` name is **deleted at the end of the `except` block** (to avoid reference cycles): using `e` afterwards raises `NameError`.
+- 🟠 **EAFP** ("easier to ask forgiveness than permission": `try`/`except KeyError`) is idiomatic Python; LBYL (`if key in d`) is fine when failure is common.
+- 🟠 Use **`pathlib.Path`** for paths, **`json`** for configs, **JSONL** for datasets (one JSON object per line), and write checkpoints **atomically** (temp file + `os.replace`).
+- 🟡 **Never `pickle.load` untrusted data**: unpickling can execute arbitrary code. `torch.load` defaults to `weights_only=True` since PyTorch 2.6 for this reason; prefer **safetensors** for model weights.
+- 🟡 **`ExceptionGroup` + `except*`** <Since v="3.11" lang="Python" /> handle several concurrent failures (e.g. from `asyncio.TaskGroup`); **`e.add_note(...)`** <Since v="3.11" lang="Python" /> adds context to an exception.
+- 🟡 **`assert` is removed with `python -O`**: never use it for input validation in production code.
+
+:::speak[How do you handle errors in a data pipeline or an LLM service?]
+"First, I only catch exceptions I can actually handle, and I catch them **narrowly**: `json.JSONDecodeError` for a bad record, `FileNotFoundError` for a missing shard, the SDK's `RateLimitError` for a 429. I never use a bare `except:` because it also traps `KeyboardInterrupt` and `SystemExit`. For a bad record in a batch job I **log it with context** and **count it**, and if the skip rate crosses a threshold I fail the job instead of silently training on half the data. When I translate a low-level error into a domain error I use **`raise ConfigError(...) from e`** so the original traceback is preserved. Transient failures like timeouts and rate limits get a retry with exponential backoff; permanent ones like a 400 don't. Cleanup always goes in a **context manager** or `finally`: closing files, releasing GPU memory or locks, and writing checkpoints atomically so a crash can't leave a half-written file."
+:::

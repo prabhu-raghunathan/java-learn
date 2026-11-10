@@ -1395,3 +1395,538 @@ export function LogitsToConfidence() {
     </Widget>
   );
 }
+
+/** The notebook's overlapping word chunker over the real BERT-paper page lengths. */
+export function ChunkPlanner() {
+  const [size, setSize] = useState(180);
+  const [overlap, setOverlap] = useState(40);
+  const [minWords, setMinWords] = useState(30);
+  const [page, setPage] = useState(1);
+  const [maxLen, setMaxLen] = useState(384);
+  const W = M.BERT_PDF_PAGE_WORDS[page - 1];
+  const plan = M.planChunks(W, size, overlap, minWords);
+  const total = M.BERT_PDF_PAGE_WORDS.reduce((n, w) => n + M.planChunks(w, size, overlap, minWords).filter((c) => c.kept).length, 0);
+  const estTokens = Math.round(1.74 * size) + 11;
+  const cols = ['var(--eq-data)', 'var(--eq-pred)', 'var(--eq-param)', 'var(--eq-hyper)'];
+  return (
+    <Widget title="Plan the chunks: size, overlap and the token budget"
+      hint="Page lengths are the real word counts of the 16 BERT-paper pages after extraction. Chunks step by size − overlap words; a final window shorter than the minimum is dropped. Token estimate: 1.74 tokens per word (this PDF's average) plus 11 for the question and special tokens.">
+      <div className={styles.controls}>
+        <Slider label="chunk_size (words)" color="hyper" value={size} min={40} max={400} step={10} onChange={setSize} fmt={(v) => String(v)} />
+        <Slider label="overlap (words)" color="hyper" value={overlap} min={0} max={200} step={5} onChange={setOverlap} fmt={(v) => String(v)} />
+        <Slider label="min_chunk_words" color="hyper" value={minWords} min={0} max={100} step={5} onChange={setMinWords} fmt={(v) => String(v)} />
+        <Slider label="page to draw" color="data" value={page} min={1} max={16} step={1} onChange={setPage} fmt={(v) => `${v} (${M.BERT_PDF_PAGE_WORDS[v - 1]} words)`} />
+        <Slider label="model max_length" color="hyper" value={maxLen} min={128} max={512} step={64} onChange={setMaxLen} fmt={(v) => String(v)} />
+      </div>
+      {overlap >= size && <div className={styles.note}>overlap must be smaller than chunk_size (the notebook raises ValueError).</div>}
+      {overlap < size && (
+        <svg viewBox={`0 0 600 ${30 + 22 * plan.length}`} style={{width: '100%', maxHeight: 260}}>
+          <rect x={10} y={6} width={580} height={14} fill="var(--ifm-color-emphasis-200)" rx={3} />
+          <text x={300} y={17} fontSize={10} textAnchor="middle" fill="var(--ifm-font-color-base)">page {page}: words 0 to {W}</text>
+          {plan.map((c, k) => (
+            <g key={k}>
+              <rect x={10 + 580 * c.start / W} y={28 + 22 * k} width={580 * (c.end - c.start) / W} height={16} rx={3}
+                fill={cols[k % 4]} opacity={c.kept ? 0.55 : 0.15} stroke={cols[k % 4]} />
+              <text x={14 + 580 * c.start / W} y={40 + 22 * k} fontSize={10} fill="var(--ifm-font-color-base)">
+                {`chunk ${k}: ${c.start}–${c.end} (${c.end - c.start} words)${c.kept ? '' : ' dropped'}`}
+              </text>
+            </g>
+          ))}
+        </svg>
+      )}
+      <Readout items={[
+        ['chunks on this page', overlap < size ? String(plan.filter((c) => c.kept).length) : '–', 'data'],
+        ['chunks in the whole PDF', overlap < size ? String(total) : '–', 'data'],
+        ['words read twice per boundary', String(overlap), 'hyper'],
+        ['≈ tokens per question + chunk', `${estTokens} ${estTokens > maxLen ? `> ${maxLen}: the end of each chunk is truncated` : `≤ ${maxLen}: fits`}`, estTokens > maxLen ? 'loss' : 'pred'],
+      ]} />
+      <div className={styles.note}>Defaults are the notebook's: 180 / 40 / 30 give 78 chunks. Every extra chunk is one more forward pass per question in the brute-force system.</div>
+    </Widget>
+  );
+}
+
+/** Rank the real per-chunk answers for eight questions three ways, then apply the filter and threshold. */
+export function DocQaRanker() {
+  const url = useBaseUrl('/data/deep-learning/docqa_candidates.json');
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [qi, setQi] = useState('0');
+  const [key, setKey] = useState('ns');
+  const [filter, setFilter] = useState(true);
+  const [thr, setThr] = useState(5.0);
+  useEffect(() => {
+    let alive = true;
+    fetch(url).then((r) => r.json()).then((d) => alive && setData(d)).catch((e) => alive && setErr(String(e)));
+    return () => { alive = false; };
+  }, [url]);
+  const title = 'Brute-force document QnA: rank, filter, threshold';
+  if (err) return <Widget title={title}><div className={styles.note}>Could not load the candidates ({err}).</div></Widget>;
+  if (!data) return <Widget title={title}><div className={styles.note}>Loading 8 × 78 real candidate answers…</div></Widget>;
+  const q = data.questions[Number(qi)];
+  const range = {ns: [0, 25, 0.5], m: [0, 30, 0.5], pr: [0, 1, 0.01]}[key];
+  const t = Math.min(Math.max(thr, range[0]), range[1]);
+  const res = M.rankCandidates(q.rows, {key, filter, threshold: t});
+  const keyName = {ns: 'span score s_i + e_j (notebook)', m: 'margin over the [CLS] score', pr: 'probability among valid spans'}[key];
+  return (
+    <Widget title={title}
+      hint="Every row is a real result: distilbert-base-cased-distilled-squad run on each of the 78 chunks of the BERT paper. The notebook ranks by raw span score; the other two keys come from the context-only span search on this page. Change the key and watch rank 1 move: none of the three scores is calibrated across chunks.">
+      <div className={styles.controls}>
+        <Select label="question" value={qi} onChange={setQi} options={data.questions.map((x, i) => [String(i), x.q])} />
+        <Select label="rank by" value={key} onChange={(v) => { setKey(v); setThr(v === 'pr' ? 0.5 : 5.0); }}
+          options={[['ns', 'span score (notebook)'], ['m', 'margin over [CLS] score'], ['pr', 'span probability']]} />
+        <label className={styles.select}><span>quality filter</span>
+          <input type="checkbox" checked={filter} onChange={(e) => setFilter(e.target.checked)} /></label>
+        <Slider label="threshold on the rank-1 score" color="hyper" value={t} min={range[0]} max={range[1]} step={range[2]} onChange={setThr} fmt={(v) => v.toFixed(2)} />
+      </div>
+      <div className={styles.scroll}>
+        <table className={styles.table}>
+          <thead><tr><th>rank</th><th>answer</th><th>{key === 'ns' ? 'span score' : key === 'm' ? 'margin' : 'span prob.'}</th><th>notebook conf.</th><th>page</th><th>chunk</th></tr></thead>
+          <tbody>
+            {res.top.map((r, i) => (
+              <tr key={r.c} className={i === 0 ? styles.hlRow : undefined}>
+                <td>{i + 1}</td><td>{r.answer || <em>(empty)</em>}</td><td>{key === 'pr' ? r.score.toFixed(4) : r.score.toFixed(3)}</td>
+                <td>{r.nc.toFixed(4)}</td><td>{r.p}</td><td>{r.c}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Readout items={[
+        ['ranking key', keyName, 'pred'],
+        ['system output', res.answered ? `"${res.best.answer}" (page ${res.best.p})` : 'No reliable answer found in the document.', res.answered ? 'data' : 'loss'],
+      ]} />
+      <div className={styles.note}>Try "Which city was BERT invented in?": the filtered top answer is "Transformers" with a span score of 6.34 (above 5.0) and a notebook confidence of 0.9964. A threshold cannot tell a confident wrong span from a right one.</div>
+    </Widget>
+  );
+}
+
+/** Retriever + reader on the real 12-question evaluation: choose chunking, k and α, see what gets read and picked. */
+export function RetrieverReaderLab() {
+  const url = useBaseUrl('/data/deep-learning/rr_eval.json');
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [qi, setQi] = useState('3');
+  const [variant, setVariant] = useState('notebook');
+  const [k, setK] = useState(5);
+  const [alpha, setAlpha] = useState(0.4);
+  useEffect(() => {
+    let alive = true;
+    fetch(url).then((r) => r.json()).then((d) => alive && setData(d)).catch((e) => alive && setErr(String(e)));
+    return () => { alive = false; };
+  }, [url]);
+  const title = 'Retriever + reader: what k and α actually do';
+  if (err) return <Widget title={title}><div className={styles.note}>Could not load the evaluation ({err}).</div></Widget>;
+  if (!data) return <Widget title={title}><div className={styles.note}>Loading the 12-question evaluation…</div></Widget>;
+  const V = data.variants[variant];
+  const Q = V.q[Number(qi)];
+  const res = M.combineCandidates(Q.cands, k, alpha);
+  const total = V.q.filter((q) => { const b = M.combineCandidates(q.cands, k, alpha).best; return b && b.ok; }).length;
+  const recall = V.q.filter((q) => q.goldRank !== null && q.goldRank <= k).length;
+  const bf = data.bruteforce.filter((b) => b.ok).length;
+  return (
+    <Widget title={title}
+      hint="Real runs: all-MiniLM-L6-v2 retrieves, distilbert-base-cased-distilled-squad reads each retrieved chunk, and the notebook's rule picks the answer: min-max both scores over the valid candidates, final = α × retrieval + (1 − α) × reader. Green rows contain the right answer. Accuracy and recall are over all 12 questions for the current settings.">
+      <div className={styles.controls}>
+        <Select label="question" value={qi} onChange={setQi} options={data.questions.map((q, i) => [String(i), q])} />
+        <Select label="chunks" value={variant} onChange={setVariant}
+          options={[['notebook', `notebook: 180 words, overlap 40 (${data.variants.notebook.n} chunks)`], ['small', `120 words, overlap 30, min 40 (${data.variants.small.n} chunks)`]]} />
+        <Slider label="top-k chunks read" color="hyper" value={k} min={1} max={10} step={1} onChange={setK} fmt={(v) => String(v)} />
+        <Slider label="α (weight on retrieval)" color="hyper" value={alpha} min={0} max={1} step={0.05} onChange={setAlpha} fmt={(v) => v.toFixed(2)} />
+      </div>
+      <div className={styles.scroll}>
+        <table className={styles.table}>
+          <thead><tr><th>ret. rank</th><th>chunk (page)</th><th>cosine</th><th>reader span</th><th>span score</th><th>norm. ret.</th><th>norm. reader</th><th>final</th></tr></thead>
+          <tbody>
+            {Q.cands.slice(0, k).map((c) => {
+              const r = res.rows.find((x) => x.r === c.r);
+              const isBest = res.best && res.best.r === c.r;
+              return (
+                <tr key={c.r} className={isBest ? styles.hlRow : undefined} style={c.ok ? {background: 'rgba(80, 160, 70, 0.18)'} : undefined}>
+                  <td>{c.r}</td><td>{c.c} ({c.p}){c.w < 60 ? `, ${c.w} words` : ''}</td><td>{c.cos.toFixed(4)}</td>
+                  <td>{c.a || <em>(none)</em>}</td><td>{c.s === null ? '–' : c.s.toFixed(2)}</td>
+                  <td>{r ? r.nr.toFixed(3) : '–'}</td><td>{r ? r.ns.toFixed(3) : '–'}</td><td>{r ? r.f.toFixed(3) : '–'}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <Readout items={[
+        ['picked answer', res.best ? `"${res.best.a}" ${res.best.ok ? '✓ right' : '✗ wrong'}` : 'none', res.best && res.best.ok ? 'data' : 'loss'],
+        ['first chunk containing the answer', Q.goldRank ? `retrieval rank ${Q.goldRank}` : 'not in the top 10', 'pred'],
+        ['recall@k over 12 questions', `${recall} / 12`, 'pred'],
+        ['answers right over 12 questions', `${total} / 12 (brute force over all chunks: ${bf} / 12)`, 'hyper'],
+      ]} />
+      <div className={styles.note}>Try α = 0 and α = 1 at k = 5: ranking by retrieval alone (α = 1) is right only 3 times, because the most similar chunk is often not the one that answers. Raising k raises recall but hands the reader more distractors.</div>
+    </Widget>
+  );
+}
+
+/** Cosine vs dot product vs L2 distance: identical rankings for unit vectors, different ones when lengths differ. */
+export function CosineVsL2() {
+  const [aDeg, setADeg] = useState(20);
+  const [aLen, setALen] = useState(3);
+  const [bDeg, setBDeg] = useState(40);
+  const [bLen, setBLen] = useState(1);
+  const [unit, setUnit] = useState(false);
+  const q = M.vec2(0);
+  const A = M.vec2(aDeg, unit ? 1 : aLen), B = M.vec2(bDeg, unit ? 1 : bLen);
+  const ma = M.vecMetrics(q, A), mb = M.vecMetrics(q, B);
+  const win = (x, y, higher) => ((higher ? x > y : x < y) ? 'A' : 'B');
+  const S = 50, ox = 200, oy = 190;
+  const pt = (v) => [ox + S * v[0], oy - S * v[1]];
+  return (
+    <Widget title="Cosine, dot product and L2: when do they agree?"
+      hint="Query q points along the x-axis with length 1. Two documents A and B have an angle to q and a length. With unit vectors (tick the box) all three metrics rank the same way, because squared L2 = 2 − 2·cosine. all-MiniLM-L6-v2 already outputs unit vectors, so the notebook's L2 and inner-product indexes return the same chunks.">
+      <div className={styles.controls}>
+        <Slider label="angle of A (degrees)" color="data" value={aDeg} min={0} max={180} step={1} onChange={setADeg} fmt={(v) => String(v)} />
+        <Slider label="length of A" color="data" value={aLen} min={0.2} max={3.5} step={0.1} onChange={setALen} fmt={(v) => v.toFixed(1)} />
+        <Slider label="angle of B (degrees)" color="pred" value={bDeg} min={0} max={180} step={1} onChange={setBDeg} fmt={(v) => String(v)} />
+        <Slider label="length of B" color="pred" value={bLen} min={0.2} max={3.5} step={0.1} onChange={setBLen} fmt={(v) => v.toFixed(1)} />
+        <label className={styles.select}><span>normalize to unit length</span>
+          <input type="checkbox" checked={unit} onChange={(e) => setUnit(e.target.checked)} /></label>
+      </div>
+      <svg viewBox="0 0 400 210" style={{width: '100%', maxHeight: 230}}>
+        <line x1={0} y1={oy} x2={400} y2={oy} stroke="var(--ifm-color-emphasis-300)" />
+        <circle cx={ox} cy={oy} r={S} fill="none" stroke="var(--ifm-color-emphasis-300)" strokeDasharray="3 3" />
+        {[[q, 'var(--eq-hyper)', 'q'], [A, 'var(--eq-data)', 'A'], [B, 'var(--eq-pred)', 'B']].map(([v, c, n]) => {
+          const [x, y] = pt(v);
+          return <g key={n}><line x1={ox} y1={oy} x2={x} y2={y} stroke={c} strokeWidth={2.5} /><circle cx={x} cy={y} r={4} fill={c} /><text x={x + 5} y={y - 5} fontSize={12} fill={c}>{n}</text></g>;
+        })}
+      </svg>
+      <div className={styles.scroll}>
+        <table className={styles.table}>
+          <thead><tr><th>metric</th><th>q vs A</th><th>q vs B</th><th>closer</th></tr></thead>
+          <tbody>
+            <tr><td>cosine (higher = closer)</td><td>{ma.cos.toFixed(4)}</td><td>{mb.cos.toFixed(4)}</td><td>{win(ma.cos, mb.cos, true)}</td></tr>
+            <tr><td>dot product / inner product (higher)</td><td>{ma.dot.toFixed(4)}</td><td>{mb.dot.toFixed(4)}</td><td>{win(ma.dot, mb.dot, true)}</td></tr>
+            <tr><td>squared L2 distance (lower)</td><td>{ma.l2sq.toFixed(4)}</td><td>{mb.l2sq.toFixed(4)}</td><td>{win(ma.l2sq, mb.l2sq, false)}</td></tr>
+            <tr><td>2 − 2 · cosine</td><td>{(2 - 2 * ma.cos).toFixed(4)}</td><td>{(2 - 2 * mb.cos).toFixed(4)}</td><td>{win(2 - 2 * ma.cos, 2 - 2 * mb.cos, false)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div className={styles.note}>{unit ? 'Unit vectors: squared L2 equals 2 − 2·cosine exactly, so every metric picks the same document.' : 'Unnormalized: the long vector A wins on cosine and dot product but loses on L2 distance, because L2 also measures length. Tick the box to see them agree.'}</div>
+    </Widget>
+  );
+}
+
+/** The whole RAG system's decision on 19 real questions: change the route and the two refusal thresholds. */
+export function RagSystemLab() {
+  const url = useBaseUrl('/data/deep-learning/rag_eval.json');
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [qi, setQi] = useState('4');
+  const [mode, setMode] = useState('auto');
+  const [minCos, setMinCos] = useState(0.2);
+  const [minSupport, setMinSupport] = useState(0.5);
+  useEffect(() => {
+    let alive = true;
+    fetch(url).then((r) => r.json()).then((d) => alive && setData(d)).catch((e) => alive && setErr(String(e)));
+    return () => { alive = false; };
+  }, [url]);
+  const title = 'The whole RAG system: route, answer or refuse';
+  if (err) return <Widget title={title}><div className={styles.note}>Could not load the runs ({err}).</div></Widget>;
+  if (!data) return <Widget title={title}><div className={styles.note}>Loading 19 real question runs…</div></Widget>;
+  const Q = data.questions[Number(qi)];
+  const opts = {mode, minCos, minSupport};
+  const d = M.ragDecide(Q, opts);
+  const facts = data.questions.filter((q) => q.type === 'fact');
+  const right = facts.filter((q) => M.ragDecide(q, opts).ok).length;
+  const refusedFacts = facts.filter((q) => M.ragDecide(q, opts).route === 'refused').length;
+  const outside = data.questions.filter((q) => q.type === 'outside');
+  const outsideRefused = outside.filter((q) => M.ragDecide(q, opts).route === 'refused').length;
+  const autoRoute = M.ragRoute(Q.q);
+  const verdict = d.route === 'refused' ? (Q.type === 'outside' ? '✓ refused' : 'refused') : Q.type === 'outside' ? '✗ answered a question the paper cannot answer' : (d.ok === true ? '✓ right' : d.ok === false ? '✗ wrong' : 'explanation: judge it yourself');
+  return (
+    <Widget title={title}
+      hint="Every answer here was produced by the page's pipeline on the BERT paper (hybrid search, DistilBERT-SQuAD extractive reader, FLAN-T5-base with sentence-selected prompts). The widget only replays the final decision: refuse if the best cosine is too low, pick a route, and for generated answers refuse if too few answer words appear in the context.">
+      <div className={styles.controls}>
+        <Select label="question" value={qi} onChange={setQi}
+          options={data.questions.map((q, i) => [String(i), `${q.type === 'fact' ? 'fact' : q.type === 'explain' ? 'explain' : 'outside'} · ${q.q}`])} />
+        <Select label="route" value={mode} onChange={setMode}
+          options={[['auto', `auto (router says: ${autoRoute})`], ['extractive', 'always extractive reader'], ['generative', 'always FLAN-T5 generator']]} />
+        <Slider label="refuse if best cosine below" color="hyper" value={minCos} min={0} max={0.6} step={0.01} onChange={setMinCos} fmt={(v) => v.toFixed(2)} />
+        <Slider label="refuse generated answer if support below" color="hyper" value={minSupport} min={0} max={1} step={0.05} onChange={setMinSupport} fmt={(v) => v.toFixed(2)} />
+      </div>
+      <div className={styles.scroll}>
+        <table className={styles.table}>
+          <thead><tr><th>signal</th><th>value</th></tr></thead>
+          <tbody>
+            <tr><td>best cosine (is the document about this at all?)</td><td>{Q.topCos.toFixed(4)}</td></tr>
+            <tr><td>extractive reader's span</td><td>{Q.ext} <em>(score {Q.extScore})</em></td></tr>
+            <tr><td>FLAN-T5's answer</td><td>{Q.gen}</td></tr>
+            <tr><td>support: share of its content words found in the context</td><td>{Q.genSupport.toFixed(2)}</td></tr>
+            {Q.type === 'fact' && <tr><td>answer chunk in the top 5 / sentence in the prompt</td><td>{Q.goldTop5 ? 'yes' : 'no'} / {Q.goldPrompt ? 'yes' : 'no'}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <Readout items={[
+        ['system says', d.answer, d.route === 'refused' ? 'loss' : 'data'],
+        ['path', `${d.route} · ${d.why}`, 'pred'],
+        ['verdict', verdict, d.ok ? 'data' : 'loss'],
+        ['12 factual questions right', `${right} / 12 (${refusedFacts} refused)`, 'hyper'],
+        ['out-of-document questions refused', `${outsideRefused} / ${outside.length}`, 'hyper'],
+      ]} />
+      <div className={styles.note}>Try "What GPU was used to train BERT?" (the paper trained on TPUs and names no GPU): the extractive route answers BooksCorpus with confidence, while the generator says the document does not contain it. Then force every question to the generator: still 5 of 12 facts right, but different ones.</div>
+    </Widget>
+  );
+}
+
+/** The notebook's balanced prompt builder: how much of each retrieved chunk actually reaches FLAN-T5. */
+export function PromptBudgetLab() {
+  const [maxInput, setMaxInput] = useState(512);
+  const [maxContext, setMaxContext] = useState(360);
+  const [perPassage, setPerPassage] = useState(100);
+  const chunkTokens = [459, 340, 384, 368, 394];
+  const ids = [6, 9, 39, 10, 7];
+  const b = M.balancedBudget(chunkTokens, {maxInput, maxContext, perPassage});
+  const W = 400, scale = W / 522;
+  return (
+    <Widget title="Token budget: how much of each chunk the generator sees"
+      hint="The notebook's build_balanced_token_aware_rag_prompt: 67 instruction tokens, a 2-token answer cue and a 12-token safety margin come first; each retrieved passage is then cut to a per-passage cap. Chunk sizes are the real FLAN-T5 token counts of the top-5 chunks for 'What is the full form of BERT?'. Counts are approximate: trimming and re-encoding can move a passage by a few tokens.">
+      <div className={styles.controls}>
+        <Slider label="model max input tokens" color="hyper" value={maxInput} min={256} max={1024} step={32} onChange={setMaxInput} fmt={(v) => String(v)} />
+        <Slider label="max context tokens" color="hyper" value={maxContext} min={60} max={900} step={10} onChange={setMaxContext} fmt={(v) => String(v)} />
+        <Slider label="cap per passage" color="hyper" value={perPassage} min={20} max={500} step={10} onChange={setPerPassage} fmt={(v) => String(v)} />
+      </div>
+      <svg viewBox={`0 0 600 ${40 + 34 * chunkTokens.length}`} style={{width: '100%', maxHeight: 260}}>
+        {chunkTokens.map((t, i) => {
+          const p = b.passages.find((x) => x.i === i);
+          const kept = p ? p.kept : 0;
+          return (
+            <g key={i}>
+              <text x={0} y={30 + 34 * i} fontSize={11} fill="var(--ifm-font-color-base)">{`chunk ${ids[i]}`}</text>
+              <rect x={60} y={18 + 34 * i} width={t * scale} height={18} rx={3} fill="var(--ifm-color-emphasis-200)" />
+              <rect x={60} y={18 + 34 * i} width={kept * scale} height={18} rx={3} fill="var(--eq-data)" opacity={0.75} />
+              <text x={66 + t * scale} y={31 + 34 * i} fontSize={10} fill="var(--ifm-font-color-base)">{p ? `${kept} of ${t} kept (${Math.round((100 * kept) / t)}%)` : `0 of ${t}: no room`}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <Readout items={[
+        ['room for context', `min(${maxInput} − 67 − 2 − 12, ${maxContext}) = ${b.available} tokens`, 'hyper'],
+        ['passages that fit', `${b.passages.length} of ${chunkTokens.length}`, 'data'],
+        ['prompt tokens', `${b.total} ${b.total > maxInput ? '> limit: the end would be cut' : `≤ ${maxInput}`}`, b.total > maxInput ? 'loss' : 'pred'],
+        ['retrieved tokens never shown to the model', `${chunkTokens.reduce((s, t) => s + t, 0) - b.passages.reduce((s, p) => s + p.kept, 0)} of ${chunkTokens.reduce((s, t) => s + t, 0)}`, 'loss'],
+      ]} />
+      <div className={styles.note}>With the notebook's settings (512 / 360 / 100), 3 passages fit and each keeps only its first 100 tokens: about a quarter of each chunk. If the answer sentence sits later in the chunk, the generator never sees it, which is why this page picks the most relevant sentences instead of the first tokens.</div>
+    </Widget>
+  );
+}
+
+/** IoU of two boxes you move, then non-maximum suppression on 8 candidate boxes (same rule as torchvision.ops.nms). */
+export function BoxNmsLab() {
+  const [dx, setDx] = useState(20);
+  const [dy, setDy] = useState(20);
+  const [size, setSize] = useState(40);
+  const [iouThr, setIouThr] = useState(0.5);
+  const [scoreThr, setScoreThr] = useState(0);
+  const A = [10, 10, 50, 50];
+  const B = [10 + dx, 10 + dy, 10 + dx + size, 10 + dy + size];
+  const iou = M.boxIou(A, B);
+  const iw = Math.max(0, Math.min(A[2], B[2]) - Math.max(A[0], B[0])), ih = Math.max(0, Math.min(A[3], B[3]) - Math.max(A[1], B[1]));
+  const boxes = [[10, 20, 46, 80], [12, 18, 48, 78], [8, 24, 44, 84], [14, 22, 50, 82], [56, 30, 92, 86], [58, 28, 94, 84], [54, 34, 90, 88], [30, 40, 70, 70]];
+  const scores = [0.95, 0.9, 0.8, 0.6, 0.92, 0.85, 0.55, 0.4];
+  const keep = M.nmsKeep(boxes, scores, iouThr, scoreThr);
+  const s = 2.2;
+  return (
+    <Widget title="IoU and non-maximum suppression"
+      hint="Left: box A is fixed at (10, 10, 50, 50); move and resize box B to see how IoU = overlap / union reacts. Right: 8 candidate boxes a detector might output for two cats. NMS keeps the best-scoring box, deletes every box whose IoU with it is above the threshold, and repeats; the score threshold drops weak boxes first.">
+      <div className={styles.controls}>
+        <Slider label="B shift right" color="data" value={dx} min={-40} max={60} step={1} onChange={setDx} fmt={(v) => String(v)} />
+        <Slider label="B shift down" color="data" value={dy} min={-40} max={60} step={1} onChange={setDy} fmt={(v) => String(v)} />
+        <Slider label="B size" color="data" value={size} min={10} max={80} step={1} onChange={setSize} fmt={(v) => String(v)} />
+        <Slider label="NMS IoU threshold" color="hyper" value={iouThr} min={0.1} max={0.95} step={0.05} onChange={setIouThr} fmt={(v) => v.toFixed(2)} />
+        <Slider label="score threshold" color="hyper" value={scoreThr} min={0} max={0.95} step={0.05} onChange={setScoreThr} fmt={(v) => v.toFixed(2)} />
+      </div>
+      <svg viewBox="0 0 520 250" style={{width: '100%', maxHeight: 280}}>
+        <g transform="translate(15,15)">
+          <rect x={0} y={0} width={220} height={220} fill="none" stroke="var(--ifm-color-emphasis-300)" />
+          <g transform="translate(60,60) scale(1.1)">
+            <rect x={A[0]} y={A[1]} width={40} height={40} fill="var(--eq-data)" fillOpacity={0.18} stroke="var(--eq-data)" strokeWidth={1.5} />
+            <rect x={B[0]} y={B[1]} width={size} height={size} fill="var(--eq-pred)" fillOpacity={0.18} stroke="var(--eq-pred)" strokeWidth={1.5} />
+            {iw * ih > 0 && <rect x={Math.max(A[0], B[0])} y={Math.max(A[1], B[1])} width={iw} height={ih} fill="var(--eq-hyper)" fillOpacity={0.5} />}
+          </g>
+          <text x={6} y={14} fontSize={11} fill="var(--ifm-font-color-base)">A (blue), B (green), overlap (shaded)</text>
+        </g>
+        <g transform="translate(270,15)">
+          <rect x={0} y={0} width={220} height={220} fill="none" stroke="var(--ifm-color-emphasis-300)" />
+          {boxes.map((b, i) => {
+            const k = keep.includes(i);
+            return (
+              <g key={i}>
+                <rect x={b[0] * s} y={b[1] * s} width={(b[2] - b[0]) * s} height={(b[3] - b[1]) * s} fill="none"
+                  stroke={k ? 'var(--eq-pred)' : 'var(--eq-loss)'} strokeOpacity={k ? 1 : 0.35} strokeWidth={k ? 2.5 : 1} strokeDasharray={k ? undefined : '3 3'} />
+                {k && <text x={b[0] * s + 3} y={b[1] * s + 12} fontSize={10} fill="var(--eq-pred)">{`box ${i} · ${scores[i].toFixed(2)}`}</text>}
+              </g>
+            );
+          })}
+        </g>
+      </svg>
+      <Readout items={[
+        ['IoU(A, B)', `${(iw * ih).toFixed(0)} / ${(1600 + size * size - iw * ih).toFixed(0)} = ${iou.toFixed(3)}`, 'hyper'],
+        ['counts as a match at 0.5?', iou >= 0.5 ? 'yes' : 'no', iou >= 0.5 ? 'data' : 'loss'],
+        ['boxes kept by NMS', keep.length ? keep.join(', ') : 'none', 'pred'],
+        ['boxes removed', `${8 - keep.length} of 8`, 'loss'],
+      ]} />
+      <div className={styles.note}>At the default 0.5, NMS keeps boxes 0, 4 and 7. Box 7 (score 0.40) barely overlaps anything, so NMS cannot remove it; raise the score threshold above 0.40 to drop it. At 0.9, nothing overlaps enough and all 8 boxes survive.</div>
+    </Widget>
+  );
+}
+
+/** Autoencoder anomaly detection on real reconstruction errors: choose the alarm threshold. */
+export function AnomalyThresholdLab() {
+  const url = useBaseUrl('/data/deep-learning/ae_anomaly.json');
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [thr, setThr] = useState(0.031);
+  useEffect(() => {
+    let alive = true;
+    fetch(url).then((r) => r.json()).then((d) => alive && setData(d)).catch((e) => alive && setErr(String(e)));
+    return () => { alive = false; };
+  }, [url]);
+  const title = 'Anomaly detection with reconstruction error';
+  if (err) return <Widget title={title}><div className={styles.note}>Could not load the errors ({err}).</div></Widget>;
+  if (!data) return <Widget title={title}><div className={styles.note}>Loading 450 reconstruction errors…</div></Widget>;
+  const st = M.thresholdStats(data.err, data.label, thr);
+  const maxE = 0.09, nb = 36, W = 500, H = 150;
+  const bins = (lab) => {
+    const c = new Array(nb).fill(0);
+    data.err.forEach((e, i) => { if (data.label[i] === lab) c[Math.min(nb - 1, Math.floor((e / maxE) * nb))]++; });
+    const tot = c.reduce((a, b) => a + b, 0);
+    return c.map((v) => v / tot);
+  };
+  const n0 = bins(0), n1 = bins(1), top = Math.max(...n0, ...n1);
+  const bw = W / nb, X = (e) => (e / maxE) * W;
+  return (
+    <Widget title={title}
+      hint="An 8-number autoencoder was trained only on digits 0 to 8. On 450 test digits, each image's reconstruction error (mean squared error per pixel) is its anomaly score; digit 9 was never seen in training. Move the alarm threshold: everything to the right of it is flagged.">
+      <div className={styles.controls}>
+        <Slider label="alarm threshold (MSE)" color="hyper" value={thr} min={0.005} max={0.08} step={0.001} onChange={setThr} fmt={(v) => v.toFixed(3)} />
+      </div>
+      <svg viewBox={`0 0 ${W} ${H + 24}`} style={{width: '100%', maxHeight: 220}}>
+        {n0.map((v, i) => <rect key={`a${i}`} x={i * bw} y={H - (v / top) * H} width={bw - 1} height={(v / top) * H} fill="var(--eq-data)" fillOpacity={0.55} />)}
+        {n1.map((v, i) => <rect key={`b${i}`} x={i * bw + bw * 0.25} y={H - (v / top) * H} width={bw * 0.5} height={(v / top) * H} fill="var(--eq-loss)" fillOpacity={0.8} />)}
+        <line x1={X(thr)} y1={0} x2={X(thr)} y2={H} stroke="var(--eq-hyper)" strokeWidth={2} strokeDasharray="4 3" />
+        <line x1={0} y1={H} x2={W} y2={H} stroke="var(--ifm-color-emphasis-400)" />
+        <text x={2} y={H + 16} fontSize={11} fill="var(--ifm-font-color-base)">0</text>
+        <text x={W - 2} y={H + 16} fontSize={11} textAnchor="end" fill="var(--ifm-font-color-base)">0.09</text>
+        <text x={W / 2} y={H + 16} fontSize={11} textAnchor="middle" fill="var(--ifm-font-color-base)">reconstruction error · blue: digits 0 to 8 (405) · red: digit 9 (45)</text>
+      </svg>
+      <Readout items={[
+        ['9s caught (recall)', `${st.tp} of ${st.pos} = ${(100 * st.recall).toFixed(1)}%`, 'data'],
+        ['normal digits flagged (false alarms)', `${st.fp} of ${st.neg} = ${(100 * st.falseAlarm).toFixed(1)}%`, 'loss'],
+        ['precision of an alarm', st.tp + st.fp ? `${(100 * st.precision).toFixed(1)}%` : 'no alarms', 'pred'],
+        ['ROC AUC (threshold-free)', data.auc.toFixed(4), 'hyper'],
+      ]} />
+      <div className={styles.note}>At 0.031 (the 95th percentile of normal errors) the alarm catches 17 of 45 nines while flagging 21 normal digits. Many 9s are rebuilt almost as well as normal digits (the two histograms overlap), so a low false-alarm rate costs recall: the threshold is a business choice, not a model property.</div>
+    </Widget>
+  );
+}
+
+/* =================================================================================== */
+/* AI Engineering: LLM APIs and prompt engineering                                     */
+/* =================================================================================== */
+
+export function SamplingFilterPlayground({preset = 'open'}) {
+  const [which, setWhich] = useState(preset);
+  const [T, setT] = useState(1);
+  const [topK, setTopK] = useState(0);
+  const [topP, setTopP] = useState(0.9);
+  const [minP, setMinP] = useState(0);
+  const d = M.LLM_NEXT_TOKEN[which];
+  const r = M.samplingFilter(d.logits, {T, topK, topP, minP});
+  const names = d.tokens.map((t) => JSON.stringify(t).slice(1, -1));
+  const colors = r.keep.map((k, i) => (!k ? 'var(--ifm-color-emphasis-300)' : i === 0 ? 'var(--w-hl)' : 'var(--w-bar)'));
+  return (
+    <Widget title="Sampling filters on real next-token logits (Qwen2.5-0.5B-Instruct, top 10 candidates)"
+      hint="Hugging Face order: divide by T, then top-k, then top-p, then min-p; the survivors are renormalised and one is drawn at random. Grey bars can never be chosen. Probabilities are over these 10 candidates only, so they differ from full-vocabulary numbers.">
+      <div className={styles.controls}>
+        <Select label="prompt" value={which} onChange={setWhich}
+          options={[['open', 'open: name a coffee shop in Pune'], ['closed', 'closed: is Pune in Maharashtra? yes/no']]} />
+        <Slider label="temperature T" color="hyper" value={T} min={0.1} max={3} step={0.05} onChange={setT} fmt={f2} />
+        <Slider label="top-k (0 = off)" color="hyper" value={topK} min={0} max={10} step={1} onChange={setTopK} fmt={(v) => String(v)} />
+        <Slider label="top-p (1 = off)" color="hyper" value={topP} min={0.05} max={1} step={0.01} onChange={setTopP} fmt={f2} />
+        <Slider label="min-p (0 = off)" color="hyper" value={minP} min={0} max={0.5} step={0.01} onChange={setMinP} fmt={f2} />
+      </div>
+      <Bars values={r.probs} labels={names} max={1} colors={colors} fmt={(v) => (v > 0 ? v.toFixed(3) : '')} />
+      <Readout items={[
+        ['tokens kept', `${r.kept} of 10`, 'pred'],
+        ['top token before filtering', `${names[0]}: ${f3(r.raw[0])}`],
+        ['top token after filtering', f3(Math.max(...r.probs)), 'pred'],
+      ]} />
+    </Widget>
+  );
+}
+
+export function LlmCostLatencyCalculator() {
+  const [nIn, setIn] = useState(1500);
+  const [nOut, setOut] = useState(300);
+  const [nCached, setCached] = useState(0);
+  const [inRate, setInRate] = useState(1);
+  const [outRate, setOutRate] = useState(4);
+  const [cachedRate, setCachedRate] = useState(0.1);
+  const [perDay, setPerDay] = useState(10000);
+  const [ttft, setTtft] = useState(0.213);
+  const [tpot, setTpot] = useState(0.0824);
+  const c = Math.min(nCached, nIn);
+  const cost = M.llmRequestCost({nIn, nOut, nCached: c, inRate, outRate, cachedRate});
+  const lat = M.llmLatency(ttft, tpot, nOut);
+  const outShare = (nOut * outRate) / ((nIn - c) * inRate + c * cachedRate + nOut * outRate);
+  const usd = (v) => `$${v < 0.01 ? v.toFixed(5) : v.toFixed(2)}`;
+  return (
+    <Widget title="LLM request cost and latency (illustrative rates, not a price list)"
+      hint="Cost = (uncached input × input rate + cached input × cached rate + output × output rate) / 1M. Latency without streaming = TTFT + TPOT × (n − 1). Defaults: the page's worked example and the TTFT/TPOT measured for Qwen2.5-0.5B on CPU.">
+      <div className={styles.controls}>
+        <Slider label="input tokens" color="data" value={nIn} min={0} max={20000} step={50} onChange={setIn} fmt={(v) => v.toLocaleString('en-IN')} />
+        <Slider label="cached input tokens" color="data" value={nCached} min={0} max={20000} step={50} onChange={setCached} fmt={(v) => Math.min(v, nIn).toLocaleString('en-IN')} />
+        <Slider label="output tokens n" color="pred" value={nOut} min={1} max={4000} step={1} onChange={setOut} fmt={(v) => v.toLocaleString('en-IN')} />
+        <Slider label="input $ / 1M" color="hyper" value={inRate} min={0.05} max={15} step={0.05} onChange={setInRate} fmt={f2} />
+        <Slider label="cached input $ / 1M" color="hyper" value={cachedRate} min={0} max={15} step={0.01} onChange={setCachedRate} fmt={f2} />
+        <Slider label="output $ / 1M" color="hyper" value={outRate} min={0.05} max={60} step={0.05} onChange={setOutRate} fmt={f2} />
+        <Slider label="requests per day" color="data" value={perDay} min={100} max={1000000} step={100} onChange={setPerDay} fmt={(v) => v.toLocaleString('en-IN')} />
+        <Slider label="TTFT (s)" color="hyper" value={ttft} min={0.05} max={10} step={0.001} onChange={setTtft} fmt={(v) => v.toFixed(3)} />
+        <Slider label="TPOT (s per token)" color="hyper" value={tpot} min={0.005} max={0.2} step={0.0001} onChange={setTpot} fmt={(v) => v.toFixed(4)} />
+      </div>
+      <Readout items={[
+        ['cost per request', usd(cost), 'loss'],
+        ['cost per day', usd(cost * perDay), 'loss'],
+        ['cost per 30 days', usd(cost * perDay * 30), 'loss'],
+        ['output share of the bill', `${(100 * outShare).toFixed(1)}%`],
+        ['time to first token', `${ttft.toFixed(3)} s`, 'pred'],
+        ['full answer (no streaming)', `${lat.toFixed(2)} s`, 'pred'],
+      ]} />
+    </Widget>
+  );
+}
+
+export function AgentLoopBudget() {
+  const [p, setP] = useState(0.95);
+  const [K, setK] = useState(5);
+  const [P, setPrompt] = useState(674);
+  const [o, setO] = useState(82);
+  const [inRate, setInRate] = useState(1);
+  const succ = M.agentSuccess(p, K);
+  const total = M.agentInputTokens(P, o, K);
+  const last = M.agentStepPrompt(P, o, K);
+  const steps = Array.from({length: Math.min(K, 12)}, (_, i) => M.agentStepPrompt(P, o, i + 1));
+  return (
+    <Widget title="Agent loop budget: reliability and context growth"
+      hint="Each tool round is one more model call that re-sends everything so far. Defaults: the page's measured loop (674 prompt tokens on call 1, +82 tokens per round) and the book's 0.95 per-step accuracy. Rates are illustrative dollars per 1M input tokens.">
+      <div className={styles.controls}>
+        <Slider label="per-step success p" color="pred" value={p} min={0.5} max={1} step={0.005} onChange={setP} fmt={(v) => v.toFixed(3)} />
+        <Slider label="model calls K" color="hyper" value={K} min={1} max={100} step={1} onChange={setK} fmt={(v) => String(v)} />
+        <Slider label="call-1 prompt P (tokens)" color="data" value={P} min={50} max={20000} step={1} onChange={setPrompt} fmt={(v) => v.toLocaleString('en-IN')} />
+        <Slider label="tokens added per round o" color="data" value={o} min={0} max={5000} step={1} onChange={setO} fmt={(v) => v.toLocaleString('en-IN')} />
+        <Slider label="input $ / 1M" color="hyper" value={inRate} min={0.05} max={15} step={0.05} onChange={setInRate} fmt={f2} />
+      </div>
+      <Bars values={steps} labels={steps.map((_, i) => `call ${i + 1}`)} max={1.15 * Math.max(...steps)} fmt={(v) => v.toLocaleString('en-IN')} />
+      <Readout items={[
+        ['P(all K steps right) = p^K', succ < 0.0001 ? succ.toExponential(2) : succ.toFixed(4), 'pred'],
+        ['prompt of the last call', `${last.toLocaleString('en-IN')} tokens`, 'data'],
+        ['input tokens over the task', total.toLocaleString('en-IN'), 'data'],
+        ['input cost of the task', `$${((total * inRate) / 1e6).toFixed(5)}`, 'loss'],
+      ]} />
+    </Widget>
+  );
+}

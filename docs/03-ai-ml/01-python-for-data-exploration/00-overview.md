@@ -9,6 +9,13 @@ sidebar_position: 0
 
 <PriorityKey lang="pandas" v="3.0" />
 
+
+:::info[Where this page sits]
+**Before:** [Python Fundamentals](../00-python-fundamentals/01-how-python-runs.md), especially [Lists, Tuples & Strings](../00-python-fundamentals/03-lists-tuples-strings.md) and [Concurrency, Memory & Performance](../00-python-fundamentals/09-concurrency-memory-performance.md), which explain why Python lists are slow for numbers.
+**This page:** what exploratory data analysis is, the EDA lifecycle, how NumPy, pandas, Matplotlib and Seaborn stack, the ShopStream dataset used on every page (data dictionary, catalogued problems, generator source), the section roadmap and environment setup.
+**Next:** [NumPy: Arrays, Memory Layout, dtypes & Indexing](./01-numpy/01-numpy-arrays-memory-indexing.md).
+:::
+
 ## 🧭 Start Here: What EDA Is and Why It Decides Your Model
 
 **What it is.** EDA is the investigation you do *before* modelling. You don't yet know what questions to ask, so you ask the data: how many rows? which columns are missing values? are the prices believable? does delivery time relate to ratings? Every answer either reveals a **data-quality problem** to fix or a **pattern** worth modelling.
@@ -24,29 +31,31 @@ sidebar_position: 0
 | **Matplotlib** | Low-level, fully controllable plotting (`Figure`, `Axes`, every line and label) | The canvas and brushes | Exact control over a chart, multi-panel layouts, publication figures |
 | **Seaborn** | High-level statistical plots that understand DataFrames (`hue=`, confidence intervals, KDEs) | The chart assistant | Quick, correct statistical views: distributions, categories, correlations |
 
+This overview builds up in this order:
+
+1. **The EDA lifecycle**: the stages from raw file to written insight, and which page covers each.
+2. **How the libraries stack**: what each of the four libraries does and how they sit on top of each other.
+3. **The running dataset**: ShopStream, its columns, its deliberate problems and the code that generates it.
+4. **Section roadmap and setup**: the nine pages that follow and the environment to run them.
+
+| New concept | One-line meaning |
+|---|---|
+| **EDA** | Exploratory data analysis: investigating a dataset before modelling it |
+| **Profiling** | Measuring shape, dtypes, missing values, duplicates and value ranges |
+| **Cleaning** | Fixing types, labels, invalid values, missing data and outliers, with each decision recorded |
+| **Vectorization** | Whole-array operations that run in compiled code instead of Python loops |
+| **Data leakage** | Letting test-set information influence training, for example by computing fill values on all rows |
+| **ShopStream** | The seeded, deliberately messy e-commerce dataset used on every page |
+
 :::analogy[EDA is a doctor's check-up for data]
 Before a doctor prescribes anything, they take your temperature, check your blood pressure and ask about symptoms. EDA is that check-up: `.info()` and `.describe()` are the vital signs, missing-value counts are the symptoms, histograms and box plots are the X-rays. Prescribing a model without them is treating a patient you've never examined.
 :::
 
-## ⚡ Essential Interview Recall
+## 🔴 1. The EDA Lifecycle
 
-- 🔴 **EDA lifecycle**: load → profile (shape, dtypes, missing, duplicates) → clean (types, labels, outliers, missing values) → derive features → aggregate and reshape → visualize → write down insights and decisions.
-- 🔴 **NumPy is the foundation**: a Pandas column is (usually) a NumPy array plus an index; Seaborn and Matplotlib draw NumPy/Pandas data; PyTorch tensors convert to and from NumPy (often without copying).
-- 🔴 **Vectorize, don't loop**: whole-array operations run in compiled C and are typically 10–100× faster than Python loops.
-- 🔴 **Profile before you clean**: `df.shape`, `df.info()`, `df.describe()`, `df.isna().sum()`, `df.duplicated().sum()`, `df[col].value_counts()`.
-- 🔴 **Never trust raw categories, dates or numbers**: normalize labels, parse dates explicitly, sanity-check ranges.
-- 🟠 **Missing ≠ zero**: decide per column whether to drop, impute (mean / median / mode / group-wise / forward-fill) or keep a missing indicator, and write down why.
-- 🟠 **Skewed data**: describe it with the **median and IQR**, not the mean and std; consider a log transform.
-- 🟠 **Fit cleaning statistics on training data only** (medians, encoders, scalers), then apply them to validation/test: otherwise you leak information.
-- 🟡 **pandas 3.0** (current): **Copy-on-Write** is always on, text columns default to the new `str` dtype, and `applymap` is gone (use `DataFrame.map`). Older tutorials and interview questions still assume pandas 1.x/2.x behaviour, so know both.
+Exploratory data analysis follows a recognizable sequence even though every dataset is different. You **load** the raw data and **profile** it: its size, its column types, how much is missing, whether rows are duplicated, and whether the values are believable. You then **clean** it, fixing types and labels and deciding what to do about invalid values, outliers and gaps. With clean data you **derive features and aggregate**, turning one row per event into summaries per group, then **reshape and combine** tables as the questions require, and **visualize** to see patterns that summary numbers hide. The final stage is **insight and decision**: writing down what you found, with numbers and caveats.
 
-:::speak[Walk me through how you would explore a new dataset]
-"First I look at it before touching it: `shape`, `info()` for dtypes and non-null counts, `head()`, `describe()` for ranges, and `value_counts()` on the categorical columns. Then I list problems: wrong dtypes, like dates stored as text or numbers as strings; inconsistent labels; impossible values, like negative quantities; outliers; duplicates; and missing values, with the percentage per column. I fix them deliberately: parse types, normalize labels, cap or flag outliers using the IQR rule, drop exact duplicates, and impute missing values with a strategy chosen per column. I record every decision, because each one changes the model. Then I engineer a few features, aggregate with `groupby` and pivot tables to answer concrete questions, and visualize: distributions for each numeric column, box plots across categories, a correlation heatmap and time trends. I finish with a short list of insights and the next modelling steps. Throughout, I compute any cleaning statistic on the training split only, so nothing leaks into evaluation."
-:::
-
-## The Mental Model
-
-### 1. The EDA lifecycle (and which page covers each stage)
+The lifecycle is not a straight line. A chart often reveals a new problem (a spike that turns out to be duplicated rows, a category that splits in two), which sends you back to cleaning. That loop is normal, and it's why the cleaning steps should be written as reproducible code rather than one-off edits. The diagram maps each stage to the page in this section that teaches it.
 
 ```mermaid
 flowchart TB
@@ -59,7 +68,15 @@ flowchart TB
     V -.->|"a chart reveals a new problem"| C
 ```
 
-### 2. How the libraries stack
+:::tip[🎯 Interview angle]
+**"Walk me through how you would explore a new dataset."** Profile before touching anything (shape, `info`, `describe`, `isna`, `duplicated`, `value_counts`), list and quantify the problems, clean with recorded decisions, derive features and aggregates, visualize, and write up insights with caveats, looping back to cleaning whenever a chart reveals something new. The full spoken answer is at the end of the page.
+:::
+
+## 🔴 2. How the Libraries Stack
+
+Four libraries divide the work, and they sit on top of one another rather than side by side. **NumPy** is the foundation: typed, contiguous arrays with vectorized maths in C. **pandas** builds labelled tables on top of it: each DataFrame column is (usually) a NumPy array plus an index, and pandas adds loading, cleaning, grouping and joining. **Matplotlib** draws on NumPy and pandas data with full control over every mark, and **Seaborn** sits on top of both Matplotlib and pandas, computing statistics such as bins, densities and confidence intervals from a DataFrame and then asking Matplotlib to draw them.
+
+The stack continues into deep learning: PyTorch tensors convert to and from NumPy arrays, often without copying. That is why habits formed here, such as vectorizing instead of looping and choosing `float32` for model inputs, carry straight into model training.
 
 ```mermaid
 flowchart TB
@@ -74,7 +91,11 @@ flowchart TB
 NumPy is the stove and knives: raw, fast, does exactly what it's told. Pandas is the prep cook who knows every ingredient by name and keeps the labelled containers in order. Matplotlib is the plating station that can arrange anything on a plate, one garnish at a time. Seaborn is the head chef who says "the usual presentation for this dish" and gets a finished plate in one instruction, using the same plating station underneath.
 :::
 
-## The Running Dataset: ShopStream
+:::tip[🎯 Interview angle]
+**"How do NumPy, pandas, Matplotlib and Seaborn relate?"** NumPy provides typed arrays and vectorized maths; pandas wraps them in labelled Series and DataFrames with I/O, cleaning and grouping; Matplotlib draws anything with full control; Seaborn computes statistical summaries from DataFrames and draws them through Matplotlib. NumPy is also the bridge to PyTorch (`torch.from_numpy`).
+:::
+
+## 🔴 3. The Running Dataset: ShopStream
 
 Every page uses the same synthetic e-commerce dataset so you can follow one story from raw CSV to dashboard. It is **seeded** (identical on every run) and **deliberately messy** in the ways real data is.
 
@@ -195,9 +216,15 @@ print(orders.shape, customers.shape)          # (5020, 11) (200, 5)
 The generator bakes in real cause and effect so the EDA has something to find: **delivery is slower** in Delhi and Hyderabad and for cash-on-delivery orders, and **ratings fall as delivery slows**. Prices are **log-normal** (most orders cheap, a long tail of expensive electronics), which is how money usually behaves. Those relationships are what the later pages discover with `groupby`, correlation heatmaps and box plots.
 :::
 
-## The Paradigm / Core Concepts
+:::tip[🎯 Interview angle]
+**"Why practise EDA on a synthetic dataset, and what problems would you look for?"** A seeded generator makes every result reproducible and lets you know the ground truth, so you can check whether your cleaning found the injected problems. The classic ones are all here: inconsistent labels, mixed date formats, multiplicative price errors, impossible quantities, missing values with different causes, orphan foreign keys and duplicate rows.
+:::
 
-### 🔴 Section roadmap
+## 🟠 4. Section Roadmap and Setup
+
+The nine pages after this overview follow the lifecycle. Two NumPy pages lay the foundation (memory layout, dtypes, views, broadcasting, aggregation and linear algebra). Four pandas pages cover loading and indexing, cleaning, grouping and reshaping. Two visualization pages cover Matplotlib and Seaborn. The capstone then runs the entire workflow as one script and produces a dashboard and written findings.
+
+Every snippet was verified on the versions listed below. Several of them changed behaviour that older tutorials and interview questions still assume, most importantly pandas 3.0, where Copy-on-Write is always on, text columns get the new `str` dtype and `applymap` is gone, so the version table is worth reading before you start.
 
 | # | Page | Lifecycle stage | Key interview topics |
 |---|---|---|---|
@@ -228,7 +255,11 @@ python -c "import numpy, pandas, matplotlib, seaborn; print(numpy.__version__, p
 | pandas 3.0 | Text columns had `object` dtype | Default **`str`** dtype (PyArrow-backed when PyArrow is installed) |
 | pandas 3.0 | `DataFrame.applymap` | Removed: use **`DataFrame.map`** |
 
-## ⚙️ Under the Hood (How the Stack Fits Together)
+:::tip[🎯 Interview angle]
+**"What changed in pandas 3.0 that affects everyday code?"** Copy-on-Write is always on, so chained assignment (`df[mask]["col"] = v`) never modifies the original; use one `.loc` call. Text columns default to the new `str` dtype instead of `object`, and `DataFrame.applymap` was removed in favour of `DataFrame.map`. NumPy 2's NEP 50 also keeps `float32_array + 1.0` as `float32`.
+:::
+
+## ⚙️ Going Deeper (How the Stack Fits Together)
 
 - **A DataFrame is a dict of columns**, each column stored as a typed array (a NumPy array, or an Arrow array for the new `str` dtype), sharing one **row index**. Column-wise operations are fast; row-by-row Python loops throw that speed away.
 - **Pandas calls NumPy** (or Arrow) for arithmetic, so `df["unit_price"] * df["quantity"]` is one vectorized C loop after the two indexes are aligned.
@@ -275,3 +306,21 @@ Turn the EDA findings into **automated data-validation checks** that run in the 
 - **The mean of a skewed column misleads**: report the median (and maybe a trimmed mean) for prices, incomes, latencies.
 - **Correlation isn't causation**: in ShopStream, slow delivery *causes* lower ratings by construction, but in real data a correlation only tells you where to look.
 - **Sampling hides rare problems**: `head()` shows the first 5 rows; outliers and bad labels live elsewhere. Use `value_counts()`, `describe()` and `sample(…, random_state=…)`.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **EDA lifecycle**: load → profile (shape, dtypes, missing, duplicates) → clean (types, labels, outliers, missing values) → derive features → aggregate and reshape → visualize → write down insights and decisions.
+- 🔴 **NumPy is the foundation**: a Pandas column is (usually) a NumPy array plus an index; Seaborn and Matplotlib draw NumPy/Pandas data; PyTorch tensors convert to and from NumPy (often without copying).
+- 🔴 **Vectorize, don't loop**: whole-array operations run in compiled C and are typically 10–100× faster than Python loops.
+- 🔴 **Profile before you clean**: `df.shape`, `df.info()`, `df.describe()`, `df.isna().sum()`, `df.duplicated().sum()`, `df[col].value_counts()`.
+- 🔴 **Never trust raw categories, dates or numbers**: normalize labels, parse dates explicitly, sanity-check ranges.
+- 🟠 **Missing ≠ zero**: decide per column whether to drop, impute (mean / median / mode / group-wise / forward-fill) or keep a missing indicator, and write down why.
+- 🟠 **Skewed data**: describe it with the **median and IQR**, not the mean and std; consider a log transform.
+- 🟠 **Fit cleaning statistics on training data only** (medians, encoders, scalers), then apply them to validation/test: otherwise you leak information.
+- 🟡 **pandas 3.0** (current): **Copy-on-Write** is always on, text columns default to the new `str` dtype, and `applymap` is gone (use `DataFrame.map`). Older tutorials and interview questions still assume pandas 1.x/2.x behaviour, so know both.
+
+:::speak[Walk me through how you would explore a new dataset]
+"First I look at it before touching it: `shape`, `info()` for dtypes and non-null counts, `head()`, `describe()` for ranges, and `value_counts()` on the categorical columns. Then I list problems: wrong dtypes, like dates stored as text or numbers as strings; inconsistent labels; impossible values, like negative quantities; outliers; duplicates; and missing values, with the percentage per column. I fix them deliberately: parse types, normalize labels, cap or flag outliers using the IQR rule, drop exact duplicates, and impute missing values with a strategy chosen per column. I record every decision, because each one changes the model. Then I engineer a few features, aggregate with `groupby` and pivot tables to answer concrete questions, and visualize: distributions for each numeric column, box plots across categories, a correlation heatmap and time trends. I finish with a short list of insights and the next modelling steps. Throughout, I compute any cleaning statistic on the training split only, so nothing leaks into evaluation."
+:::

@@ -11,12 +11,25 @@ sidebar_position: 5
 
 <FormulaKey />
 
+:::info[Where this page sits]
+**Before:** [Pandas: Cleaning, Types & Missing Data](./04-pandas-cleaning-types-missing-data.md), which produced the clean ShopStream table used here (and introduced group-wise imputation with `transform`).
+**This page:** element-wise tools (`map`, `apply`, `DataFrame.map`) versus vectorized expressions, the split-apply-combine pattern, `agg` vs `transform` vs `filter`, named aggregation, and group-relative features such as within-group z-scores.
+**Next:** [Pandas: Reshape & Combine](./06-pandas-reshape-combine.md).
+:::
+
 ## 🧭 Start Here: From Rows to Answers
 
 The cleaned ShopStream table has one row per order. Business questions are almost never about one order: "Which category earns the most?", "Is this order expensive **for its category**?", "How many times has each customer bought?" Answering them needs two kinds of tool:
 
 1. **Element-wise transformations** turn each value into another value: map a tier name to a discount rate, bucket a price into budget/mid/premium. Pandas offers `map`, `apply` and `DataFrame.map` for this, but the fast path is almost always a **vectorized** expression.
 2. **Group operations** split rows into groups by a key, compute something per group, and put the results back together. This is the **split-apply-combine** pattern (the same idea as SQL `GROUP BY` and window functions), and it's the most-used part of pandas in analytics and feature engineering.
+
+The chapters build up in this order:
+
+1. **Element-wise transformations**: `map`, `apply` and `DataFrame.map`, and why vectorized expressions usually beat all three.
+2. **Split, apply, combine**: what `groupby` actually does.
+3. **`agg`, `transform` and `filter`**: one row per group, one value per row, or a subset of rows.
+4. **Aggregation functions**: method, list, dict and named aggregation, and group-relative features.
 
 | New concept | One-line meaning |
 |---|---|
@@ -33,71 +46,13 @@ The cleaned ShopStream table has one row per order. Business questions are almos
 You tip the basket onto the floor and **split** it into piles by colour, **apply** the right wash to each pile, then **combine** everything back into one folded stack. `agg` is weighing each pile and writing one number per colour; `transform` is pinning a tag with "this pile weighs 3 kg" onto every single shirt in it.
 :::
 
-## ⚡ Essential Interview Recall
+## 🔴 1. Element-wise Transformations: `map`, `apply` and Vectorization
 
-- 🔴 **`Series.map(dict)`** returns **NaN for keys not in the dict**; `Series.replace(dict)` leaves them unchanged.
-- 🔴 **`apply(axis=1)` is a Python loop over rows**: on ShopStream it was **85× slower** than the vectorized expression (29.2 ms vs 0.35 ms). Use column arithmetic, `np.where`/`np.select`, `pd.cut`.
-- 🔴 **`DataFrame.applymap` is removed in pandas 3** (`AttributeError: 'DataFrame' object has no attribute 'applymap'`); use **`DataFrame.map`**.
-- 🔴 **`groupby` = split → apply → combine**, and it's lazy: `df.groupby("category")` computes nothing until you call `sum`, `agg`, `transform`...
-- 🔴 **`agg` → one row per group; `transform` → same length as the input** (4,946 rows in, 4,946 out), aligned to the original index.
-- 🔴 **Named aggregation**: `df.groupby("category").agg(orders=("order_id", "count"), revenue=("revenue", "sum"))`: flat, readable column names.
-- 🔴 **`size()` counts rows, `count()` counts non-null values**: Beauty has 741 orders but only 428 ratings.
-- 🔴 **Group-wise normalization**: `(x - g.transform("mean")) / g.transform("std")`; share of group: `x / g.transform("sum")`.
-- 🟠 **Multi-key grouping** gives a **MultiIndex**; `as_index=False` or `.reset_index()` flattens it back to columns.
-- 🟠 **Use built-in names** (`"mean"`, `"sum"`, `"median"`): Cython speed. Lambdas run per group in Python (2.7× slower for `agg`, 5.8× for `transform` on 2M rows).
-- 🟠 Per-entity sequences: `groupby("customer_id").cumcount()`, `.cumsum()`, `.diff()`, `.shift()`, `.rank()`; **sort by time first**.
-- 🟡 pandas 3 defaults: `observed=True` for categorical keys (empty categories don't appear), `dropna=True` (NaN keys are dropped unless `dropna=False`), `sort=True`.
+Many cleaning and feature steps turn each value into another value: a tier name into a discount rate, a price into a budget/mid/premium bucket. Pandas offers several ways to do that, and they differ enormously in speed. The fastest are **vectorized** column expressions: arithmetic between columns, `np.where` and `np.select` for conditions, `pd.cut` and `pd.qcut` for bucketing, and the `.str` and `.dt` accessors. They run one C loop over the whole column and never call Python code per value.
 
-## 📐 Formula Sheet
+`Series.map` has two personalities. Given a **dict or a Series**, it performs a hash lookup per value, which is fast and is the right tool for code-to-label or ID-to-attribute mappings (unmatched keys become `NaN`). Given a **function**, it calls that function once per element at Python speed, as does `Series.apply`. `DataFrame.apply` calls your function once per **column** by default, which is cheap because there are few columns; with `axis=1` it calls it once per **row** and builds a new Series each time, which is the slowest pattern in pandas. `DataFrame.map` (formerly `applymap`) calls a function on every cell and is mostly useful for formatting.
 
-| Concept | Formula | In plain words |
-|---|---|---|
-| Group mean | $\pred{\bar x_g} = \frac{1}{\data{n_g}}\sum_{i \in g} \data{x_i}$ | `groupby(g)[x].mean()` |
-| Within-group z-score | $\pred{z_i} = \dfrac{\data{x_i} - \pred{\bar x_{g(i)}}}{\pred{s_{g(i)}}}$ | How unusual a row is **for its own group** |
-| Share of group total | $\pred{w_i} = \dfrac{\data{x_i}}{\sum_{j \in g(i)} \data{x_j}}$ | `x / groupby(g)[x].transform("sum")` |
-| Ratio to group mean | $\pred{r_i} = \data{x_i} / \pred{\bar x_{g(i)}}$ | 1.24 = 24% above the category average |
-| Recency | $\pred{\text{recency}} = \data{t_{\text{snapshot}}} - \max_{i \in c} \data{t_i}$ | Days since the customer's last order |
-
-:::speak[What is the difference between agg and transform in a groupby?]
-"Both split the data by a key and compute something per group; the difference is the **shape of the result**. `agg` **reduces** each group to one row, so grouping 4,946 orders by category gives a five-row table: total revenue per category, like SQL `GROUP BY`. `transform` computes the same per-group value but **broadcasts it back to every original row**, so the output has 4,946 rows aligned to the original index, like a SQL window function with `PARTITION BY`. That makes `transform` the tool for row-level features that need group context: an order's price divided by its category's average price, a z-score within each category, each order's share of its customer's spend, or filling missing delivery days with the median of the customer's city. I use built-in string names like `'mean'` because they run in Cython; a lambda runs per group in Python and can be several times slower."
-:::
-
-## The Mental Model
-
-### 1. Split, apply, combine
-
-```mermaid
-flowchart TB
-    D["orders: 4,946 rows"] -->|"split by category"| S1["Beauty: 741 rows"]
-    D --> S2["Books: 702 rows"]
-    D --> S3["Electronics: 1,275 rows"]
-    D --> S4["Fashion: 1,261 rows"]
-    D --> S5["Home: 967 rows"]
-    S1 & S2 & S3 & S4 & S5 -->|"apply: sum of revenue"| C["combine"]
-    C -->|"agg"| A["5 rows: one total per category"]
-    C -->|"transform"| T["4,946 rows: each order gets its category's total"]
-```
-
-<Animation src="pandas/split-apply-combine" caption="Rows are coloured by category, pulled apart into one pile per category, each pile is summed, and the five totals are stacked into a small result table. That final table is what agg returns." />
-
-### 2. `agg` vs `transform` vs `filter`
-
-<Animation src="pandas/agg-vs-transform" caption="The same group means, delivered two ways. agg collapses each group to a single row. transform writes the group mean next to every original row, so the result lines up with the input and can be used in arithmetic." />
-
-| | Output shape | Index | SQL equivalent | Typical use |
-|---|---|---|---|---|
-| `agg` / `sum` / `mean` | One row per group | Group keys | `GROUP BY` | Reports, summary tables |
-| `transform` | **Same as input** | Original index | `AVG(x) OVER (PARTITION BY g)` | Row-level features, imputation, normalization |
-| `filter` | Subset of input rows | Original index | `HAVING` (keeping rows) | Drop small or irrelevant groups |
-| `apply` | Anything | Depends | — | Last resort for complex per-group logic |
-
-:::analogy[agg is the class average on the noticeboard, transform is the average on every report card]
-The school can pin one sheet on the noticeboard listing each class's average mark (agg: one line per class). Or it can print each class's average **on every student's report card**, next to their own mark, so each student sees how they compare (transform: one line per student).
-:::
-
-## The Paradigm / Core Concepts
-
-### 🔴 `map` vs `apply` vs `DataFrame.map` vs vectorized
+The practical rule follows: before writing `apply`, check whether the logic is arithmetic, a condition, a bucketing, a lookup, text or a date operation, because each has a vectorized form. Reach for `apply` only when none fits, and avoid `axis=1` whenever a column expression can do the job.
 
 | Tool | Works on | Calls your function | Speed | Use for |
 |---|---|---|---|---|
@@ -118,7 +73,66 @@ Before writing `apply`, ask whether the logic is arithmetic (`df.a * df.b`), a c
 A cashier scanning 5,000 apples one by one does 5,000 separate actions, each with its own beep and pause: that's `apply`, a Python call per value. Tipping the whole crate on a weighing scale gives the answer in one action: that's a vectorized column operation. Same result, very different queue.
 :::
 
-### 🔴 Aggregation functions
+:::tip[🎯 Interview angle]
+**"What's the difference between `map`, `apply` and vectorized operations, and why is `apply(axis=1)` slow?"** Vectorized operations run one C loop per column; `map` with a dict is a fast hash lookup; `map` or `apply` with a function calls Python once per element; `DataFrame.apply(axis=1)` calls Python once per row and builds a Series each time. Rewrite row-wise logic with `np.where`, `np.select`, `pd.cut` or `map(dict)`.
+:::
+
+## 🔴 2. Split, Apply, Combine
+
+Business questions are rarely about one row: which category earns the most, how many times each customer has bought, whether an order is expensive **for its category**. Answering them uses the **split-apply-combine** pattern. `groupby("category")` **splits** the rows into one group per distinct key, a function is **applied** to each group independently (a sum, a mean, a count), and the per-group results are **combined** into a new object.
+
+`groupby` itself is lazy: it only records how to split, and nothing is computed until you ask for an operation. The same idea exists in SQL as `GROUP BY` for summaries and as window functions (`OVER (PARTITION BY ...)`) for per-row group values, and those two flavours correspond exactly to pandas' `agg` and `transform`, described next. Grouping by several keys, `groupby(["city", "category"])`, produces one group per combination, with a MultiIndex in the result.
+
+```mermaid
+flowchart TB
+    D["orders: 4,946 rows"] -->|"split by category"| S1["Beauty: 741 rows"]
+    D --> S2["Books: 702 rows"]
+    D --> S3["Electronics: 1,275 rows"]
+    D --> S4["Fashion: 1,261 rows"]
+    D --> S5["Home: 967 rows"]
+    S1 & S2 & S3 & S4 & S5 -->|"apply: sum of revenue"| C["combine"]
+    C -->|"agg"| A["5 rows: one total per category"]
+    C -->|"transform"| T["4,946 rows: each order gets its category's total"]
+```
+
+<Animation src="pandas/split-apply-combine" caption="Rows are coloured by category, pulled apart into one pile per category, each pile is summed, and the five totals are stacked into a small result table. That final table is what agg returns." />
+
+:::tip[🎯 Interview angle]
+**"Explain `groupby` in pandas."** It's split-apply-combine: split rows into groups by key, apply a function to each group, combine the results. It's lazy until you call an operation, and it mirrors SQL: `agg` is `GROUP BY`, `transform` is a window function with `PARTITION BY`. Use `reset_index()` or `as_index=False` to turn the keys back into columns.
+:::
+
+## 🔴 3. `agg`, `transform` and `filter`
+
+The three main group operations differ in the **shape** of what they return, and choosing the right one is the most common groupby interview question. **`agg`** (and shortcuts such as `sum` and `mean`) reduces each group to **one row**, so the result has one row per group, indexed by the group keys. That is what reports and summary tables need, and it corresponds to SQL `GROUP BY`.
+
+**`transform`** computes a group value but returns a result with the **same shape and index as the input**: every row receives its own group's value. That makes it the tool for row-level features ("this order's category average"), group-wise imputation (`fillna` with the group median) and normalization within groups, because the result lines up with the original DataFrame and can be used directly in arithmetic. It is the pandas equivalent of a SQL window function.
+
+**`filter`** keeps or drops **entire groups** based on a condition, returning the original rows of the groups that pass, like SQL `HAVING` but keeping rows. `apply` on a group can return anything, which makes it flexible but slow; keep it as a last resort for logic the others can't express, such as top-N rows per group.
+
+<Animation src="pandas/agg-vs-transform" caption="The same group means, delivered two ways. agg collapses each group to a single row. transform writes the group mean next to every original row, so the result lines up with the input and can be used in arithmetic." />
+
+| | Output shape | Index | SQL equivalent | Typical use |
+|---|---|---|---|---|
+| `agg` / `sum` / `mean` | One row per group | Group keys | `GROUP BY` | Reports, summary tables |
+| `transform` | **Same as input** | Original index | `AVG(x) OVER (PARTITION BY g)` | Row-level features, imputation, normalization |
+| `filter` | Subset of input rows | Original index | `HAVING` (keeping rows) | Drop small or irrelevant groups |
+| `apply` | Anything | Depends | — | Last resort for complex per-group logic |
+
+:::analogy[agg is the class average on the noticeboard, transform is the average on every report card]
+The school can pin one sheet on the noticeboard listing each class's average mark (agg: one line per class). Or it can print each class's average **on every student's report card**, next to their own mark, so each student sees how they compare (transform: one line per student).
+:::
+
+:::tip[🎯 Interview angle]
+**"What is the difference between `agg` and `transform` in a groupby?"** `agg` returns one row per group (a summary, like SQL `GROUP BY`); `transform` returns one value per original row, aligned to the input index (like a window function), so it can be used for features, group-wise imputation and normalization. `filter` keeps or drops whole groups. The full spoken answer is near the end of the page.
+:::
+
+## 🔴 4. Aggregation Functions and Group-Relative Features
+
+`agg` accepts several ways of specifying what to compute. A single method call gives one Series; a **list** of function names gives one column per function; a **dict** chooses functions per column but produces awkward MultiIndex columns. **Named aggregation**, `g.agg(orders=("order_id", "count"), revenue=("revenue", "sum"))`, is the clearest: each output column gets your own name, and the result has flat columns ready for a report.
+
+A few built-in names behave in ways worth remembering. `count` counts **non-null** values while `size()` counts rows; `std` and `var` use `ddof=1`; `first` and `last` depend on the row order, so sort first. Custom functions work too, but are slower and get awkward default names.
+
+Combining `transform` with these statistics creates **group-relative features**, which often matter more to a model than raw values. A ₹9,000 order is ordinary for Electronics but extreme for Books, so instead of the raw price you compute a **within-group z-score**: subtract the group mean and divide by the group standard deviation, both broadcast to every row with `transform`.
 
 | Spec | Example | Result columns |
 |---|---|---|
@@ -151,7 +165,11 @@ $$
 
 </Formula>
 
-## ⚙️ Under the Hood (pandas Internals)
+:::tip[🎯 Interview angle]
+**"How would you build a report with order count and revenue per category, and a feature saying how expensive an order is for its category?"** For the report use named aggregation: `g.agg(orders=("order_id", "count"), revenue=("revenue", "sum"))`. For the feature, compute a within-group z-score with `transform("mean")` and `transform("std")`, which align to every row. Note that `count` skips NaN while `size` doesn't.
+:::
+
+## ⚙️ Going Deeper (pandas Internals)
 
 - **The GroupBy object is lazy**: `df.groupby("category")` stores the key and the data. On the first computation pandas **factorizes** the key (turns each label into an integer group code, via a hash table: O(n)) and works out which rows belong to which group (a stable sort of the codes or a counting pass).
 - **Built-in aggregations** (`sum`, `mean`, `std`, `min`, `max`, `first`, `count`, `cumsum`, `rank`...) are Cython loops that walk the codes once and accumulate per group: O(n) overall, no Python per group.
@@ -561,3 +579,34 @@ A "top 10 customers" report led with customer `C9999`, 100 orders, and marketing
 - **`transform` must return a scalar or a same-length result per group**; returning a different length raises.
 - **`first()` skips NaN**, `nth(0)` doesn't.
 - **Large numbers of small groups** (millions of user IDs) are where pandas group-by overhead shows; consider Polars or a SQL engine.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **`Series.map(dict)`** returns **NaN for keys not in the dict**; `Series.replace(dict)` leaves them unchanged.
+- 🔴 **`apply(axis=1)` is a Python loop over rows**: on ShopStream it was **85× slower** than the vectorized expression (29.2 ms vs 0.35 ms). Use column arithmetic, `np.where`/`np.select`, `pd.cut`.
+- 🔴 **`DataFrame.applymap` is removed in pandas 3** (`AttributeError: 'DataFrame' object has no attribute 'applymap'`); use **`DataFrame.map`**.
+- 🔴 **`groupby` = split → apply → combine**, and it's lazy: `df.groupby("category")` computes nothing until you call `sum`, `agg`, `transform`...
+- 🔴 **`agg` → one row per group; `transform` → same length as the input** (4,946 rows in, 4,946 out), aligned to the original index.
+- 🔴 **Named aggregation**: `df.groupby("category").agg(orders=("order_id", "count"), revenue=("revenue", "sum"))`: flat, readable column names.
+- 🔴 **`size()` counts rows, `count()` counts non-null values**: Beauty has 741 orders but only 428 ratings.
+- 🔴 **Group-wise normalization**: `(x - g.transform("mean")) / g.transform("std")`; share of group: `x / g.transform("sum")`.
+- 🟠 **Multi-key grouping** gives a **MultiIndex**; `as_index=False` or `.reset_index()` flattens it back to columns.
+- 🟠 **Use built-in names** (`"mean"`, `"sum"`, `"median"`): Cython speed. Lambdas run per group in Python (2.7× slower for `agg`, 5.8× for `transform` on 2M rows).
+- 🟠 Per-entity sequences: `groupby("customer_id").cumcount()`, `.cumsum()`, `.diff()`, `.shift()`, `.rank()`; **sort by time first**.
+- 🟡 pandas 3 defaults: `observed=True` for categorical keys (empty categories don't appear), `dropna=True` (NaN keys are dropped unless `dropna=False`), `sort=True`.
+
+:::speak[What is the difference between agg and transform in a groupby?]
+"Both split the data by a key and compute something per group; the difference is the **shape of the result**. `agg` **reduces** each group to one row, so grouping 4,946 orders by category gives a five-row table: total revenue per category, like SQL `GROUP BY`. `transform` computes the same per-group value but **broadcasts it back to every original row**, so the output has 4,946 rows aligned to the original index, like a SQL window function with `PARTITION BY`. That makes `transform` the tool for row-level features that need group context: an order's price divided by its category's average price, a z-score within each category, each order's share of its customer's spend, or filling missing delivery days with the median of the customer's city. I use built-in string names like `'mean'` because they run in Cython; a lambda runs per group in Python and can be several times slower."
+:::
+
+## 📐 Formula Sheet
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Group mean | $\pred{\bar x_g} = \frac{1}{\data{n_g}}\sum_{i \in g} \data{x_i}$ | `groupby(g)[x].mean()` |
+| Within-group z-score | $\pred{z_i} = \dfrac{\data{x_i} - \pred{\bar x_{g(i)}}}{\pred{s_{g(i)}}}$ | How unusual a row is **for its own group** |
+| Share of group total | $\pred{w_i} = \dfrac{\data{x_i}}{\sum_{j \in g(i)} \data{x_j}}$ | `x / groupby(g)[x].transform("sum")` |
+| Ratio to group mean | $\pred{r_i} = \data{x_i} / \pred{\bar x_{g(i)}}$ | 1.24 = 24% above the category average |
+| Recency | $\pred{\text{recency}} = \data{t_{\text{snapshot}}} - \max_{i \in c} \data{t_i}$ | Days since the customer's last order |

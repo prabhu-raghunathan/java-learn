@@ -9,34 +9,51 @@ Python's three core **sequences** share indexing, slicing, `len`, `in` and itera
 
 <PriorityKey lang="Python" v="3.10" />
 
-## ⚡ Essential Interview Recall
 
-- 🔴 **`list`** = ordered, **mutable**, duplicates allowed, mixed types allowed. Internally a **dynamic array of pointers** (not a linked list).
-- 🔴 **List Big-O**: index/assign `O(1)`, **`append` amortized `O(1)`**, `pop()` from the end `O(1)`; `insert(0, x)`, `pop(0)`, `remove(x)`, `x in list`, `index(x)` are **`O(n)`**; `sort()` is `O(n log n)`. Need fast operations at both ends → **`collections.deque`**.
-- 🔴 A list **over-allocates** by about 12.5% when it grows (capacities 4, 8, 16, 24, 32, 40, 52, …), which is what makes `append` amortized O(1).
-- 🔴 **Slicing** `seq[start:stop:step]`: `stop` is **exclusive**, out-of-range slices **never raise** (they're just empty), `[::-1]` reverses, and **a slice of a list is a new (shallow) copy**.
-- 🔴 **Shallow vs deep copy**: `list.copy()`, `lst[:]`, `list(lst)` copy only the **outer** list; nested lists are **shared**. Use `copy.deepcopy` for nested structures.
-- 🔴 **`[[0] * 3] * 3` creates 3 references to the SAME inner list.** Build 2-D lists with a comprehension: `[[0] * 3 for _ in range(3)]`.
-- 🔴 **`list.sort()` sorts in place and returns `None`**; `sorted(iterable)` returns a **new list** and works on any iterable. Both are **stable** and take `key=` and `reverse=`.
-- 🔴 **`tuple`** = ordered, **immutable**, only 2 methods (`count`, `index`). A one-element tuple needs a comma: **`(1,)`**; `(1)` is just the int `1`.
-- 🔴 A tuple is **hashable only if all its elements are** → can be a dict key / set member; a list never can (`TypeError: unhashable type: 'list'`).
-- 🔴 **Strings are immutable** sequences of Unicode code points: `s[0] = "C"` raises `TypeError`; every "modifying" method returns a **new** string.
-- 🔴 **Build strings with `"".join(parts)`** (O(n)), not `s += part` in a loop (O(n²) in general).
-- 🟠 Tuples are **smaller** (no over-allocation, no growth bookkeeping) and slightly **faster to create**; constant tuples are built once at compile time.
-- 🟠 A tuple's **immutability is shallow**: `t = (1, [2])` can't be reassigned, but `t[1].append(3)` works.
-- 🟠 `str.split()` (no argument) splits on **runs of whitespace** and drops empty strings; `split(" ")` splits on **every single space**.
-- 🟠 `find()` returns **-1** when not found; `index()` raises **`ValueError`**.
-- 🟡 `len(s)` counts **code points**, not bytes or visible characters: `len("café")` can be 4 or 5 depending on Unicode normalization; LLM **tokens** are a third, different count.
-- 🟡 **`namedtuple` / `typing.NamedTuple`** give tuples named fields at no memory cost; `@dataclass` (on the [OOP page](./07-oop-in-python.md)) is the mutable alternative.
-
-:::speak[When would you use a tuple instead of a list?]
-"I use a **list** for a **homogeneous, changing collection**: a batch of samples, a list of file paths, the losses I append every epoch. I use a **tuple** for a **fixed record** whose position means something: an `(x, y)` coordinate, a `(batch, channels, height, width)` tensor shape, or several values returned from a function. Three concrete reasons. First, a tuple is **immutable**, so nobody can accidentally change a shape or a config record I've handed them. Second, a tuple of immutable elements is **hashable**, so it can be a **dict key** or set member, for example caching results by `(row, col)` in dynamic programming. A list can't. Third, it's **smaller and slightly faster**: no spare capacity, and constant tuples are built once at compile time. The caveat I'd mention is that immutability is **shallow**: a tuple that contains a list can still have that list mutated."
+:::info[Where this page sits]
+**Before:** [Operators & Control Flow](./02-operators-and-control-flow.md): loops, `in`, comparisons and truthiness, all of which you apply to sequences here.
+**This page:** the three core sequences (`list`, `tuple`, `str`): how a list is laid out in memory, what each operation costs, slicing, shallow vs deep copies, when to pick a tuple, and how strings behave.
+**Next:** [Dicts, Sets & Collections](./04-dicts-sets-collections.md).
 :::
 
-## The Mental Model
+## 🧭 Start Here
 
-### 1. A list is an array of pointers with spare room
+Almost every Python program, and every AI pipeline, is a story about sequences: a batch of samples, a list of file paths, a tensor shape, a chat history, a prompt. Python gives you three built-in sequence types that share the same basic toolkit (indexing with `[i]`, slicing with `[a:b]`, `len`, `in`, iteration) but make very different promises. A **`list`** can change, a **`tuple`** cannot, and a **`str`** is an unchangeable sequence of text characters.
 
+Coming from Java, the closest match for `list` is `ArrayList<Object>`: a resizable array, not a linked list. That single fact explains its whole cost profile, which interviewers love to test: reading `a[i]` or appending at the end is cheap, while inserting at the front shifts everything. The second family of questions is about **aliasing**: because a list stores references, copying a list, multiplying a nested list, or passing a list into a function can leave two names pointing at the same data. The third family is about strings: they are immutable, so building one with `+=` in a loop can be slow, and "length" means code points, not bytes or tokens.
+
+The chapters build up in this order:
+
+1. **Lists as dynamic arrays**: the memory layout, over-allocation, the cost of every operation, and the in-place methods.
+2. **Slicing**: the `start:stop:step` rules, negative indexes, and why slices never raise.
+3. **Shallow vs deep copy**: what is really copied, and the `[[0] * 3] * 3` trap.
+4. **Tuples, and choosing a sequence**: immutability, hashability, and a decision tree for picking the right type.
+5. **Strings**: immutability, the essential methods, and efficient building.
+
+| New concept | One-line meaning |
+|---|---|
+| **Sequence** | An ordered container you can index, slice, measure with `len` and loop over |
+| **Dynamic array** | A contiguous array of pointers with spare capacity that grows by reallocating |
+| **Amortized O(1)** | Usually constant time; the occasional expensive resize averages out over many calls |
+| **Slice** | `seq[start:stop:step]`, a new sequence with `stop` excluded |
+| **Shallow copy** | A new outer container whose slots still point at the same inner objects |
+| **Deep copy** | A recursive copy, so nothing is shared with the original |
+| **Hashable** | Has a hash that never changes, so it can be a dict key or set member |
+| **Code point** | One Unicode character number; `len(str)` counts these |
+
+:::analogy[Three kinds of shelf]
+A **list** is a whiteboard shelf where you can add, remove and swap items at will. A **tuple** is a sealed display case: you can look at what's inside and count it, but the arrangement is fixed, which is exactly why it can be used as a label (a dict key). A **string** is a printed line of text: to "change" it you print a new line.
+:::
+
+## 🔴 1. Lists as Dynamic Arrays
+
+A Python `list` is an ordered, mutable collection that allows duplicates and mixed types. Under the hood it is not a chain of linked nodes; it is a **dynamic array**. The list object holds a small header (its length and its capacity) and a pointer to a separate block of memory containing one **pointer** per element. The elements themselves live elsewhere on the heap. That is why a list can mix an `int`, a `str` and another `list`, and why the same object can appear in two slots: each slot only stores an address.
+
+Because the slots are contiguous, reading or writing `a[i]` is simple address arithmetic, so it costs O(1). Appending is also cheap most of the time, because CPython keeps some **spare capacity** at the end of the array. When the spare room runs out, CPython allocates a larger block (about 12.5% bigger plus a small constant), copies the pointers across and frees the old block. That copy is O(n), but it happens rarely enough that the average cost per `append` stays constant, which is what **amortized O(1)** means.
+
+The same layout explains the slow operations. Inserting or removing at the front or middle (`insert(0, x)`, `pop(0)`, `remove(x)`) must shift every later pointer one slot along, so it is O(n). Searching (`x in a`, `index`, `count`) has no shortcut and scans every element with `==`, also O(n). If you need fast adds and removes at both ends, as in a queue or a sliding window, use `collections.deque` instead.
+
+Lists also come with a small set of methods, and one convention matters more than the method names: every method that changes the list **in place** returns `None`. That design makes it obvious that no copy was made, and it produces a classic bug, `a = a.sort()`, which replaces the list with `None`. When you want a new sorted list and the original untouched, use the built-in `sorted()`, which also accepts any iterable. Both sorts are **stable** and accept `key=` and `reverse=`.
 ```mermaid
 flowchart LR
     subgraph ListObj["list object (header + size 5 + capacity 8)"]
@@ -58,36 +75,6 @@ flowchart LR
 When a train fills up, the railway doesn't add one carriage per new passenger: it swaps in a longer train with a few empty carriages. Most passengers just walk into a free seat (a cheap `append`); occasionally everyone has to move to the new train (the copy). Averaged over all passengers, boarding stays cheap, which is what "amortized O(1)" means.
 :::
 
-### 2. Picking a sequence
-
-```mermaid
-flowchart TB
-    Q{"Will the contents change?"} -->|yes| Q2{"Adding/removing at the FRONT too?"}
-    Q2 -->|no| L["list"]
-    Q2 -->|yes| D["collections.deque"]
-    Q -->|no| Q3{"Is it text?"}
-    Q3 -->|yes| S["str"]
-    Q3 -->|no| Q4{"Need field names?"}
-    Q4 -->|no| T["tuple"]
-    Q4 -->|yes| N["NamedTuple (immutable) or dataclass (mutable)"]
-```
-
-## The Paradigm / Core Concepts
-
-### 🔴 List vs tuple vs str
-
-| | `list` | `tuple` | `str` |
-|---|---|---|---|
-| Literal | `[1, 2]`, `[]` | `(1, 2)`, `(1,)`, `()` | `"ab"`, `'ab'`, `"""ab"""` |
-| Mutable | ✅ | ❌ | ❌ |
-| Hashable (dict key) | ❌ | ✅ if all elements are | ✅ |
-| Elements | Any objects | Any objects | Unicode code points |
-| Methods | 11 (`append`, `insert`, `extend`, `remove`, `pop`, `index`, `count`, `sort`, `reverse`, `copy`, `clear`) | 2 (`count`, `index`) | ~47 (`split`, `join`, `strip`, …) |
-| Memory for 3 ints (3.14) | 88 bytes | 72 bytes | — |
-| Typical AI use | Batches, paths, loss history | Tensor shapes, `(x, y)` pairs, return values | Prompts, labels, file names |
-
-### 🔴 List time complexity
-
 | Operation | Example | Cost | Why |
 |---|---|---|---|
 | Index / assign | `a[i]`, `a[i] = x` | **O(1)** | Pointer arithmetic into the array |
@@ -100,8 +87,6 @@ flowchart TB
 | Extend | `a.extend(b)` | **O(len(b))** | |
 | Sort | `a.sort()`, `sorted(a)` | **O(n log n)**; O(n) if already sorted | Timsort / Powersort finds existing runs |
 | `len`, `min`/`max`/`sum` | | O(1), O(n) | Length is stored; the others scan |
-
-### 🔴 List methods
 
 | Method | Does | Returns | Raises |
 |---|---|---|---|
@@ -123,8 +108,17 @@ Methods that change a list **in place** (`append`, `sort`, `reverse`, `insert`, 
 
 </RuleCard>
 
-### 🔴 Slicing
+:::tip[🎯 Interview angle]
+**"How is a Python list implemented, and what does each operation cost?"** It's a dynamic array of pointers with over-allocated spare capacity, so indexing and assignment are O(1), `append` and `pop()` from the end are amortized O(1), and insert, delete or search anywhere else is O(n) because elements shift or are scanned. Mention that `sort()` works in place and returns `None` while `sorted()` returns a new list, and reach for `deque` when you need O(1) operations at the front.
+:::
 
+## 🔴 2. Slicing
+
+Slicing is how you take a piece of a sequence: `seq[start:stop:step]`. The `start` index is included and the `stop` index is **excluded**, the same half-open convention as `range`, so `seq[a:b]` has exactly `b - a` items and `seq[:k] + seq[k:]` rebuilds the original. Any part can be left out: a missing `start` means the beginning, a missing `stop` means the end, and a missing `step` means 1. Negative indexes count from the end, so `-1` is the last item and `seq[-3:]` is the last three.
+
+The `step` lets you skip or reverse. `seq[::2]` takes every second item and `seq[::-1]` walks backwards, producing a reversed copy. Two behaviours surprise newcomers. First, slicing is forgiving: an out-of-range slice simply returns an empty or shorter result instead of raising `IndexError`, unlike a single index. Second, a slice of a list is a **new list** (a shallow copy), which costs time proportional to its length and means changes to the slice don't touch the original.
+
+Slices can also appear on the left-hand side of an assignment. Slice assignment replaces a range of items with the contents of an iterable, and the replacement can be a different length, so the list can grow or shrink. `del` with a slice removes a whole range at once. In AI code, slicing is everywhere: train/validation splits, keeping the last few messages of a chat history, and sliding windows over token ids.
 | Slice | Meaning (with `nums = [10, 20, …, 100]`) | Result |
 |---|---|---|
 | `nums[0:5]` | Index 0 up to (not including) 5 | `[10, 20, 30, 40, 50]` |
@@ -139,8 +133,17 @@ Methods that change a list **in place** (`append`, `sort`, `reverse`, `insert`, 
 - **Slice assignment** can resize a list: `lst[1:3] = ["a", "b", "c"]` replaces 2 items with 3. `del lst[::2]` deletes every other item.
 - **Why slicing matters in AI**: train/validation splits (`data[:split]`, `data[split:]`), the last *k* messages of a chat history (`history[-k:]`), sliding windows over token ids, reversing sequences for bidirectional models.
 
-### 🔴 Shallow vs deep copy
+:::tip[🎯 Interview angle]
+**"What does `nums[100:]` return when the list has 10 items, and what does `nums[::-1]` do?"** An out-of-range slice never raises, it just returns `[]`; `[::-1]` returns a reversed copy. Add that `stop` is exclusive, negative indexes count from the end, and a list slice is a new shallow copy, so modifying it doesn't change the original.
+:::
 
+## 🔴 3. Shallow vs Deep Copy
+
+Because a list stores references, there are three different things people mean by "copy", and mixing them up is one of the most common Python bugs. Plain assignment, `b = a`, copies nothing at all: it gives the same list a second name, so a change through `b` is visible through `a`. A **shallow copy** (`a.copy()`, `a[:]`, `list(a)` or `copy.copy(a)`) creates a new outer list, but its slots still point at the **same** inner objects. For a flat list of numbers or strings that is all you need, because those inner objects are immutable anyway.
+
+The trouble starts with nested data. If `a` is a list of lists, a shallow copy shares the inner lists, so writing `shallow[0][0] = 99` changes the original too. A **deep copy**, `copy.deepcopy(a)`, walks the whole structure recursively and copies every mutable object it finds, so the two structures become fully independent. It is slower and uses more memory, which is why Python doesn't do it by default; use it for nested configs or structures you plan to modify per experiment.
+
+The same sharing explains the famous 2-D list trap. `[[0] * 3] * 3` builds one inner list and then repeats **the reference to it** three times, so changing one "row" changes all three. Repetition with `*` never copies the elements it repeats. The fix is to build each row separately with a comprehension, `[[0] * 3 for _ in range(3)]`, which runs the inner expression once per row.
 | Operation | New outer object? | Inner objects | Use when |
 |---|:---:|---|---|
 | `b = a` | ❌ | Same | You want a second name (rarely what you meant) |
@@ -153,8 +156,50 @@ Methods that change a list **in place** (`append`, `sort`, `reverse`, `insert`, 
 Photocopying a binder's table of contents gives you a new page, but it still points to the same chapters in the same binder: scribble in chapter 1 and everyone sees it. A deep copy photocopies every chapter as well, so you can mark yours up freely.
 :::
 
-### 🔴 String essentials
+:::tip[🎯 Interview angle]
+**"What's the difference between a shallow and a deep copy, and why does `[[0] * 3] * 3` misbehave?"** A shallow copy makes a new outer container but shares the inner objects; `deepcopy` copies recursively so nothing is shared. `[[0] * 3] * 3` repeats one reference to the same inner list, so all rows change together; build grids with `[[0] * 3 for _ in range(3)]`.
+:::
 
+## 🔴 4. Tuples, and Choosing a Sequence
+
+A **tuple** is an ordered, **immutable** sequence. Once created, its slots cannot be reassigned, added or removed, so it only needs two methods (`count` and `index`). Tuples are written with commas, and the parentheses are often optional: the comma is what makes the tuple, which is why a one-element tuple needs a trailing comma, `(1,)`, while `(1)` is just the integer 1 in brackets.
+
+Immutability buys three practical benefits. A tuple can be **hashed** as long as all its elements are hashable, so it can be a dict key or a set member, for example a `(row, col)` cache key; a list never can. It is **smaller**, because its pointers are stored inline with no spare capacity. And it is **safe to share**: a tensor shape or a config record handed to another function can't be changed by accident. The one caveat is that immutability is **shallow**: a tuple that contains a list can't swap that list for another object, but the list itself can still be mutated.
+
+The usual rule of thumb is that a list holds **many items of the same kind** that may change (a batch, a loss history), while a tuple holds **a fixed record whose positions have meaning** (an `(x, y)` point, a `(batch, channels, height, width)` shape, multiple return values). When the positions deserve names, `typing.NamedTuple` gives a tuple named fields, and `@dataclass` is the mutable alternative. The decision tree below puts the whole choice, including `str` and `deque`, on one screen.
+| | `list` | `tuple` | `str` |
+|---|---|---|---|
+| Literal | `[1, 2]`, `[]` | `(1, 2)`, `(1,)`, `()` | `"ab"`, `'ab'`, `"""ab"""` |
+| Mutable | ✅ | ❌ | ❌ |
+| Hashable (dict key) | ❌ | ✅ if all elements are | ✅ |
+| Elements | Any objects | Any objects | Unicode code points |
+| Methods | 11 (`append`, `insert`, `extend`, `remove`, `pop`, `index`, `count`, `sort`, `reverse`, `copy`, `clear`) | 2 (`count`, `index`) | ~47 (`split`, `join`, `strip`, …) |
+| Memory for 3 ints (3.14) | 88 bytes | 72 bytes | — |
+| Typical AI use | Batches, paths, loss history | Tensor shapes, `(x, y)` pairs, return values | Prompts, labels, file names |
+
+```mermaid
+flowchart TB
+    Q{"Will the contents change?"} -->|yes| Q2{"Adding/removing at the FRONT too?"}
+    Q2 -->|no| L["list"]
+    Q2 -->|yes| D["collections.deque"]
+    Q -->|no| Q3{"Is it text?"}
+    Q3 -->|yes| S["str"]
+    Q3 -->|no| Q4{"Need field names?"}
+    Q4 -->|no| T["tuple"]
+    Q4 -->|yes| N["NamedTuple (immutable) or dataclass (mutable)"]
+```
+
+:::tip[🎯 Interview angle]
+**"Why can a tuple be a dict key but a list can't?"** A dict needs a hash that never changes, and a tuple's contents can't be reassigned, so a tuple of hashable elements is hashable; a list is mutable, so it raises `TypeError: unhashable type: 'list'`. Add that `(1,)` needs the comma, that tuples are smaller than lists, and that immutability is shallow: `(1, [2])` is not hashable because it contains a list.
+:::
+
+## 🔴 5. Strings
+
+A Python `str` is an **immutable** sequence of Unicode **code points**. It supports everything the other sequences do (indexing, slicing, `len`, `in`, iteration), but `s[0] = "C"` raises `TypeError`, and every method that seems to modify a string (`upper`, `replace`, `strip`) actually returns a **new** string. Immutability is what lets strings be hashed once and cached, which makes them fast dict keys.
+
+The string API is large, but a handful of methods cover most interview and day-to-day work: changing case, searching (`find` returns `-1` when the text is absent while `index` raises `ValueError`), splitting and joining, stripping whitespace, replacing, and testing content. Note that `split()` with no argument splits on runs of whitespace and drops empty pieces, while `split(" ")` splits on every single space. For formatting, f-strings are the modern default.
+
+Immutability has a performance consequence. Building a long string with `s += piece` in a loop can create a new string on every step, which is O(n²) in general (CPython has an in-place optimization that only works when nothing else references the string; see Going Deeper). The reliable pattern is to collect the pieces in a list and call `"".join(parts)` once, which is O(n). Finally, "length" is subtle for text: `len` counts code points, which is neither the number of bytes when encoded as UTF-8 nor the number of tokens an LLM sees.
 | Task | Code | Result |
 |---|---|---|
 | Change case | `capitalize()`, `title()`, `upper()`, `lower()`, `swapcase()`, `casefold()` | New strings |
@@ -167,7 +212,11 @@ Photocopying a binder's table of contents gives you a new page, but it still poi
 | Test content | `isdigit()`, `isalpha()`, `isalnum()`, `isspace()` | `bool` |
 | Format | f-strings, `str.format`, `%` | f-strings are the modern default |
 
-## ⚙️ Under the Hood (CPython Internals)
+:::tip[🎯 Interview angle]
+**"Strings are immutable: what does that mean in practice?"** You can't assign to `s[i]`; every method returns a new string, and the original is unchanged. The practical consequence is to build strings with `"".join(parts)` (O(n)) rather than `+=` in a loop, which is O(n²) in general. Bonus points for noting that `len` counts code points, not bytes or LLM tokens.
+:::
+
+## ⚙️ Going Deeper (CPython Internals)
 
 - **List layout**: a header (refcount, type, `ob_size` = length, `allocated` = capacity) plus a separate C array of `PyObject*` pointers. Growth uses `new_allocated = (n + (n >> 3) + 6) & ~3`, which gives the measured capacities **4, 8, 16, 24, 32, 40, 52, 64, 76…**: roughly 12.5% headroom, so the copying cost averages out to O(1) per append.
 - **Tuple layout**: the pointers are stored **inline** right after the header, with no separate array and no spare capacity, so `(1, 2, 3)` takes 72 bytes against 88 for `[1, 2, 3]`. CPython keeps **free lists** of small tuples for reuse, and tuples of constants (`(1, 2, 3)` in source) are **folded at compile time** into a single constant.
@@ -574,3 +623,30 @@ A RAG service built its prompt by concatenating retrieved chunks with `+=` insid
 - **`len()` of a string isn't the token count**: budget LLM context windows with the model's tokenizer (`tiktoken`, the Hugging Face tokenizer, or the provider's token-counting endpoint), never with `len(text)` or `len(text.split())`.
 - **Zero-step slices**: `nums[::0]` raises `ValueError: slice step cannot be zero`.
 - **`tuple` creation from one string**: `tuple("Alex")` gives `('A', 'l', 'e', 'x')`, not `('Alex',)`. Same for `list("Alex")` and `set("Alex")`.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **`list`** = ordered, **mutable**, duplicates allowed, mixed types allowed. Internally a **dynamic array of pointers** (not a linked list).
+- 🔴 **List Big-O**: index/assign `O(1)`, **`append` amortized `O(1)`**, `pop()` from the end `O(1)`; `insert(0, x)`, `pop(0)`, `remove(x)`, `x in list`, `index(x)` are **`O(n)`**; `sort()` is `O(n log n)`. Need fast operations at both ends → **`collections.deque`**.
+- 🔴 A list **over-allocates** by about 12.5% when it grows (capacities 4, 8, 16, 24, 32, 40, 52, …), which is what makes `append` amortized O(1).
+- 🔴 **Slicing** `seq[start:stop:step]`: `stop` is **exclusive**, out-of-range slices **never raise** (they're just empty), `[::-1]` reverses, and **a slice of a list is a new (shallow) copy**.
+- 🔴 **Shallow vs deep copy**: `list.copy()`, `lst[:]`, `list(lst)` copy only the **outer** list; nested lists are **shared**. Use `copy.deepcopy` for nested structures.
+- 🔴 **`[[0] * 3] * 3` creates 3 references to the SAME inner list.** Build 2-D lists with a comprehension: `[[0] * 3 for _ in range(3)]`.
+- 🔴 **`list.sort()` sorts in place and returns `None`**; `sorted(iterable)` returns a **new list** and works on any iterable. Both are **stable** and take `key=` and `reverse=`.
+- 🔴 **`tuple`** = ordered, **immutable**, only 2 methods (`count`, `index`). A one-element tuple needs a comma: **`(1,)`**; `(1)` is just the int `1`.
+- 🔴 A tuple is **hashable only if all its elements are** → can be a dict key / set member; a list never can (`TypeError: unhashable type: 'list'`).
+- 🔴 **Strings are immutable** sequences of Unicode code points: `s[0] = "C"` raises `TypeError`; every "modifying" method returns a **new** string.
+- 🔴 **Build strings with `"".join(parts)`** (O(n)), not `s += part` in a loop (O(n²) in general).
+- 🟠 Tuples are **smaller** (no over-allocation, no growth bookkeeping) and slightly **faster to create**; constant tuples are built once at compile time.
+- 🟠 A tuple's **immutability is shallow**: `t = (1, [2])` can't be reassigned, but `t[1].append(3)` works.
+- 🟠 `str.split()` (no argument) splits on **runs of whitespace** and drops empty strings; `split(" ")` splits on **every single space**.
+- 🟠 `find()` returns **-1** when not found; `index()` raises **`ValueError`**.
+- 🟡 `len(s)` counts **code points**, not bytes or visible characters: `len("café")` can be 4 or 5 depending on Unicode normalization; LLM **tokens** are a third, different count.
+- 🟡 **`namedtuple` / `typing.NamedTuple`** give tuples named fields at no memory cost; `@dataclass` (on the [OOP page](./07-oop-in-python.md)) is the mutable alternative.
+
+:::speak[When would you use a tuple instead of a list?]
+"I use a **list** for a **homogeneous, changing collection**: a batch of samples, a list of file paths, the losses I append every epoch. I use a **tuple** for a **fixed record** whose position means something: an `(x, y)` coordinate, a `(batch, channels, height, width)` tensor shape, or several values returned from a function. Three concrete reasons. First, a tuple is **immutable**, so nobody can accidentally change a shape or a config record I've handed them. Second, a tuple of immutable elements is **hashable**, so it can be a **dict key** or set member, for example caching results by `(row, col)` in dynamic programming. A list can't. Third, it's **smaller and slightly faster**: no spare capacity, and constant tuples are built once at compile time. The caveat I'd mention is that immutability is **shallow**: a tuple that contains a list can still have that list mutated."
+:::
+

@@ -11,6 +11,12 @@ A NumPy **`ndarray`** is a single block of memory holding numbers of **one dtype
 
 <FormulaKey />
 
+:::info[Where this page sits]
+**Before:** [Python for Data Exploration: Overview](../00-overview.md), which introduces EDA and the ShopStream dataset; and, for the Python background, [Lists, Tuples & Strings](../../00-python-fundamentals/03-lists-tuples-strings.md), which explains why a list is an array of pointers.
+**This page:** what an `ndarray` is, how it is laid out in memory, creating arrays, dtypes and precision, shape, strides, views vs copies, and indexing in 1, 2 and 3 dimensions.
+**Next:** [NumPy: Broadcasting, Linear Algebra & Aggregations](./02-numpy-broadcasting-linalg-aggregations.md).
+:::
+
 ## 🧭 Start Here: What NumPy Is and Why It Exists
 
 **The problem.** A Python list of numbers is really a list of **pointers**, each pointing to a separate `float` object somewhere in memory (24 bytes each, plus the 8-byte pointer). Adding 1.1 to every element means a Python-level loop that, for every element, follows a pointer, checks the object's type, calls the right addition function and allocates a new object for the result. That's flexible, but slow and memory-hungry.
@@ -18,6 +24,14 @@ A NumPy **`ndarray`** is a single block of memory holding numbers of **one dtype
 **NumPy's answer.** Store the numbers themselves, **side by side, all of the same type**, in one contiguous buffer: one million `float64` values take exactly 8,000,000 bytes. Because every element has the same size and type, NumPy can run a single compiled C loop over the buffer (and use the CPU's SIMD instructions to process several numbers per instruction). That's what **vectorization** means: you write `prices * 1.1` and the loop happens in C, not in Python.
 
 **Why an AI engineer cares.** Pandas columns, image batches, embeddings, audio, and every PyTorch tensor you load from data are arrays with exactly this layout. Knowing what a **dtype**, a **stride** and a **view** are explains why some operations are free, why others silently copy gigabytes, and why `torch.from_numpy` can be instant.
+
+The chapters build up in this order:
+
+1. **Lists vs arrays**: why one typed, contiguous buffer is smaller and faster than a list of objects.
+2. **Creating arrays**: `array`, `arange`, `linspace`, `zeros`, `empty` and the random generator.
+3. **dtypes**: what each element type costs in memory and in precision.
+4. **Shape, strides and views**: how one buffer can be seen in many shapes without copying, and when NumPy does copy.
+5. **Indexing**: single elements, slices, fancy indexing and boolean masks in 1, 2 and 3 dimensions.
 
 | New concept | One-line meaning |
 |---|---|
@@ -34,40 +48,13 @@ A NumPy **`ndarray`** is a single block of memory holding numbers of **one dtype
 A Python list is a cabinet of folders, each holding a sticky note with a number written on it: flexible, but to add 1.1 to every number you open every folder, read the note, and write a new one. A NumPy array is a ruler with numbers printed at equal spacing: you can slide a single tool along it and process every mark in one smooth motion.
 :::
 
-## ⚡ Essential Interview Recall
+## 🔴 1. Lists vs Arrays: Memory and Vectorization
 
-- 🔴 **ndarray** = contiguous typed buffer + **shape** + **strides** + **dtype**. All elements share one dtype.
-- 🔴 **Vectorization** runs the loop in C (often with SIMD): on 1M floats we measured **25 ms** for a Python generator sum vs **1 ms** with `(arr * 1.1).sum()`.
-- 🔴 **Memory**: 1M floats ≈ **32 MB** as a Python list vs **8 MB** as `float64` (4 MB as `float32`).
-- 🔴 **C order (row-major)** stores rows contiguously (NumPy's default); **Fortran order (column-major)** stores columns contiguously. `arr.flags` reports which.
-- 🔴 **Strides** = bytes per step along each axis. A `(3, 4)` `float64` array in C order has strides `(32, 8)`; its transpose has `(8, 32)`: **transposing only swaps strides**, it copies nothing.
-- 🔴 **Basic slicing returns a VIEW** (shares memory: writing to it changes the original). Check with `np.shares_memory(a, b)` or `b.base is a`.
-- 🔴 **Fancy indexing (integer arrays) and boolean masks return COPIES**, but **assigning through them writes into the original**: `a[a > 2] = 0` works.
-- 🔴 Combine masks with **`&`, `|`, `~`** and **parentheses**: `(a > 4) & (a < 10)`. Python's `and`/`or` raise `ValueError: The truth value of an array ... is ambiguous`.
-- 🔴 Default dtypes: integers → **`int64`**, floats → **`float64`**; mixing in a string turns the whole array into **strings** (`<U32`).
-- 🟠 **`astype` always copies** (by default); casting floats to ints **truncates** (`1.5 → 1`, `2.7 → 2`).
-- 🟠 **Integer overflow wraps silently** in arrays: `uint8` 250 + 10 → **4**; `int8` 127 + 1 → **-128**.
-- 🟠 **Precision**: `float16` can't represent 2049 (→ 2048) and overflows above 65,504; `float32` has ~7 significant digits (ε ≈ 1.19e-7); `float64` ~16.
-- 🟠 Creation: `np.array`, `np.arange` (step; float steps are unreliable), `np.linspace` (count; includes the end), `zeros`, `ones`, `full`, `eye`, **`empty`** (uninitialized garbage!), `np.random.default_rng(seed)`.
-- 🟡 **NumPy 2 / NEP 50**: Python scalars are "weak": `float32_array + 1.0` stays **`float32`**.
-- 🟡 `np.sum` uses **pairwise summation** (10M float32 ones sum to exactly 1e7), but a running `cumsum` in `float32` stalls at **16,777,216** (2²⁴): accumulate in `float64`.
+A Python list of numbers doesn't hold numbers; it holds **pointers**, each to a separate `float` object living somewhere else on the heap. That design lets a list mix types, but every operation on it pays for the flexibility. Adding 1.1 to each element means a Python-level loop that follows a pointer, checks the object's type, finds the right addition routine and allocates a brand-new object for the result, one element at a time. Memory suffers too: each number costs a full object plus the pointer to it.
 
-## 📐 Formula Sheet
+A NumPy **`ndarray`** stores the raw numbers themselves, side by side in one contiguous buffer, and every element has the same **dtype**. One million `float64` values are exactly 8,000,000 bytes, with no per-element headers. Because the size and type of every element are known in advance, NumPy can process the whole buffer with a single compiled C loop, and the CPU can use its cache efficiently (the next number is always adjacent) and its SIMD instructions (several numbers per instruction).
 
-| Concept | Formula | In plain words |
-|---|---|---|
-| Element address | $\pred{\text{offset}} = \sum_k \data{i_k} \cdot \hyper{s_k}$ | Bytes from the start = each index × that axis's stride |
-| C-order strides | $\hyper{s_k} = \text{itemsize} \cdot \prod_{j>k} \data{n_j}$ | Last axis moves 1 element; earlier axes jump over whole rows |
-| Buffer size | $\pred{\text{nbytes}} = \text{itemsize} \cdot \prod_k \data{n_k}$ | Element count × bytes per element |
-| float precision | $\pred{\varepsilon} = 2^{-\hyper{m}}$ | Gap between 1.0 and the next representable number ($m$ = mantissa bits) |
-
-:::speak[Why is NumPy so much faster than Python lists?]
-"Three reasons, all about memory layout. First, a Python list stores **pointers to boxed objects**: each float is a separate 24-byte object scattered around memory, so iterating means chasing pointers and checking types on every element. A NumPy array stores the raw numbers **contiguously with a single dtype**, so 1 million float64s are exactly 8 megabytes in one block. Second, because the type is fixed, NumPy runs the operation as **one compiled C loop** over the buffer, with no per-element interpreter overhead, and the CPU can use **SIMD** instructions and its cache efficiently because the next number is always right next to the current one. Third, many operations, like slicing, transposing and reshaping, just create a **view**: new shape and strides over the same buffer, so they cost almost nothing. In my measurement, multiplying and summing a million floats took about 25 milliseconds in a Python loop and about 1 millisecond vectorized."
-:::
-
-## The Mental Model
-
-### 1. List vs array in memory
+That is what **vectorization** means: you write a whole-array expression such as `prices * 1.1` and the loop runs in C rather than in the interpreter. On this page's measurement, a Python generator sum over one million floats took about 25 ms against about 1 ms for `(arr * 1.1).sum()`, and the list used about 32 MB against 8 MB for the array. Pandas columns, image batches, embeddings and PyTorch tensors all share this layout, which is why the rest of the section builds on it.
 
 ```mermaid
 flowchart LR
@@ -85,26 +72,15 @@ flowchart LR
 
 <Animation src="numpy/list-vs-array" caption="A Python list holds pointers to separate float objects, so a loop must hop from object to object, checking types each time. A NumPy array stores the raw numbers side by side, so one compiled loop sweeps across them. The timings are from the measurement on this page." />
 
-### 2. One buffer, many views
-
-```mermaid
-flowchart TB
-    B["Data buffer: 0 1 2 3 4 5 6 7 8 9 10 11 (float64, 96 bytes)"]
-    B --> V1["m = reshape(3, 4)<br/>shape (3, 4) · strides (32, 8)"]
-    B --> V2["m.T<br/>shape (4, 3) · strides (8, 32)"]
-    B --> V3["m[:, ::2]<br/>shape (3, 2) · strides (32, 16)"]
-    B -.->|"fancy / boolean indexing"| C["NEW buffer (copy)"]
-```
-
-<Animation src="numpy/strides-views" caption="The 12 numbers never move. Reshaping, transposing and slicing only change the shape and strides that tell NumPy how many bytes to jump per step, so all three arrays are views of the same buffer. Fancy indexing is the exception: it gathers the chosen elements into a new buffer." />
-
-:::analogy[Strides are the directions to the next seat]
-Imagine a cinema where seats are numbered in one long line. "Shape (3, 4), strides (32, 8)" is an usher's instruction: "to go to the next seat in a row, walk 8 steps; to go to the next row, walk 32". Transposing doesn't move anybody; the usher just swaps the instructions. That's why it's free.
+:::tip[🎯 Interview angle]
+**"Why is NumPy so much faster than a Python list?"** A list stores pointers to boxed objects, so every element access chases a pointer and checks a type; an array stores raw numbers of one dtype contiguously, so one compiled loop (with SIMD and good cache use) processes the buffer. Quote the measurement: about 25 ms vs 1 ms for a million floats, and 32 MB vs 8 MB. The full spoken answer is near the end of the page.
 :::
 
-## The Paradigm / Core Concepts
+## 🔴 2. Creating Arrays
 
-### 🔴 Array creation
+Most arrays are created in one of a few ways. `np.array(seq)` converts existing Python data and infers a dtype: all integers give `int64`, any float gives `float64`, and mixing in a string turns the whole array into strings. For generated sequences, `np.arange(start, stop, step)` works like `range` (the stop is excluded) and `np.linspace(start, stop, num)` returns a fixed **number** of evenly spaced values, including the stop.
+
+The difference between those two matters with floats. A float step accumulates rounding error, so the number of elements `arange` produces is not reliable, and its last value may be slightly off; whenever you want N evenly spaced floats, use `linspace`. For buffers to fill later, `zeros`, `ones` and `full` create initialised arrays and `eye` creates an identity matrix (also a handy one-hot encoder). `np.empty` allocates **without initialising**, so it contains whatever bytes were already there; use it only when you will overwrite every element. For random data, create a generator once with `np.random.default_rng(seed)` so results are reproducible.
 
 | Function | Example | Result | Use it for |
 |---|---|---|---|
@@ -122,7 +98,17 @@ Imagine a cinema where seats are numbered in one long line. "Shape (3, 4), strid
 
 </RuleCard>
 
-### 🔴 dtypes and what they cost
+:::tip[🎯 Interview angle]
+**"What's the difference between `np.arange` and `np.linspace`, and is `np.empty` an array of zeros?"** `arange` takes a step and excludes the stop, so with float steps the element count can vary; `linspace` takes a count and includes the stop, so use it for evenly spaced floats. `np.empty` is uninitialised memory, not zeros; use `np.zeros` unless every element is overwritten immediately.
+:::
+
+## 🔴 3. dtypes: Memory and Precision
+
+Every array has exactly one **dtype**, the type and size of each element, and choosing it is the first memory and precision decision in any ML pipeline. Integer types range from 1-byte `int8`/`uint8` (pixels, quantized weights) to 8-byte `int64` (indices and token IDs, PyTorch's `long`). Float types trade precision for size: `float16` keeps about 3 significant digits and overflows above 65,504; `float32`, the standard for model inputs and weights, keeps about 7; `float64`, the NumPy and pandas default, keeps about 16.
+
+Two behaviours make dtypes a source of silent bugs. First, **integer overflow in arrays wraps around without warning**: `uint8` 250 + 10 gives 4. Second, **float precision runs out**: above 2²⁴ = 16,777,216, consecutive `float32` values are 2 apart, so adding 1 changes nothing. The **machine epsilon** formula below captures that precision limit. Converting between dtypes with `astype` makes a copy by default, and casting floats to integers truncates toward zero rather than rounding.
+
+When arrays and Python numbers meet, NumPy 2 follows NEP 50: Python scalars are "weak", so `float32_array + 1.0` stays `float32`, while between two arrays the larger type wins.
 
 | dtype | Bytes | Range / precision | ML usage |
 |---|:---:|---|---|
@@ -151,7 +137,32 @@ $$
 
 </Formula>
 
-### 🔴 Views vs copies
+:::tip[🎯 Interview angle]
+**"Which dtype would you use for model inputs, and what can go wrong with small types?"** `float32`: 4 bytes and about 7 significant digits, enough for training and half the memory of `float64`. Small integer types overflow silently (`uint8` 250 + 10 = 4), `float16` overflows above 65,504, and `float32` can't count past 16,777,216 by ones, so accumulate in `float64`.
+:::
+
+## 🔴 4. Shape, Strides and Views
+
+An array is a data buffer plus a small amount of metadata that says how to read it: the **shape** (how many elements along each axis), the **dtype** and the **strides** (how many bytes to jump to move one step along each axis). A `(3, 4)` `float64` array in C (row-major) order has strides `(32, 8)`: the next column is 8 bytes away, the next row 32 bytes away. Element `[i, j]` simply lives at `i * 32 + j * 8` bytes from the start.
+
+This separation is what makes many operations free. Transposing swaps the strides to `(8, 32)` and moves no data. Reshaping a contiguous array and taking a basic slice such as `m[:, ::2]` produce new shapes and strides over the **same buffer**. These results are **views**: they share memory with the original, so writing into a view changes the original too. You can check with `np.shares_memory(a, b)` or by seeing whether `b.base is a`.
+
+Some selections can't be described by regular strides: picking arbitrary positions with an integer array (**fancy indexing**) or with a **boolean mask**. NumPy must gather those elements into a **new** buffer, so they return **copies**. The one twist is assignment: `a[a > 2] = 0` writes straight into `a`, because indexing on the left of `=` is a different operation from reading. When you need an independent array, call `.copy()` explicitly.
+
+```mermaid
+flowchart TB
+    B["Data buffer: 0 1 2 3 4 5 6 7 8 9 10 11 (float64, 96 bytes)"]
+    B --> V1["m = reshape(3, 4)<br/>shape (3, 4) · strides (32, 8)"]
+    B --> V2["m.T<br/>shape (4, 3) · strides (8, 32)"]
+    B --> V3["m[:, ::2]<br/>shape (3, 2) · strides (32, 16)"]
+    B -.->|"fancy / boolean indexing"| C["NEW buffer (copy)"]
+```
+
+<Animation src="numpy/strides-views" caption="The 12 numbers never move. Reshaping, transposing and slicing only change the shape and strides that tell NumPy how many bytes to jump per step, so all three arrays are views of the same buffer. Fancy indexing is the exception: it gathers the chosen elements into a new buffer." />
+
+:::analogy[Strides are the directions to the next seat]
+Imagine a cinema where seats are numbered in one long line. "Shape (3, 4), strides (32, 8)" is an usher's instruction: "to go to the next seat in a row, walk 8 steps; to go to the next row, walk 32". Transposing doesn't move anybody; the usher just swaps the instructions. That's why it's free.
+:::
 
 | Operation | View or copy? | Writing to the result changes the original? |
 |---|---|---|
@@ -168,7 +179,15 @@ Basic slicing (`start:stop:step`, single integers) → **view**. Indexing with a
 
 </RuleCard>
 
-### 🔴 Indexing cheat sheet
+:::tip[🎯 Interview angle]
+**"When does NumPy return a view and when a copy?"** Basic slicing, reshape (when possible) and transpose return views: new shape and strides over the same buffer, so writes affect the original. Fancy (integer-array) indexing and boolean masks return copies, although assigning through them (`a[a > 2] = 0`) writes into the original. Check with `np.shares_memory`, and call `.copy()` when you need independence.
+:::
+
+## 🔴 5. Indexing in 1, 2 and 3 Dimensions
+
+NumPy indexing extends Python's sequence indexing to many axes, with one index (or slice) per axis separated by commas. `M[1, 2]` is the element in row 1, column 2; `M[0:2, 1:3]` is a 2×2 block; `M[:, 2]` is a whole column. Prefer `M[1, 2]` to `M[1][2]`, which first builds a temporary row. The `...` (Ellipsis) stands for "all the leading axes", so `sensor[..., 0]` takes index 0 of the last axis whatever the number of dimensions.
+
+Beyond slices there are two selection mechanisms. **Fancy indexing** passes arrays of integers: `M[[0, 2]]` picks rows 0 and 2, and `M[[0, 2], [1, 3]]` picks the **pairs** (0, 1) and (2, 3), not a 2×2 block; use `np.ix_` when you want the sub-grid. **Boolean masks** select every element where a condition holds, producing a 1-D result. Conditions are combined with `&`, `|` and `~`, each comparison wrapped in parentheses; Python's `and` and `or` raise `ValueError` because an array has no single truth value.
 
 | Goal | 1-D | 2-D (`M`, shape `(3, 4)`) | 3-D (`sensor`, shape `(3, 7, 24)`) |
 |---|---|---|---|
@@ -182,7 +201,11 @@ Basic slicing (`start:stop:step`, single integers) → **view**. Indexing with a
 | Pick a sub-grid | `M[np.ix_([0, 2], [1, 3])]` → 2×2 | | |
 | Condition | `a[a > 2]` | `M[(M > 4) & (M < 10)]` → 1-D result | `sensor[sensor > 30]` |
 
-## ⚙️ Under the Hood (NumPy Internals)
+:::tip[🎯 Interview angle]
+**"How do you select rows where two conditions hold, and what does `M[[0, 2], [1, 3]]` return?"** Use a boolean mask with `&` and parentheses: `M[(M > 4) & (M < 10)]`; `and` raises `ValueError` because an array's truth value is ambiguous. `M[[0, 2], [1, 3]]` returns the elements at the pairs (0, 1) and (2, 3); use `M[np.ix_([0, 2], [1, 3])]` for the 2×2 sub-grid. Both selections are copies.
+:::
+
+## ⚙️ Going Deeper (NumPy Internals)
 
 - **The `ndarray` object** is a small C struct: a pointer to the data buffer, `ndim`, `shape`, `strides`, a `dtype` descriptor, flags (`C_CONTIGUOUS`, `F_CONTIGUOUS`, `WRITEABLE`, `OWNDATA`) and a `base` reference to the object that owns the memory (for views).
 - **Address arithmetic**: element `[i, j]` lives at `data + i*strides[0] + j*strides[1]`. For `np.arange(12, dtype=np.float64).reshape(3, 4)` the strides are `(32, 8)`; for an `int32` array of the same shape, `(16, 4)`; for the Fortran-order copy, `(8, 24)`.
@@ -504,3 +527,36 @@ A feature-engineering job held a 6 GB `float64` feature matrix and ran `X = X[ma
 - **NaN propagates and isn't equal to itself**: `np.nan == np.nan` is `False`; use `np.isnan`, and the `nan*` functions (`np.nanmean`, `np.nansum`) to ignore it.
 - **`arr.astype(np.int64)` truncates toward zero** (`-2.7 → -2`). Use `np.round` (banker's rounding) or `np.floor` first if you mean something else.
 - **Comparing floats**: `np.isclose` / `np.allclose` with a tolerance, never `==` on computed results.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **ndarray** = contiguous typed buffer + **shape** + **strides** + **dtype**. All elements share one dtype.
+- 🔴 **Vectorization** runs the loop in C (often with SIMD): on 1M floats we measured **25 ms** for a Python generator sum vs **1 ms** with `(arr * 1.1).sum()`.
+- 🔴 **Memory**: 1M floats ≈ **32 MB** as a Python list vs **8 MB** as `float64` (4 MB as `float32`).
+- 🔴 **C order (row-major)** stores rows contiguously (NumPy's default); **Fortran order (column-major)** stores columns contiguously. `arr.flags` reports which.
+- 🔴 **Strides** = bytes per step along each axis. A `(3, 4)` `float64` array in C order has strides `(32, 8)`; its transpose has `(8, 32)`: **transposing only swaps strides**, it copies nothing.
+- 🔴 **Basic slicing returns a VIEW** (shares memory: writing to it changes the original). Check with `np.shares_memory(a, b)` or `b.base is a`.
+- 🔴 **Fancy indexing (integer arrays) and boolean masks return COPIES**, but **assigning through them writes into the original**: `a[a > 2] = 0` works.
+- 🔴 Combine masks with **`&`, `|`, `~`** and **parentheses**: `(a > 4) & (a < 10)`. Python's `and`/`or` raise `ValueError: The truth value of an array ... is ambiguous`.
+- 🔴 Default dtypes: integers → **`int64`**, floats → **`float64`**; mixing in a string turns the whole array into **strings** (`<U32`).
+- 🟠 **`astype` always copies** (by default); casting floats to ints **truncates** (`1.5 → 1`, `2.7 → 2`).
+- 🟠 **Integer overflow wraps silently** in arrays: `uint8` 250 + 10 → **4**; `int8` 127 + 1 → **-128**.
+- 🟠 **Precision**: `float16` can't represent 2049 (→ 2048) and overflows above 65,504; `float32` has ~7 significant digits (ε ≈ 1.19e-7); `float64` ~16.
+- 🟠 Creation: `np.array`, `np.arange` (step; float steps are unreliable), `np.linspace` (count; includes the end), `zeros`, `ones`, `full`, `eye`, **`empty`** (uninitialized garbage!), `np.random.default_rng(seed)`.
+- 🟡 **NumPy 2 / NEP 50**: Python scalars are "weak": `float32_array + 1.0` stays **`float32`**.
+- 🟡 `np.sum` uses **pairwise summation** (10M float32 ones sum to exactly 1e7), but a running `cumsum` in `float32` stalls at **16,777,216** (2²⁴): accumulate in `float64`.
+
+:::speak[Why is NumPy so much faster than Python lists?]
+"Three reasons, all about memory layout. First, a Python list stores **pointers to boxed objects**: each float is a separate 24-byte object scattered around memory, so iterating means chasing pointers and checking types on every element. A NumPy array stores the raw numbers **contiguously with a single dtype**, so 1 million float64s are exactly 8 megabytes in one block. Second, because the type is fixed, NumPy runs the operation as **one compiled C loop** over the buffer, with no per-element interpreter overhead, and the CPU can use **SIMD** instructions and its cache efficiently because the next number is always right next to the current one. Third, many operations, like slicing, transposing and reshaping, just create a **view**: new shape and strides over the same buffer, so they cost almost nothing. In my measurement, multiplying and summing a million floats took about 25 milliseconds in a Python loop and about 1 millisecond vectorized."
+:::
+
+## 📐 Formula Sheet
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Element address | $\pred{\text{offset}} = \sum_k \data{i_k} \cdot \hyper{s_k}$ | Bytes from the start = each index × that axis's stride |
+| C-order strides | $\hyper{s_k} = \text{itemsize} \cdot \prod_{j>k} \data{n_j}$ | Last axis moves 1 element; earlier axes jump over whole rows |
+| Buffer size | $\pred{\text{nbytes}} = \text{itemsize} \cdot \prod_k \data{n_k}$ | Element count × bytes per element |
+| float precision | $\pred{\varepsilon} = 2^{-\hyper{m}}$ | Gap between 1.0 and the next representable number ($m$ = mantissa bits) |

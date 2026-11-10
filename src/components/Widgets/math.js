@@ -507,3 +507,193 @@ export function bertEncode(text, vocabList, {pair = null, maxLength = 512, padTo
 }
 /** Two-class softmax: the probability of class 1 is the sigmoid of the logit margin z1 − z0. */
 export const twoClassProb = (z0, z1) => 1 / (1 + Math.exp(-(z1 - z0)));
+
+/* ---- notebook 20: extractive document QnA ---------------------------------------------------- */
+/** Words per page of the BERT paper PDF after PyMuPDF extraction and whitespace cleaning (real run). */
+export const BERT_PDF_PAGE_WORDS = [584, 669, 583, 811, 621, 756, 656, 746, 667, 626, 662, 603, 621, 657, 386, 521];
+/** The notebook's chunk_pages_by_words for one page: windows of `size` words stepping by size − overlap. */
+export function planChunks(W, size = 180, overlap = 40, minWords = 30) {
+  if (overlap >= size) return [];
+  const out = [];
+  let start = 0;
+  while (start < W) {
+    const end = Math.min(start + size, W);
+    out.push({start, end, kept: end - start >= minWords});
+    if (end === W) break;
+    start = end - overlap;
+  }
+  return out;
+}
+/** The notebook's is_reasonable_answer heuristic. */
+export function reasonableAnswer(a) {
+  const s = (a || '').trim();
+  return s.length >= 2 && !['.', ',', ';', ':', '-', '–'].includes(s) && !['[cls]', '[sep]', '[pad]'].includes(s.toLowerCase());
+}
+/**
+ * Rank the per-chunk candidates of one question. key: 'ns' (notebook span score), 'm' (margin over the [CLS] score) or
+ * 'pr' (probability among valid context spans). Rows carry the notebook answer (na) and the offset-sliced answer (a).
+ */
+export function rankCandidates(rows, {key = 'ns', filter = true, threshold = 5.0, k = 5} = {}) {
+  const ans = (r) => (key === 'ns' ? r.na : r.a);
+  const kept = rows.filter((r) => (filter ? reasonableAnswer(ans(r)) : ans(r).trim().length >= 1));
+  const top = [...kept].sort((x, y) => y[key] - x[key]).slice(0, k).map((r) => ({...r, answer: ans(r), score: r[key]}));
+  const best = top[0];
+  return {top, best, answered: !!best && best.score >= threshold};
+}
+
+/* ---- notebook 21: retriever + reader ------------------------------------------------------------ */
+/** The notebook's min_max_normalize: (v − min) / (max − min + eps). */
+export function minMax(values, eps = 1e-10) {
+  if (!values.length) return [];
+  const lo = Math.min(...values), hi = Math.max(...values);
+  return values.map((v) => (v - lo) / (hi - lo + eps));
+}
+/**
+ * The notebook's retrieve_then_answer ranking: take the top-k retrieved candidates, keep those with a valid reader
+ * span (s !== null), min-max both scores over the kept ones, final = α·retrieval + (1 − α)·reader, pick the first max.
+ */
+export function combineCandidates(cands, k = 5, alpha = 0.4) {
+  const kept = cands.slice(0, k).filter((c) => c.s !== null && c.s !== undefined);
+  if (!kept.length) return {rows: [], best: null};
+  const nr = minMax(kept.map((c) => c.cos)), ns = minMax(kept.map((c) => c.s));
+  const rows = kept.map((c, i) => ({...c, nr: nr[i], ns: ns[i], f: alpha * nr[i] + (1 - alpha) * ns[i]}));
+  let best = 0;
+  rows.forEach((r, i) => { if (r.f > rows[best].f) best = i; });
+  return {rows, best: rows[best]};
+}
+/** Two-dimensional vectors from an angle in degrees and a length. */
+export const vec2 = (deg, len = 1) => [len * Math.cos((deg * Math.PI) / 180), len * Math.sin((deg * Math.PI) / 180)];
+/** Cosine, dot product and squared L2 distance between two 2-D vectors. */
+export function vecMetrics(a, b) {
+  const dot = a[0] * b[0] + a[1] * b[1];
+  const na = Math.hypot(...a), nb = Math.hypot(...b);
+  const l2sq = (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+  return {dot, cos: dot / (na * nb), l2sq, na, nb};
+}
+
+/* ---- notebook 22: generative RAG ------------------------------------------------------------------ */
+/** The page's rule-based question router (same regular expressions as rag_pipeline.py). */
+export function ragRoute(question) {
+  if (/\b(how many|how much|what percentage|which|stand for|full form|what is the size|what value)\b/i.test(question)) return 'extractive';
+  return /\b(why|how|explain|summari[sz]e|compare|differ|describe)\b/i.test(question) ? 'generative' : 'extractive';
+}
+/** The naive router the page starts from: any explanation word sends the question to the generator. */
+export const ragRouteNaive = (question) => (/\b(why|how|explain|summari[sz]e|compare|differ|difference|describe|discuss)\b/i.test(question) ? 'generative' : 'extractive');
+export const RAG_REFUSAL = 'The provided document does not contain enough information to answer this question.';
+/** rag_answer's decision for one precomputed question record: refuse on weak retrieval, route, refuse on weak support. */
+export function ragDecide(rec, {mode = 'auto', minCos = 0.2, minSupport = 0.5} = {}) {
+  if (rec.topCos < minCos) return {route: 'refused', answer: RAG_REFUSAL, why: `top cosine ${rec.topCos.toFixed(3)} < ${minCos}`};
+  const route = mode === 'auto' ? ragRoute(rec.q) : mode;
+  if (route === 'extractive') return {route, answer: rec.ext, why: `span score ${rec.extScore}`, ok: rec.extOk};
+  if (rec.genSupport < minSupport) return {route: 'refused', answer: RAG_REFUSAL, why: `support ${rec.genSupport.toFixed(2)} < ${minSupport}: "${rec.gen}"`};
+  return {route, answer: rec.gen, why: `support ${rec.genSupport.toFixed(2)}`, ok: rec.genOk};
+}
+/**
+ * The notebook's build_balanced_token_aware_rag_prompt budget arithmetic. Passage token counts are approximate
+ * (label + trimmed text); decoding and re-encoding a trimmed passage can shift its count by a few tokens.
+ */
+export function balancedBudget(chunkTokens, {maxInput = 512, maxContext = 360, perPassage = 100, instruction = 67, marker = 2, safety = 12, label = 4} = {}) {
+  const available = Math.min(maxInput - instruction - marker - safety, maxContext);
+  let used = 0;
+  const passages = [];
+  for (const [i, t] of chunkTokens.entries()) {
+    const remaining = available - used;
+    if (remaining <= 30) break;
+    const kept = Math.min(perPassage, remaining, t);
+    const tokens = kept + label;
+    if (used + tokens <= available) { passages.push({i, kept, dropped: t - kept, tokens}); used += tokens; }
+  }
+  return {available, used, passages, total: instruction + used + marker};
+}
+
+/* ---- Object detection and autoencoders (detection & segmentation page, autoencoders & GANs page) ---- */
+/** Intersection over union of two boxes in corner format [x_min, y_min, x_max, y_max]. */
+export function boxIou(a, b) {
+  const w = Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0]));
+  const h = Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+  const inter = w * h;
+  const area = (r) => Math.max(0, r[2] - r[0]) * Math.max(0, r[3] - r[1]);
+  const union = area(a) + area(b) - inter;
+  return union > 0 ? inter / union : 0;
+}
+/** Corner box [x_min, y_min, x_max, y_max] to centre box [cx, cy, w, h]. */
+export const xyxyToCxcywh = (b) => [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2, b[2] - b[0], b[3] - b[1]];
+/** Greedy non-maximum suppression, same rule as torchvision.ops.nms: returns kept indices, best score first. */
+export function nmsKeep(boxes, scores, iouThr = 0.5, scoreThr = 0) {
+  const order = scores.map((s, i) => i).filter((i) => scores[i] >= scoreThr).sort((i, j) => scores[j] - scores[i]);
+  const keep = [], dead = new Set();
+  for (const i of order) {
+    if (dead.has(i)) continue;
+    keep.push(i);
+    for (const j of order) if (j !== i && !dead.has(j) && boxIou(boxes[i], boxes[j]) > iouThr) dead.add(j);
+  }
+  return keep;
+}
+/** Threshold an anomaly score: labels 1 = anomaly. Returns recall, false-alarm rate and precision. */
+export function thresholdStats(scores, labels, thr) {
+  let tp = 0, fp = 0, pos = 0, neg = 0;
+  scores.forEach((s, i) => { if (labels[i]) { pos++; if (s > thr) tp++; } else { neg++; if (s > thr) fp++; } });
+  return {tp, fp, pos, neg, recall: pos ? tp / pos : 0, falseAlarm: neg ? fp / neg : 0, precision: tp + fp ? tp / (tp + fp) : 0};
+}
+/** ROC AUC: probability that a random anomaly scores higher than a random normal example (ties count half). */
+export function rocAuc(scores, labels) {
+  let num = 0, pos = 0, neg = 0;
+  const P = scores.filter((s, i) => labels[i]), N = scores.filter((s, i) => !labels[i]);
+  for (const p of P) for (const n of N) num += p > n ? 1 : p === n ? 0.5 : 0;
+  pos = P.length; neg = N.length;
+  return pos && neg ? num / (pos * neg) : 0;
+}
+
+// ---------- AI Engineering: LLM APIs and prompt engineering -----------------------
+// Real next-token logits (top 10) from Qwen2.5-0.5B-Instruct for the page's two prompts (data/llm_api_sampling.json).
+export const LLM_NEXT_TOKEN = {
+  open: {q: 'Suggest a name for a new coffee shop in Pune. Reply with only the name.', tokens: ["Green", "Coffee", "P", "The", "C", "Bean", "Del", "Urban", "S", "Morning"], logits: [14.1022, 13.8003, 13.1647, 13.1632, 12.7724, 12.2102, 12.1442, 11.6867, 11.6138, 11.5734]},
+  closed: {q: 'Is Pune in Maharashtra? Answer with only yes or no.', tokens: ["Yes", "No", "yes", "YES", "P", " Yes", " yes", "All", "Answer", "NO"], logits: [28.7094, 24.4654, 21.1882, 17.7084, 17.5886, 17.4745, 16.7369, 16.6779, 16.3083, 15.8804]},
+};
+const softmaxMasked = (z, keep) => {
+  const m = Math.max(...z.filter((_, i) => keep[i]));
+  const e = z.map((v, i) => (keep[i] ? Math.exp(v - m) : 0));
+  const s = e.reduce((a, b) => a + b, 0);
+  return e.map((x) => x / s);
+};
+/** Hugging Face order: temperature, then top-k, then top-p, then min-p. Each filter sees the survivors of the previous one.
+ *  topK = 0, topP = 1 and minP = 0 switch a filter off. Returns the kept mask and the renormalised probabilities. */
+export function samplingFilter(logits, {T = 1, topK = 0, topP = 1, minP = 0} = {}) {
+  const z = logits.map((v) => v / T);
+  const n = z.length;
+  const order = [...z.keys()].sort((a, b) => z[b] - z[a]);
+  const keep = new Array(n).fill(true);
+  if (topK > 0 && topK < n) order.slice(topK).forEach((i) => { keep[i] = false; });
+  if (topP < 1) {
+    const p = softmaxMasked(z, keep);
+    let before = 0;
+    for (const i of order) {
+      if (!keep[i]) continue;
+      if (before >= topP) keep[i] = false;   // HF keeps a token while the mass ranked above it is still < top_p
+      else before += p[i];
+    }
+  }
+  if (minP > 0) {
+    const p = softmaxMasked(z, keep);
+    const cut = minP * Math.max(...p);
+    p.forEach((v, i) => { if (keep[i] && v < cut) keep[i] = false; });
+  }
+  keep[order[0]] = true;                     // min_tokens_to_keep = 1
+  return {keep, probs: softmaxMasked(z, keep), raw: softmaxMasked(z, new Array(n).fill(true)), kept: keep.filter(Boolean).length};
+}
+/** Cost of one request in dollars; rates are dollars per 1M tokens, cached tokens are part of nIn. */
+export function llmRequestCost({nIn, nOut, nCached = 0, inRate, outRate, cachedRate = inRate}) {
+  return ((nIn - nCached) * inRate + nCached * cachedRate + nOut * outRate) / 1e6;
+}
+/** Total latency of a non-streaming answer of n output tokens: the first token arrives at TTFT, then n - 1 more. */
+export const llmLatency = (ttft, tpot, n) => ttft + tpot * Math.max(n - 1, 0);
+/** Input tokens summed over T turns when every turn re-sends the system prompt S and all previous turns (m tokens per turn). */
+export const chatHistoryTokens = (S, m, T) => T * S + (m * T * (T + 1)) / 2;
+
+// ---------- AI Engineering: tool calling and the agent loop ----------------------
+/** Probability that all K steps succeed when each succeeds independently with probability p. */
+export const agentSuccess = (p, K) => Math.pow(p, K);
+/** Input tokens summed over K model calls when call 1 sends P tokens and every tool round adds o tokens. */
+export const agentInputTokens = (P, o, K) => K * P + (o * K * (K - 1)) / 2;
+/** Prompt tokens of the k-th call (k starts at 1). */
+export const agentStepPrompt = (P, o, k) => P + o * (k - 1);

@@ -1,0 +1,8 @@
+{
+  "label": "AI Engineering",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Revision sheets for the AI Engineering track: start with the last-hour sheet, then one sheet per page, beginning with LLM APIs and prompt engineering."
+  }
+}

@@ -11,6 +11,12 @@ Cleaning turns what was **recorded** into what is **true**: parse text into real
 
 <FormulaKey />
 
+:::info[Where this page sits]
+**Before:** [Pandas: Structures, Loading & Indexing](./03-pandas-structures-loading-indexing.md), whose first-look profile produced the list of ShopStream problems fixed here.
+**This page:** the cleaning pipeline: parsing dates explicitly and the `.dt` accessor, normalizing text with `.str` and regex, the `category` dtype, duplicates and validity rules, why data is missing (MCAR, MAR, MNAR), imputation strategies, and outliers with the IQR fence.
+**Next:** [Pandas: GroupBy, Apply & Transform](./05-pandas-groupby-apply-transform.md).
+:::
+
 ## 🧭 Start Here: Why Cleaning Is Most of the Job
 
 The [previous page](./03-pandas-structures-loading-indexing.md) ended with a list of red flags in ShopStream: 20 spellings of 5 categories, dates stored as text in two formats, prices up to ₹771,750, quantities of -1 and 999, 20 duplicated rows, and thousands of missing values. A model or a chart built on that data is wrong in ways nobody notices. This page fixes each one and explains the decision behind each fix.
@@ -21,6 +27,14 @@ There are four kinds of work:
 2. **Validity**: remove what can't be true (duplicates, negative quantities) and decide what to do with what's merely unusual (outliers).
 3. **Missing data**: detect it, understand **why** it's missing, then drop or impute.
 4. **Recording what you did**: imputation changes the data's statistics; a missing-indicator column and a train-only fit keep the model honest.
+
+The chapters follow the pipeline in order:
+
+1. **The cleaning pipeline**: the order of the steps and why it matters.
+2. **Dates**: parsing every format explicitly, then extracting features with `.dt`.
+3. **Strings and regex**: normalizing labels and validating IDs with the `.str` accessor.
+4. **The `category` dtype**: storing low-cardinality labels as small integer codes.
+5. **Missing data and outliers**: why values are missing, how to fill them, and how to flag outliers without being fooled by skew.
 
 | New concept | One-line meaning |
 |---|---|
@@ -37,39 +51,11 @@ There are four kinds of work:
 The world's best recipe still tastes of mud if you skip the sink. Cleaning isn't glamorous and nobody photographs it, but it decides whether the dish is edible. In data work it's routinely 60–80% of the time, and interviewers know it.
 :::
 
-## ⚡ Essential Interview Recall
+## 🔴 1. The Cleaning Pipeline
 
-- 🔴 **Always pass `format=` to `pd.to_datetime`.** Without it, mixed inputs raise; `format="mixed"` guesses **per row** and silently swaps day and month on ambiguous dates (86 ShopStream rows moved, 49 into months that haven't happened). Parse each known format explicitly and combine with `fillna`.
-- 🔴 **`errors="coerce"`** turns unparseable values into `NaT` / `NaN` instead of raising, then **count them**.
-- 🔴 **`.dt`** for datetime parts (`.dt.month`, `.dt.day_name()`, `.dt.hour`, `.dt.to_period("M")`, `.dt.floor("D")`); **`.str`** for vectorized text (`strip`, `title`, `contains`, `extract`, `replace(..., regex=True)`).
-- 🔴 **`category` dtype** = unique labels stored once + integer codes (`int8` for under 128 labels). ShopStream's category column: **76 KB → 5 KB**; on 2M rows **29 MB (`str`) / 111 MB (`object`) → 2 MB**, `value_counts` 27 ms → 8 ms.
-- 🔴 **Detect**: `isna()` = `isnull()` (aliases); `df.isna().sum()` for counts, `.mean()` for fractions. **`NaN != NaN`**, so never test with `==`.
-- 🔴 **`dropna()`** drops a row with **any** missing value by default: ShopStream would lose **2,488 of 5,020** rows. Use `subset=`, `how="all"` or `thresh=`.
-- 🔴 **Mean vs median imputation**: mean is pulled by outliers and skew; the **median** is robust. **Mode** for categoricals. Every constant fill **shrinks the standard deviation** and creates a spike at the fill value.
-- 🔴 **Group-wise imputation**: `df["x"].fillna(df.groupby("g")["x"].transform("median"))`.
-- 🔴 **`ffill`/`bfill` must be done per group** on ordered data (`df.groupby("sensor_id")["sensor_val"].ffill()`), or values leak from one entity to the next.
-- 🟠 **Missing-indicator feature**: `df["rating_missing"] = df["rating"].isna()` keeps the information "this was missing", which is often predictive (MNAR).
-- 🟠 **Fit imputation values on the training split only**, then apply them to validation/test (otherwise you leak test statistics).
-- 🟠 **Outliers**: IQR fence (on the **log** scale for skewed data), z-scores, or domain rules; then **drop, cap (`clip`), or keep and transform**. Decide per cause.
-- 🟡 **pandas 3 missing markers**: `NaN` for floats and `str`, `NaT` for datetimes, `pd.NA` in nullable dtypes (`Int64`, `boolean`). `pd.isna` understands all of them.
+Cleaning is not a single function call; it is a sequence of decisions, and the order matters. First you **fix types**, because almost everything else depends on them: you can't extract a month from a date stored as text, and you can't count categories correctly while `' Books '` and `'BOOKS'` are different strings. Then you **remove exact duplicates**, so they don't distort later statistics. Then you apply **validity rules** that remove what can't be true, such as negative quantities.
 
-## 📐 Formula Sheet
-
-| Concept | Formula | In plain words |
-|---|---|---|
-| Interquartile range | $\pred{\text{IQR}} = \data{Q_3} - \data{Q_1}$ | Width of the middle 50% of the data |
-| IQR outlier fence | $\data{x} < \data{Q_1} - \hyper{k}\,\pred{\text{IQR}}$ or $\data{x} > \data{Q_3} + \hyper{k}\,\pred{\text{IQR}}$, $\hyper{k} = 1.5$ | Further than 1.5 box-widths outside the box |
-| z-score rule | $\lvert \pred{z} \rvert = \left\lvert \dfrac{\data{x} - \pred{\mu}}{\pred{\sigma}} \right\rvert > \hyper{3}$ | More than 3 standard deviations from the mean |
-| Missing rate | $\pred{r} = \dfrac{\text{number of NaN}}{\data{N}}$ | `df.isna().mean()` |
-| Variance after constant fill | $\pred{\sigma^2_{\text{new}}} \approx \pred{\sigma^2}\,(1 - \pred{r})$ (mean fill) | Filling a fraction r with the mean shrinks variance by about that fraction |
-
-:::speak[How do you handle missing data?]
-"First I **measure** it: `df.isna().mean()` per column, and whether missingness is concentrated in particular groups. Then I ask **why** it's missing. If it's completely random and a small fraction, I can drop rows with `dropna(subset=...)`. If it depends on other columns, I impute **within groups**, for example the median delivery time per city with `groupby('city').transform('median')`. If missingness depends on the value itself, like unhappy customers not leaving a rating, imputing hides a signal, so I keep a **missing-indicator** column. For numeric columns I prefer the **median** because it's robust to skew and outliers; for categoricals the mode or an explicit 'Unknown'. For ordered data like sensor readings I forward-fill **per sensor**. Two production rules: compute fill values on the **training set only** and reuse them at inference, and remember that any constant fill shrinks variance and creates a spike, which can mislead both models and charts."
-:::
-
-## The Mental Model
-
-### 1. The cleaning pipeline
+Only after that do you handle **missing data**, because the right fill value (a group median, say) depends on clean groups and valid numbers. **Outliers** come last, since they are judged against the distribution of the cleaned data. Throughout, you **record every decision**: imputation and capping change the data's statistics, and anything you compute from the data (a median, a fence) must later be computed on the training split only, so the model never sees information from the test set.
 
 ```mermaid
 flowchart TB
@@ -81,26 +67,17 @@ flowchart TB
     O --> C["Clean, typed DataFrame + a log of every decision"]
 ```
 
-### 2. Choosing a missing-data strategy
-
-```mermaid
-flowchart TB
-    Q{"Why is it missing?"} -->|"Random, few rows"| DR["dropna(subset=...)"]
-    Q -->|"Depends on other columns"| GR["Group-wise fill: groupby().transform('median')"]
-    Q -->|"Depends on the value itself"| IND["Add an is_missing flag, then fill"]
-    Q -->|"Ordered data, value persists"| FF["groupby(entity).ffill() / interpolate"]
-    Q -->|"Means zero or none"| ZERO["fillna(0) or fillna('Unknown')"]
-```
-
-<Animation src="pandas/ffill-bfill" caption="Two sensors share one column. A plain ffill carries sensor S1's last reading into S2's first gap, while groupby sensor_id then ffill stops at the boundary and leaves that gap empty. bfill fills backwards from the next reading." />
-
-:::analogy[ffill is the scoreboard that keeps showing the last score]
-Between goals, a football scoreboard keeps showing the last score: that's forward-fill, and it's right because the score really hasn't changed. But you'd never carry one match's final score onto the next match's board. Filling across groups is exactly that mistake.
+:::tip[🎯 Interview angle]
+**"In what order would you clean a messy dataset?"** Fix types first (dates, normalized labels, categories), drop exact duplicates, apply validity rules, then handle missing data, then outliers, and log every decision. Fill values and fences should be learned on the training split only to avoid leakage.
 :::
 
-## The Paradigm / Core Concepts
+## 🔴 2. Dates: Parse Explicitly
 
-### 🔴 Dates: parse explicitly
+Timestamps usually arrive as text, and turning them into `datetime64` is what lets you extract months, compute durations and sort chronologically. `pd.to_datetime` does the conversion, but its behaviour with **mixed formats** is the most dangerous trap on this page. Strings such as `12/04/2026` are valid dates whether read day-first or month-first, so if pandas has to guess, it can pick the wrong reading with no error at all. On ShopStream, `format="mixed"` silently mis-parsed 86 rows, and adding `dayfirst=True` made it worse, mis-parsing 1,728 ISO dates instead.
+
+The safe approach is to name every known format. Parse each pattern explicitly with `errors="coerce"`, which turns non-matching strings into `NaT` (the datetime version of missing), combine the results with `fillna`, and then assert that no `NaT` remains. Finally sanity-check the range with `min()` and `max()`: dates in the future or before the business existed point to a parsing bug.
+
+Once the column is a real datetime, the **`.dt` accessor** exposes its parts: year, month, day, hour, weekday name, calendar period, floored timestamps, formatted strings and time-zone conversion. Subtracting two datetimes gives a `Timedelta`, whose `.dt.days` gives durations such as days since an order.
 
 | Call | What happens on ShopStream | Verdict |
 |---|---|---|
@@ -125,7 +102,15 @@ Parse each known format explicitly with `errors="coerce"`, combine them with `fi
 | `.dt.tz_localize(...)`, `.dt.tz_convert(...)` | Time-zone aware timestamps | IST 09:09 → UTC 03:39 |
 | Subtraction → `Timedelta`, `.dt.days` | Durations | Days since order |
 
-### 🔴 Strings: the `.str` accessor and regex
+:::tip[🎯 Interview angle]
+**"How do you parse a date column that mixes `2026-06-10` and `12/04/2026`?"** Never let pandas guess: `format="mixed"` mis-parsed 86 ShopStream rows and `dayfirst=True` broke 1,728 more. Parse each known format with `errors="coerce"`, combine with `fillna`, assert there are no `NaT`s left, and check the min and max dates.
+:::
+
+## 🔴 3. Strings and Regex
+
+Text columns are where real data is messiest: extra spaces, inconsistent capitals, currency symbols inside numbers, IDs in the wrong shape. The **`.str` accessor** applies Python string methods to a whole column at once: `strip`, `lower` and `title` normalize labels, so `' Books '` and `'BOOKS'` both become `'Books'`; `replace` removes characters such as `₹` and commas before converting to a number; `split` and `extract` break a string into columns.
+
+Many of these methods accept **regular expressions**, a compact pattern language for describing text. `^` and `$` anchor the start and end, `\d` matches a digit, `{4}` means exactly four repetitions, `[₹,]` means any one of those characters, and parentheses capture a group. With them, `.str.match(r"^C\d{4}$")` validates that every customer ID is a `C` followed by four digits, and `.str.contains` builds a boolean mask, for example to find dates written day-first.
 
 | Method | Does | Example |
 |---|---|---|
@@ -145,7 +130,15 @@ Parse each known format explicitly with `errors="coerce"`, combine them with `fi
 | `[₹,]` | Any one of these characters |
 | `( ... )` | A capture group (what `extract` returns) |
 
-### 🔴 The `category` dtype
+:::tip[🎯 Interview angle]
+**"A category column has 20 spellings of 5 values. How do you fix it?"** Normalize with the `.str` accessor (`.str.strip().str.title()`), check `value_counts()` until only the valid labels remain, and map any genuine aliases explicitly. Use regex with `.str.match` or `.str.contains` to validate formats such as IDs, and `.str.replace` to strip symbols before casting to numbers.
+:::
+
+## 🔴 4. The `category` dtype
+
+A column such as a city, tier or payment method repeats a handful of distinct strings across thousands of rows. Storing the full string in every row wastes memory and makes comparisons slow. The **`category`** dtype stores each distinct value once in a small lookup table and keeps only a small integer **code** per row. On ShopStream's category column that took memory from 281,306 bytes as `object` (or 76,114 as the pandas 3 `str` default) down to 5,226 bytes, and on a 2-million-row test it made `value_counts` and equality filters several times faster.
+
+Use it for **low-cardinality** columns, where the number of distinct values is much smaller than the number of rows, and not for IDs, where every value is unique and the lookup table would be as big as the column. When the labels have a natural order (Bronze < Silver < Gold), an **ordered** categorical lets you sort and compare them correctly.
 
 <RuleCard name="Use category for low-cardinality labels" tag="Memory and speed" why="Storing each distinct string once and a small integer per row is far smaller than one string per row, and comparisons become integer comparisons." remember="Few distinct values, use category.">
 
@@ -165,7 +158,32 @@ A commentator doesn't spell out "Electronics" every time; the team sheet says El
 | `str` (pandas 3 default, Arrow) | 76,114 | | 29.2 MB | 26.9 ms | 12.9 ms |
 | **`category`** | **5,226** | | **2.0 MB** | **8.0 ms** | **1.4 ms** |
 
-### 🔴 Missing data: why it's missing
+:::tip[🎯 Interview angle]
+**"When would you convert a column to `category`?"** When it has few distinct values relative to the number of rows: pandas stores each label once plus a small integer code per row, so memory drops sharply (281,306 bytes to 5,226 on ShopStream's category column) and grouping and comparisons get faster. Don't use it for high-cardinality columns like IDs; use an ordered categorical when labels have an order.
+:::
+
+## 🔴 5. Missing Data and Outliers
+
+Before filling a missing value, ask **why** it is missing, because the answer decides which fills are safe. Data can be missing **completely at random** (MCAR), such as a logging glitch, in which case dropping rows or a simple fill introduces little bias. It can be missing **at random given other columns** (MAR), for example delivery days missing more often in some cities, in which case a **group-wise** fill using those columns is appropriate. Or it can be missing **not at random** (MNAR), where the missingness depends on the value itself, such as unhappy customers skipping the rating; then you fill but also add a **missing-indicator** column so the model can learn from the gap itself.
+
+The strategies trade simplicity against side effects. Dropping rows loses data and biases results unless the data is MCAR. A constant fill is right when missing means "none". The **median** is preferred over the mean for skewed numbers, but every simple fill shrinks the variance. Forward-fill suits ordered data where a value persists, but it must be done **within each group** (`groupby(key).ffill()`), or it carries one entity's last value into the next. Any statistic used for filling must be learned on the training split only.
+
+**Outliers** are judged with robust statistics. The **IQR fence** flags values more than 1.5 interquartile ranges beyond the middle half of the data, using quartiles that the outliers themselves barely move. The fence must be applied on the right scale, though: ShopStream's prices are log-normal, so on the raw scale the fence flags 504 legitimate orders, while on the log scale it flags 12, close to the 25 injected errors.
+
+```mermaid
+flowchart TB
+    Q{"Why is it missing?"} -->|"Random, few rows"| DR["dropna(subset=...)"]
+    Q -->|"Depends on other columns"| GR["Group-wise fill: groupby().transform('median')"]
+    Q -->|"Depends on the value itself"| IND["Add an is_missing flag, then fill"]
+    Q -->|"Ordered data, value persists"| FF["groupby(entity).ffill() / interpolate"]
+    Q -->|"Means zero or none"| ZERO["fillna(0) or fillna('Unknown')"]
+```
+
+<Animation src="pandas/ffill-bfill" caption="Two sensors share one column. A plain ffill carries sensor S1's last reading into S2's first gap, while groupby sensor_id then ffill stops at the boundary and leaves that gap empty. bfill fills backwards from the next reading." />
+
+:::analogy[ffill is the scoreboard that keeps showing the last score]
+Between goals, a football scoreboard keeps showing the last score: that's forward-fill, and it's right because the score really hasn't changed. But you'd never carry one match's final score onto the next match's board. Filling across groups is exactly that mistake.
+:::
 
 | Mechanism | Meaning | ShopStream example | Safe approach |
 |---|---|---|---|
@@ -198,7 +216,11 @@ $$
 
 </Formula>
 
-## ⚙️ Under the Hood (pandas Internals)
+:::tip[🎯 Interview angle]
+**"How do you handle missing data?"** First ask why it's missing: MCAR (drop or simple fill), MAR (group-wise fill from the explaining columns) or MNAR (fill plus a missing-indicator flag). Prefer the median for skewed numbers, ffill only within groups, and fit every fill statistic on the training data only. For outliers use the IQR fence on the right scale: log scale for skewed prices. The full spoken answer is near the end of the page.
+:::
+
+## ⚙️ Going Deeper (pandas Internals)
 
 - **`datetime64[us]`**: pandas 3 stores timestamps as 64-bit integers counting **microseconds** since 1970 (pandas 2 used nanoseconds), so subtraction and comparisons are integer arithmetic. `NaT` is the minimum int64 used as a sentinel.
 - **`to_datetime` with a format** uses a fast C parser that applies one format to every row; `format="mixed"` falls back to parsing each string separately (slower **and** ambiguous). Without a format pandas infers one from the **first** non-null value and applies it to all.
@@ -553,3 +575,35 @@ A churn model ranked "rating = 3.52" as a strong signal of staying. 3.52 wasn't 
 - **Categoricals and `groupby`**: pandas 3 defaults to `observed=True`, so empty categories don't appear as groups; pass `observed=False` to see them.
 - **Concatenating two categoricals with different categories** gives `object`/`str` back; use `union_categoricals` or a shared `CategoricalDtype`.
 - **`str.contains` with special characters** (`.`, `+`, `(`) treats them as regex; pass `regex=False` for literal text.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **Always pass `format=` to `pd.to_datetime`.** Without it, mixed inputs raise; `format="mixed"` guesses **per row** and silently swaps day and month on ambiguous dates (86 ShopStream rows moved, 49 into months that haven't happened). Parse each known format explicitly and combine with `fillna`.
+- 🔴 **`errors="coerce"`** turns unparseable values into `NaT` / `NaN` instead of raising, then **count them**.
+- 🔴 **`.dt`** for datetime parts (`.dt.month`, `.dt.day_name()`, `.dt.hour`, `.dt.to_period("M")`, `.dt.floor("D")`); **`.str`** for vectorized text (`strip`, `title`, `contains`, `extract`, `replace(..., regex=True)`).
+- 🔴 **`category` dtype** = unique labels stored once + integer codes (`int8` for under 128 labels). ShopStream's category column: **76 KB → 5 KB**; on 2M rows **29 MB (`str`) / 111 MB (`object`) → 2 MB**, `value_counts` 27 ms → 8 ms.
+- 🔴 **Detect**: `isna()` = `isnull()` (aliases); `df.isna().sum()` for counts, `.mean()` for fractions. **`NaN != NaN`**, so never test with `==`.
+- 🔴 **`dropna()`** drops a row with **any** missing value by default: ShopStream would lose **2,488 of 5,020** rows. Use `subset=`, `how="all"` or `thresh=`.
+- 🔴 **Mean vs median imputation**: mean is pulled by outliers and skew; the **median** is robust. **Mode** for categoricals. Every constant fill **shrinks the standard deviation** and creates a spike at the fill value.
+- 🔴 **Group-wise imputation**: `df["x"].fillna(df.groupby("g")["x"].transform("median"))`.
+- 🔴 **`ffill`/`bfill` must be done per group** on ordered data (`df.groupby("sensor_id")["sensor_val"].ffill()`), or values leak from one entity to the next.
+- 🟠 **Missing-indicator feature**: `df["rating_missing"] = df["rating"].isna()` keeps the information "this was missing", which is often predictive (MNAR).
+- 🟠 **Fit imputation values on the training split only**, then apply them to validation/test (otherwise you leak test statistics).
+- 🟠 **Outliers**: IQR fence (on the **log** scale for skewed data), z-scores, or domain rules; then **drop, cap (`clip`), or keep and transform**. Decide per cause.
+- 🟡 **pandas 3 missing markers**: `NaN` for floats and `str`, `NaT` for datetimes, `pd.NA` in nullable dtypes (`Int64`, `boolean`). `pd.isna` understands all of them.
+
+:::speak[How do you handle missing data?]
+"First I **measure** it: `df.isna().mean()` per column, and whether missingness is concentrated in particular groups. Then I ask **why** it's missing. If it's completely random and a small fraction, I can drop rows with `dropna(subset=...)`. If it depends on other columns, I impute **within groups**, for example the median delivery time per city with `groupby('city').transform('median')`. If missingness depends on the value itself, like unhappy customers not leaving a rating, imputing hides a signal, so I keep a **missing-indicator** column. For numeric columns I prefer the **median** because it's robust to skew and outliers; for categoricals the mode or an explicit 'Unknown'. For ordered data like sensor readings I forward-fill **per sensor**. Two production rules: compute fill values on the **training set only** and reuse them at inference, and remember that any constant fill shrinks variance and creates a spike, which can mislead both models and charts."
+:::
+
+## 📐 Formula Sheet
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Interquartile range | $\pred{\text{IQR}} = \data{Q_3} - \data{Q_1}$ | Width of the middle 50% of the data |
+| IQR outlier fence | $\data{x} < \data{Q_1} - \hyper{k}\,\pred{\text{IQR}}$ or $\data{x} > \data{Q_3} + \hyper{k}\,\pred{\text{IQR}}$, $\hyper{k} = 1.5$ | Further than 1.5 box-widths outside the box |
+| z-score rule | $\lvert \pred{z} \rvert = \left\lvert \dfrac{\data{x} - \pred{\mu}}{\pred{\sigma}} \right\rvert > \hyper{3}$ | More than 3 standard deviations from the mean |
+| Missing rate | $\pred{r} = \dfrac{\text{number of NaN}}{\data{N}}$ | `df.isna().mean()` |
+| Variance after constant fill | $\pred{\sigma^2_{\text{new}}} \approx \pred{\sigma^2}\,(1 - \pred{r})$ (mean fill) | Filling a fraction r with the mean shrinks variance by about that fraction |

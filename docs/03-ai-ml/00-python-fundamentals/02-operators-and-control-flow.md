@@ -9,71 +9,55 @@ Python's operators look like Java's but behave differently in exactly the places
 
 <PriorityKey lang="Python" v="3.10" />
 
-## ⚡ Essential Interview Recall
 
-- 🔴 **7 operator families**: arithmetic, assignment, comparison, logical, identity (`is`), membership (`in`), bitwise. Plus **`@`** (matrix multiply) and **`:=`** (walrus).
-- 🔴 **`/` is true division → always `float`** (`10 / 5 == 2.0`). **`//` is floor division** (rounds toward −∞): `-10 // 4 == -3`, `-7 // 2 == -4`.
-- 🔴 **`%` takes the sign of the divisor**: `-7 % 3 == 2`, `7 % -2 == -1`. The invariant is `a == (a // b) * b + a % b`. (Java and C truncate: `-7 % 3 == -1` there.)
-- 🔴 **Any division by zero raises `ZeroDivisionError`**, floats included: `1.0 / 0` doesn't give `inf` like Java.
-- 🔴 **`**` is right-associative and binds tighter than unary minus**: `2 ** 3 ** 2 == 512`, `-2 ** 2 == -4`.
-- 🔴 **No `++` / `--`**: `x++` is a `SyntaxError`, and `++x` is just `+(+x)`, which leaves `x` unchanged. Use `x += 1`.
-- 🔴 **`and` / `or` short-circuit and return an operand**: `"" or "default"` → `"default"`, `0 and 1/0` → `0` (no error). `not` always returns a `bool`.
-- 🔴 **Comparisons chain**: `a < b < c` means `a < b and b < c`, with `b` evaluated **once**. Works for `==`, `in` and `is` too, which is the source of puzzles like `False == False in [False]`.
-- 🔴 **`is` = same object, `==` = equal value.** **`in`** is O(n) for `list`/`tuple`/`str`, **O(1) average** for `set`/`dict` (hash lookup) and O(1) for `range`.
-- 🔴 `range(start, stop, step)` **excludes `stop`**, is **lazy** (constant memory), and supports negative steps.
-- 🔴 `break` exits the **innermost** loop, `continue` skips to the next iteration, `pass` is a do-nothing placeholder.
-- 🟠 **`for … else` / `while … else`**: the `else` runs only if the loop finished **without `break`**. Think of it as "no break".
-- 🟠 Use **`enumerate`** (index + value) and **`zip`** (parallel iteration) instead of `range(len(x))`; **`zip(strict=True)`** <Since v="3.10" lang="Python" /> raises if lengths differ.
-- 🟠 **Never add or remove items in a list while iterating over it**: build a new list (comprehension) or iterate over a copy.
-- 🟠 **Walrus `:=`** <Since v="3.8" lang="Python" /> assigns inside an expression: `if (n := len(data)) > 3:`.
-- 🟡 **`match`** <Since v="3.10" lang="Python" /> is **structural pattern matching**, not a C-style switch: it destructures dicts, sequences and objects, supports guards (`case x if x > 0`), and a **bare name in a `case` captures** instead of comparing.
-- 🟡 `@` calls `__matmul__`: in NumPy/PyTorch `*` is **elementwise** and `@` is **matrix multiplication**.
-
-:::speak[What's the difference between and/or in Python and && / || in Java?]
-"Both short-circuit: Python stops evaluating as soon as the result is known. The difference is what they return. In Java `&&` always gives a boolean. In Python `a or b` returns **`a` if `a` is truthy, otherwise `b`**, and `a and b` returns **`a` if `a` is falsy, otherwise `b`**. So `name or "anonymous"` is a common way to supply a default, and `user and user.email` is a null-safe access. The catch is that **falsy isn't the same as missing**: `0`, `0.0`, `""` and empty lists are all falsy. If a user explicitly sets an LLM's `temperature` to `0.0`, then `temperature or 0.7` silently replaces it with 0.7. When zero or empty is a legitimate value I write `x if x is not None else default` instead. And `not` is different from the other two: it always returns a real `True` or `False`."
+:::info[Where this page sits]
+**Before:** [How Python Runs](./01-how-python-runs.md): objects, names, types, truthiness. This page uses truthiness constantly, because `and`, `or`, `if` and `while` all decide on it.
+**This page:** every operator family (arithmetic, assignment, comparison, logical, identity, membership, bitwise, matrix), precedence, and the control-flow statements (`if`/`elif`, the ternary expression, `match`, `for`, `while`, `break`, `continue`, `for … else`).
+**Next:** [Lists, Tuples & Strings](./03-lists-tuples-strings.md).
 :::
 
-## The Mental Model
+## 🧭 Start Here
 
-### 1. How `and` / `or` decide what to return
+Operators and loops are the first thing a Java developer assumes they already know in Python, and that assumption is exactly what interviewers exploit. The symbols look the same, but several behave differently: `/` always returns a float, `//` and `%` round toward negative infinity instead of toward zero, there is no `++`, comparisons can be chained like maths (`1 < x < 10`), and `and`/`or` return one of their operands rather than a `bool`. Each difference is small; together they produce the "what does this print?" questions that open most Python screening rounds.
 
-```mermaid
-flowchart TB
-    O["a or b"] --> O1{"Is a truthy?"}
-    O1 -->|yes| O2["return a<br/>(b is never evaluated)"]
-    O1 -->|no| O3["return b"]
-    A["a and b"] --> A1{"Is a falsy?"}
-    A1 -->|yes| A2["return a<br/>(b is never evaluated)"]
-    A1 -->|no| A3["return b"]
-```
+Control flow has its own Python twists. There is `elif` instead of `else if`, a one-line conditional expression (`a if cond else b`), structural pattern matching with `match` (which is not a C-style `switch`), and a `for … else` construct that confuses almost everyone the first time. Loops iterate over *iterables* rather than counting indexes, which is why idiomatic Python reaches for `enumerate` and `zip` instead of `range(len(x))`.
 
-<Animation src="python/short-circuit" caption="Python evaluates an or-chain left to right and stops at the first truthy value, returning that value itself. An and-chain stops at the first falsy value. Operands after the stopping point are never evaluated." />
+The chapters build up in this order:
 
-:::analogy[or is a waiter going down the menu]
-`a or b or c` is a waiter checking the dishes in order and serving the first one that's available, without even looking at the rest. `a and b and c` is a safety checklist: the first failed check is what gets reported, and nothing after it is inspected. Either way you get back an actual dish (an operand), not a yes/no.
+1. **Arithmetic**: true division, floor division and modulo with negative numbers, powers.
+2. **Assignment**: augmented assignment, the missing `++`, and the walrus operator.
+3. **Comparison, logical, identity and membership**: chaining, short-circuiting operands, `is` vs `==`, and the cost of `in`.
+4. **Bitwise and matrix operators**: bit tricks, boolean masks in pandas, and `@` for matrix multiplication.
+5. **Precedence**: the order that decides puzzles like `-2 ** 2`.
+6. **Conditionals**: `if`/`elif`/`else`, the ternary expression and `match`.
+7. **Loops**: `for` vs `while`, `break`, `continue`, `pass` and `for … else`.
+
+| New concept | One-line meaning |
+|---|---|
+| **True division `/`** | Always returns a `float`, even for `10 / 5` |
+| **Floor division `//`** | Rounds the quotient down, toward negative infinity |
+| **Modulo `%`** | Remainder with the sign of the divisor, so `a == (a // b) * b + a % b` |
+| **Augmented assignment** | `x += 1` and friends; mutates in place for mutable objects |
+| **Walrus `:=`** | Assigns inside an expression (3.8+) |
+| **Short-circuit** | `and`/`or` stop as soon as the result is known and return that operand |
+| **Comparison chaining** | `a < b < c` means `a < b and b < c`, with `b` evaluated once |
+| **Membership `in`** | Calls `__contains__`: O(n) for lists, O(1) average for sets and dicts |
+| **`@`** | Matrix multiplication (`__matmul__`); `*` is elementwise in NumPy and PyTorch |
+| **Ternary expression** | `a if cond else b`: choosing a value in one line |
+| **`match` / `case`** | Structural pattern matching on the shape of data (3.10+) |
+| **`for … else`** | The `else` runs only if the loop finished without `break` |
+
+:::analogy[Same road signs, different country]
+Driving in another country, the signs look familiar but a few rules differ: you keep left, turning on red is forbidden, the speed is in km/h. Python's operators are like that for a Java driver. Most signs mean what you expect, and the handful that don't (division, modulo, `and`/`or`, `++`) are exactly where accidents happen.
 :::
 
-### 2. Which loop, which exit
+## 🔴 1. Arithmetic Operators: Division, Floor Division and Modulo
 
-```mermaid
-flowchart TB
-    Q{"Do you know how many<br/>iterations, or have a sequence?"} -->|yes| F["for item in iterable"]
-    Q -->|no, run until a condition| W["while condition"]
-    F --> E{"Need to stop early?"}
-    W --> E
-    E -->|"stop the whole loop"| B["break → the else block is SKIPPED"]
-    E -->|"skip this item"| C["continue"]
-    E -->|"loop ran to the end"| L["else block runs"]
-```
+Python has the usual arithmetic operators (`+`, `-`, `*`) plus three that need care. **True division** `/` always produces a `float`: `10 / 5` is `2.0`, never `2`. If you want an integer quotient you ask for it with **floor division** `//`, which divides and then rounds the result *down*, toward negative infinity. For positive numbers that is the same as Java's integer division; for negative numbers it is not: `-10 // 4` is `-3` in Python but `-2` in Java, because Java truncates toward zero. **Power** is an operator, `**`, rather than a library call, and it binds tighter than a unary minus on its left, so `-2 ** 2` is `-4`.
 
-:::analogy[for … else is a search party]
-A search party combs the woods (the loop). Whoever finds the missing hiker blows a whistle and everyone stops (`break`). The `else` block is the radio call "searched everywhere, nothing found": it only happens if nobody blew the whistle.
-:::
+**Modulo** `%` is defined to stay consistent with floor division. Python guarantees the identity `a == (a // b) * b + a % b` for every pair of numbers, and since `//` rounds down, the remainder always takes the **sign of the divisor**: `-7 % 3` is `2` (Java gives `-1`). That choice is deliberate and useful: `i % n` is always a valid index between `0` and `n - 1`, even when `i` is negative, which makes wrap-around buffers, circular indexing and time bucketing work without special cases. `divmod(a, b)` returns both results at once.
 
-## The Paradigm / Core Concepts
-
-### 🔴 Arithmetic operators
-
+Two more differences from Java complete the picture. Integer arithmetic never overflows, because `int` has arbitrary precision. And division by zero always raises `ZeroDivisionError`, for floats too: `1.0 / 0` is an exception in Python, not `Infinity`. If you need C or Java behaviour, `int(a / b)` truncates toward zero and `math.fmod(a, b)` gives a remainder with the sign of the dividend.
 | Operator | Name | Example | Result | Java difference |
 |---|---|---|---|---|
 | `+` `-` `*` | Add, subtract, multiply | `10 * 5` | `50` | Same, but ints never overflow |
@@ -95,8 +79,17 @@ A search party combs the woods (the loop). Whoever finds the missing hiker blows
 Picture the number line as a building where negative numbers are basement levels. `-3.5` is halfway between basement 3 and basement 4. "Floor" always means *the level below where you're standing*, so you end up on basement 4 (`-4`). Truncation (`int()`, Java) instead walks toward the ground floor, which lands on basement 3 (`-3`).
 :::
 
-### 🔴 Assignment operators
+:::tip[🎯 Interview angle]
+**"What is `-7 // 2` and `-7 % 2` in Python, and why?"** `-4` and `1`. `//` floors toward negative infinity (Java truncates toward zero and would give `-3`), and `%` is defined so that `a == (a // b) * b + a % b`, which gives the remainder the sign of the divisor. That makes `i % n` a safe index for negative `i`. Also: `/` always returns a float and dividing by zero raises even for floats.
+:::
 
+## 🔴 2. Assignment Operators, the Missing `++` and the Walrus
+
+Plain `=` binds a name to an object (Chapter 2 of the previous page). **Augmented assignment** operators (`+=`, `-=`, `*=`, `/=`, `//=`, `%=`, `**=` and the bitwise ones) combine an operation with rebinding: `x += 5` means "compute `x + 5` and bind `x` to the result". The subtlety is that Python first tries an *in-place* version of the operator (`__iadd__` for `+=`). Immutable objects such as `int` and `str` don't have one, so a new object is created and the name moves to it. Mutable objects such as `list` do, so `lst += [4]` extends the very same list, and every other name pointing at that list sees the change. That is the aliasing trap from the previous page in a new form.
+
+Python has **no increment or decrement operators**. `x++` is a `SyntaxError`, which is at least loud. `++x` is worse: it is legal and parses as two unary plus signs, `+(+x)`, which evaluates to `x` and changes nothing, so a while-loop written with Java habits can spin forever without any error. Use `x += 1`.
+
+The **walrus operator** `:=` (3.8+) assigns *inside* an expression, which ordinary `=` cannot do. `if (n := len(data)) > 3:` computes the length once, binds it to `n` and tests it in the same line, and `while (chunk := f.read(4096)):` reads and tests in one step. It is the lowest-precedence operator, which is why it usually needs parentheses.
 | Operator | Same as | Example (`x = 5`) |
 |---|---|---|
 | `=` | Bind a name | `x = 5` |
@@ -108,7 +101,32 @@ Picture the number line as a building where negative numbers are basement levels
 
 - For **mutable** objects, `+=` mutates in place (`list.__iadd__`); for immutable ones it creates a new object. That's the aliasing trap from [How Python Runs](./01-how-python-runs.md).
 
-### 🔴 Comparison, logical, identity and membership
+:::tip[🎯 Interview angle]
+**"Does Python have `++`, and what does `+=` do on a list?"** No: `x++` is a SyntaxError and `++x` is just `+(+x)`, which leaves `x` unchanged, so use `x += 1`. `+=` first tries the in-place method `__iadd__`: for a list it extends the same object (visible through every alias), while for immutable types like `int` or `str` it creates a new object and rebinds the name. The walrus `:=` assigns inside an expression, as in `if (n := len(data)) > 3:`.
+:::
+
+## 🔴 3. Comparison, Logical, Identity and Membership Operators
+
+The **comparison** operators (`<`, `>`, `<=`, `>=`, `==`, `!=`) return booleans for ordinary values, but they have a feature Java lacks: they **chain**. `1 < x < 10` means `1 < x and x < 10`, with `x` evaluated only once. Chaining applies to every comparison operator, including `==`, `in` and `is`, which is the source of puzzles such as `False == False in [False]` (it means `False == False and False in [False]`, which is `True`). NumPy arrays and pandas Series overload the comparisons to return an array of booleans, one per element.
+
+The **logical** operators are words: `and`, `or`, `not`. Like Java's `&&` and `||` they short-circuit, stopping as soon as the result is known, but they do not return `True` or `False`: they return **one of their operands**. `a or b` returns `a` if `a` is truthy, otherwise `b`; `a and b` returns `a` if `a` is falsy, otherwise `b`. That makes `name = user_input or "default"` a common idiom for fallbacks, and `0 and 1/0` safe, because the division is never evaluated. Only `not` always returns a real `bool`.
+
+**Identity** (`is`, `is not`) asks whether two names refer to the same object, and cannot be overloaded; **membership** (`in`, `not in`) asks whether a container holds a value by calling its `__contains__` method. The cost of `in` depends entirely on the container: a list, tuple or string is scanned element by element (O(n)), a set or dict computes one hash and probes a few slots (O(1) on average), and a `range` answers arithmetically. For a dict, `in` checks the **keys**.
+```mermaid
+flowchart TB
+    O["a or b"] --> O1{"Is a truthy?"}
+    O1 -->|yes| O2["return a<br/>(b is never evaluated)"]
+    O1 -->|no| O3["return b"]
+    A["a and b"] --> A1{"Is a falsy?"}
+    A1 -->|yes| A2["return a<br/>(b is never evaluated)"]
+    A1 -->|no| A3["return b"]
+```
+
+<Animation src="python/short-circuit" caption="Python evaluates an or-chain left to right and stops at the first truthy value, returning that value itself. An and-chain stops at the first falsy value. Operands after the stopping point are never evaluated." />
+
+:::analogy[or is a waiter going down the menu]
+`a or b or c` is a waiter checking the dishes in order and serving the first one that's available, without even looking at the rest. `a and b and c` is a safety checklist: the first failed check is what gets reported, and nothing after it is inspected. Either way you get back an actual dish (an operand), not a yes/no.
+:::
 
 | Family | Operators | Returns | Notes |
 |---|---|---|---|
@@ -134,8 +152,17 @@ Picture the number line as a building where negative numbers are basement levels
 | `set`, `frozenset`, `dict` (keys) | **O(1)** average | One hash computation + a few probes |
 | `range` | **O(1)** | Arithmetic: is it between start and stop, on the step? |
 
-### 🟠 Bitwise and matrix operators
+:::tip[🎯 Interview angle]
+**"What does `"" or "default"` return, and why is `x in my_list` slow?"** `"default"`: `and`/`or` short-circuit and return the deciding operand, not a bool, so `or` gives the first truthy value (or the last operand) and `and` the first falsy one. Comparisons chain (`1 < x < 10`). `in` calls `__contains__`, which scans a list or tuple in O(n) but hashes into a set or dict in O(1) on average, so convert to a set when you test membership repeatedly.
+:::
 
+## 🟠 4. Bitwise and Matrix Operators
+
+The **bitwise** operators work on the binary representation of integers: `&` (AND), `|` (OR), `^` (XOR), `~` (NOT, which for Python's signed integers equals `-x - 1`), and the shifts `<<` and `>>`. Because Python integers have arbitrary precision there is no overflow and no unsigned right shift (`>>>`): `>>` is an arithmetic shift that keeps the sign. They appear in interviews mainly through classic bit tricks (`n & (n - 1) == 0` tests for a power of two) and in permission flags.
+
+In data work the same symbols have a second, more important life. NumPy and pandas overload `&`, `|` and `~` as **elementwise logical operators on boolean masks**, which is how you filter a DataFrame on several conditions: `df[(df.age > 30) & (df.city == "Pune")]`. The parentheses are required because `&` binds tighter than `>`, and the words `and`/`or` cannot be used, because they try to collapse a whole Series into one truth value and raise "truth value of a Series is ambiguous".
+
+Finally, `@` (3.5+) is the **matrix multiplication** operator, dispatching to `__matmul__`. Built-in Python types don't implement it; NumPy and PyTorch do. In those libraries `*` multiplies element by element and `@` performs a true matrix product, a distinction that matters in every neural-network layer (`X @ W + b`).
 | Operator | Meaning | Example | Result |
 |---|---|---|---|
 | `&` | AND | `5 & 3` | `1` |
@@ -149,8 +176,15 @@ Picture the number line as a building where negative numbers are basement levels
 - `n & (n - 1) == 0` tests for a power of two; `n.bit_count()` <Since v="3.10" lang="Python" /> counts set bits.
 - In NumPy/pandas, `&`, `|`, `~` are the **elementwise** logical operators for boolean masks: `df[(df.age > 30) & (df.city == "Pune")]`. Using `and`/`or` there raises "truth value of a Series is ambiguous".
 
-### 🟠 Operator precedence (highest → lowest)
+:::tip[🎯 Interview angle]
+**"How do you filter a pandas DataFrame on two conditions, and what's the difference between `*` and `@`?"** Use the elementwise operators with parentheses: `df[(df.age > 30) & (df.city == "Pune")]`; `and`/`or` raise because a Series has no single truth value. In NumPy and PyTorch, `*` is elementwise multiplication and `@` (`__matmul__`) is matrix multiplication, as in `X @ W + b`.
+:::
 
+## 🟠 5. Operator Precedence
+
+When an expression mixes operators, **precedence** decides which binds first, and a few Python rules differ from what intuition suggests. Exponentiation `**` binds tighter than a unary minus on its *left*, so `-2 ** 2` is `-(2 ** 2)`, which is `-4`; and `**` is **right-associative**, so `2 ** 3 ** 2` is `2 ** 9`, which is `512`. All the comparison, identity and membership operators share one level and chain with each other. `not` binds looser than comparisons, so `not a == b` means `not (a == b)`. The logical operators sit below that (`and` before `or`), then the conditional expression, then `lambda`, and the walrus `:=` is lowest of all.
+
+In practice the rule is to add parentheses whenever a reader might hesitate, and *always* around comparisons combined with `&` or `|` in NumPy and pandas, because the bitwise operators bind tighter than comparisons. The table below is the full order from highest to lowest.
 | # | Operators | Note |
 |---|---|---|
 | 1 | `(...)`, `x[i]`, `x.attr`, `f()` | Grouping, indexing, attribute, call |
@@ -171,8 +205,17 @@ Picture the number line as a building where negative numbers are basement levels
 | 16 | `lambda` | |
 | 17 | `:=` | Walrus (lowest) |
 
-### 🔴 Conditional statements
+:::tip[🎯 Interview angle]
+**"What is `-2 ** 2` and `2 ** 3 ** 2`?"** `-4` and `512`: `**` binds tighter than a unary minus on its left and is right-associative. Comparisons share one precedence level and chain, `not` sits below them, then `and`, then `or`, then the conditional expression, `lambda` and finally the walrus. With pandas masks, parenthesise each comparison because `&` and `|` bind tighter than `>`.
+:::
 
+## 🔴 6. Conditional Statements: `if`, `elif`, the Ternary and `match`
+
+Python's `if` statement uses indentation instead of braces and `elif` instead of `else if`; you can chain as many `elif` branches as needed, and the first true condition wins. Conditions use truthiness, so `if items:` is the idiomatic test for a non-empty list. Deeply nested `if` blocks are usually flattened with `and`, or with early `return` statements inside functions, which keeps the "happy path" at the left margin.
+
+When you need to choose a **value** rather than run a block, the **conditional expression** (Python's ternary) reads almost like English: `label = "adult" if age >= 18 else "minor"`. Note the order: the value comes first, then the condition, then the alternative, which is the reverse of Java's `cond ? a : b`.
+
+Python 3.10 added **structural pattern matching**, `match`/`case`. It looks like a `switch`, but it matches the *shape* of data: it can destructure a dict, a list or an object, bind parts of it to names, and add guards (`case x if x > 0`). That makes it a natural fit for routing heterogeneous messages, such as LLM tool calls, by their structure (implementation block 7). Its trap is that a bare name in a `case` is a *capture* pattern, not a comparison (see Going Deeper).
 | Form | Syntax | Use |
 |---|---|---|
 | `if` / `else` | `if age >= 18: ... else: ...` | Two branches |
@@ -181,8 +224,17 @@ Picture the number line as a building where negative numbers are basement levels
 | Ternary expression | `a if cond else b` | Choosing a **value** in one line |
 | `match` / `case` | Structural pattern matching <Since v="3.10" lang="Python" /> | Branching on the **shape** of data (dicts, lists, objects) |
 
-### 🔴 Loops
+:::tip[🎯 Interview angle]
+**"Is `match` just a switch statement?"** No. It's structural pattern matching: cases match the shape of data, destructure dicts, sequences and objects, bind parts to names and support guards. A bare name in a `case` captures (and matches everything) rather than comparing, so use literals, dotted constants or guards. For choosing a value in one line use the conditional expression `a if cond else b`, whose order is the reverse of Java's ternary.
+:::
 
+## 🔴 7. Loops: `for`, `while`, `break`, `continue` and `for … else`
+
+Python's `for` loop is a "for each" loop: it iterates over any **iterable** (a list, a string, a file, a dictionary, a generator, a `range`) and binds each item to the loop variable. There is no C-style `for (i = 0; i < n; i++)`; when you need numbers you iterate over `range(start, stop, step)`, which excludes `stop`, supports negative steps and is lazy, holding only three integers no matter how large the range. When you need the index *and* the value, use `enumerate`; to walk two sequences in parallel, use `zip` (with `strict=True` since 3.10 to catch length mismatches). A `while` loop runs as long as its condition is truthy, which suits loops whose number of iterations isn't known in advance: training until convergence, polling a job, running an RL episode until it ends.
+
+Three statements control a loop from the inside. `break` leaves the **innermost** loop immediately, `continue` skips the rest of the current iteration, and `pass` does nothing at all (it exists because Python's grammar needs a statement in an empty block). Python adds an unusual fourth piece: a loop can have an **`else` block**, which runs only when the loop finishes *without* hitting `break`. It is best read as "no break", and it replaces the found-flag pattern in searches.
+
+One rule prevents a whole class of bugs: never add or remove items in a list while iterating over it, because the iterator walks by index and items are silently skipped. Build a new list (usually with a comprehension) or iterate over a copy.
 | | `for` loop | `while` loop |
 |---|---|---|
 | Iterates over | Any **iterable** (list, string, file, generator, `range`) | Runs while a **condition** is truthy |
@@ -190,7 +242,26 @@ Picture the number line as a building where negative numbers are basement levels
 | Counter management | Automatic | Manual (forgetting `i += 1` = infinite loop) |
 | AI examples | Epochs, batches, files in a folder | RL episodes (`while not done:`), gradient-descent convergence, polling a job's status |
 
-## ⚙️ Under the Hood (CPython Internals)
+```mermaid
+flowchart TB
+    Q{"Do you know how many<br/>iterations, or have a sequence?"} -->|yes| F["for item in iterable"]
+    Q -->|no, run until a condition| W["while condition"]
+    F --> E{"Need to stop early?"}
+    W --> E
+    E -->|"stop the whole loop"| B["break → the else block is SKIPPED"]
+    E -->|"skip this item"| C["continue"]
+    E -->|"loop ran to the end"| L["else block runs"]
+```
+
+:::analogy[for … else is a search party]
+A search party combs the woods (the loop). Whoever finds the missing hiker blows a whistle and everyone stops (`break`). The `else` block is the radio call "searched everywhere, nothing found": it only happens if nobody blew the whistle.
+:::
+
+:::tip[🎯 Interview angle]
+**"When does the `else` of a `for` loop run?"** Only when the loop completes without `break`: think of it as "no break". It's the clean way to write "search, and if nothing was found, do X" without a flag. Also mention that `for` iterates over iterables (use `enumerate` and `zip` rather than `range(len(x))`), `break` exits only the innermost loop, and you must not mutate a list while looping over it.
+:::
+
+## ⚙️ Going Deeper (CPython Internals)
 
 - **`a < b < c` compiles to** "evaluate `b` once, compare, jump out if false, compare again" (`COPY` / `COMPARE_OP` / `POP_JUMP_IF_FALSE` bytecodes), which is cheaper than `a < b and b < c` when `b` is a function call.
 - **`and` / `or` compile to jumps, not operators**: `JUMP_IF_FALSE` / `JUMP_IF_TRUE` style bytecodes leave the deciding operand on the stack and skip the rest. That's why they return operands and why the right side may never run.
@@ -584,3 +655,29 @@ An LLM API wrapper let callers pass `temperature`. Customers who sent `temperatu
 - **`range` only takes ints**: `range(0, 1, 0.1)` raises `TypeError`. Use `numpy.arange` or `numpy.linspace` for float steps (prefer `linspace`: float steps accumulate rounding error).
 - **`zip` silently truncates** to the shortest input, which can quietly drop the last batch of labels. Use `strict=True` in data pipelines.
 - **The loop variable survives the loop**, and in a nested function or lambda defined inside the loop it's looked up **late**: see the late-binding closure trap on [Functions, Scope & Closures](./05-functions-scope-closures.md).
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **7 operator families**: arithmetic, assignment, comparison, logical, identity (`is`), membership (`in`), bitwise. Plus **`@`** (matrix multiply) and **`:=`** (walrus).
+- 🔴 **`/` is true division → always `float`** (`10 / 5 == 2.0`). **`//` is floor division** (rounds toward −∞): `-10 // 4 == -3`, `-7 // 2 == -4`.
+- 🔴 **`%` takes the sign of the divisor**: `-7 % 3 == 2`, `7 % -2 == -1`. The invariant is `a == (a // b) * b + a % b`. (Java and C truncate: `-7 % 3 == -1` there.)
+- 🔴 **Any division by zero raises `ZeroDivisionError`**, floats included: `1.0 / 0` doesn't give `inf` like Java.
+- 🔴 **`**` is right-associative and binds tighter than unary minus**: `2 ** 3 ** 2 == 512`, `-2 ** 2 == -4`.
+- 🔴 **No `++` / `--`**: `x++` is a `SyntaxError`, and `++x` is just `+(+x)`, which leaves `x` unchanged. Use `x += 1`.
+- 🔴 **`and` / `or` short-circuit and return an operand**: `"" or "default"` → `"default"`, `0 and 1/0` → `0` (no error). `not` always returns a `bool`.
+- 🔴 **Comparisons chain**: `a < b < c` means `a < b and b < c`, with `b` evaluated **once**. Works for `==`, `in` and `is` too, which is the source of puzzles like `False == False in [False]`.
+- 🔴 **`is` = same object, `==` = equal value.** **`in`** is O(n) for `list`/`tuple`/`str`, **O(1) average** for `set`/`dict` (hash lookup) and O(1) for `range`.
+- 🔴 `range(start, stop, step)` **excludes `stop`**, is **lazy** (constant memory), and supports negative steps.
+- 🔴 `break` exits the **innermost** loop, `continue` skips to the next iteration, `pass` is a do-nothing placeholder.
+- 🟠 **`for … else` / `while … else`**: the `else` runs only if the loop finished **without `break`**. Think of it as "no break".
+- 🟠 Use **`enumerate`** (index + value) and **`zip`** (parallel iteration) instead of `range(len(x))`; **`zip(strict=True)`** <Since v="3.10" lang="Python" /> raises if lengths differ.
+- 🟠 **Never add or remove items in a list while iterating over it**: build a new list (comprehension) or iterate over a copy.
+- 🟠 **Walrus `:=`** <Since v="3.8" lang="Python" /> assigns inside an expression: `if (n := len(data)) > 3:`.
+- 🟡 **`match`** <Since v="3.10" lang="Python" /> is **structural pattern matching**, not a C-style switch: it destructures dicts, sequences and objects, supports guards (`case x if x > 0`), and a **bare name in a `case` captures** instead of comparing.
+- 🟡 `@` calls `__matmul__`: in NumPy/PyTorch `*` is **elementwise** and `@` is **matrix multiplication**.
+
+:::speak[What's the difference between and/or in Python and && / || in Java?]
+"Both short-circuit: Python stops evaluating as soon as the result is known. The difference is what they return. In Java `&&` always gives a boolean. In Python `a or b` returns **`a` if `a` is truthy, otherwise `b`**, and `a and b` returns **`a` if `a` is falsy, otherwise `b`**. So `name or "anonymous"` is a common way to supply a default, and `user and user.email` is a null-safe access. The catch is that **falsy isn't the same as missing**: `0`, `0.0`, `""` and empty lists are all falsy. If a user explicitly sets an LLM's `temperature` to `0.0`, then `temperature or 0.7` silently replaces it with 0.7. When zero or empty is a legitimate value I write `x if x is not None else default` instead. And `not` is different from the other two: it always returns a real `True` or `False`."
+:::

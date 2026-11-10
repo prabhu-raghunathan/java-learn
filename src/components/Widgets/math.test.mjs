@@ -182,5 +182,112 @@ close('not row -> new vector', M.weightedSum(M.ATT_MATRIX[3], M.ATT_VALUES), [0.
   close('truncation to 512', M.bertEncode(Array(200).fill('the movie was good').join(' '), vocab).ids.length, 512, 0);
   close('P(POSITIVE) = sigmoid(margin)', M.twoClassProb(-4.2341, 4.6189), 0.99986, 1e-5);
 }
+// --- notebook 20: chunk planning and ranking the real per-chunk candidates (distilbert-base-cased-distilled-squad) ---
+{
+  const {readFileSync} = await import('node:fs');
+  const {fileURLToPath} = await import('node:url');
+  const C = JSON.parse(readFileSync(fileURLToPath(new URL('../../../static/data/deep-learning/docqa_candidates.json', import.meta.url)), 'utf8'));
+  close('page 1 windows', M.planChunks(584).flatMap((c) => [c.start, c.end]), [0, 180, 140, 320, 280, 460, 420, 584], 0);
+  close('78 chunks over 16 pages', M.BERT_PDF_PAGE_WORDS.reduce((n, W) => n + M.planChunks(W).filter((c) => c.kept).length, 0), 78, 0);
+  close('chunks per page', M.BERT_PDF_PAGE_WORDS.map((W) => M.planChunks(W).filter((c) => c.kept).length), [4, 5, 4, 6, 5, 6, 5, 6, 5, 5, 5, 5, 5, 5, 3, 4], 0);
+  close('78 rows per question', C.questions.map((q) => q.rows.length), Array(8).fill(78), 0);
+  close('JS filter = Python is_reasonable_answer', C.questions.flatMap((q) => q.rows).filter((r) => M.reasonableAnswer(r.na) !== r.ok).length, 0, 0);
+  const r0 = M.rankCandidates(C.questions[0].rows);
+  close('BERT stand for: chunk 0 then 27, scores', [r0.best.c, r0.top[1].c, r0.best.score, r0.top[1].score], [0, 27, 20.123, 20.049], 1e-3);
+  eq('BERT stand for: answer', r0.best.answer, 'Bidirectional Encoder Representations from Transformers');
+  const city = M.rankCandidates(C.questions[6].rows);
+  eq('city: filtered answer passes threshold', city.answered && city.best.answer === 'Transformers', true);
+  close('city: score and notebook confidence', [city.best.score, city.best.nc], [6.3379, 0.9964], 1e-4);
+  const raw = [...C.questions[6].rows].sort((x, y) => y.ns - x.ns)[0];
+  eq('city: raw top span decodes to an empty string (special tokens)', raw.na === '' && Math.abs(raw.ns - 10.0751) < 1e-4, true);
+  const fav = M.rankCandidates(C.questions[5].rows);
+  eq('favourite language: below threshold', !fav.answered && fav.best.answer === 'ESIM + ELMo sys - tem', true);
+  eq('dataset question by margin', M.rankCandidates(C.questions[4].rows, {key: 'm'}).best.answer, 'Stanford Question Answering Dataset');
+}
+// --- notebook 21: retriever + reader scoring on the real 12-question evaluation (rr_eval.json) ---
+{
+  const {readFileSync} = await import('node:fs');
+  const {fileURLToPath} = await import('node:url');
+  const R = JSON.parse(readFileSync(fileURLToPath(new URL('../../../static/data/deep-learning/rr_eval.json', import.meta.url)), 'utf8'));
+  const acc = (v, k, a) => R.variants[v].q.filter((q) => { const b = M.combineCandidates(q.cands, k, a).best; return b && b.ok; }).length;
+  close('notebook chunks: k=1/3/5/10 at α=0.4', [1, 3, 5, 10].map((k) => acc('notebook', k, 0.4)), [3, 3, 6, 7], 0);
+  close('notebook chunks: k=5, α=0 / 1', [acc('notebook', 5, 0), acc('notebook', 5, 1)], [5, 3], 0);
+  close('120-word chunks: k=3 α=0, k=5 α=0.4', [acc('small', 3, 0), acc('small', 5, 0.4)], [5, 6], 0);
+  close('brute force over 78 chunks', R.bruteforce.filter((b) => b.ok).length, 8, 0);
+  close('recall@1,3,5,10 (notebook chunks)', [1, 3, 5, 10].map((k) => R.variants.notebook.recall[k]), [0.25, 5 / 12, 8 / 12, 10 / 12], 1e-9);
+  const bc = M.combineCandidates(R.variants.notebook.q[3].cands, 5, 0.4);
+  eq('BooksCorpus question: retrieval rank 4 wins', bc.best.r === 4 && bc.best.a === 'BooksCorpus', true);
+  close('BooksCorpus final scores', bc.rows.map((r) => r.f), [0.4646, 0.4651, 0.1130, 0.6681, 0.4836], 1e-4);
+  close('notebook main-idea min-max', M.minMax([0.236558, 0.227046, 0.220554, 0.215813, 0.214250]), [1, 0.573581, 0.282574, 0.070040, 0], 1e-4);
+  const u = M.vecMetrics(M.vec2(0), M.vec2(54.4));
+  close('unit vectors: L2^2 = 2 - 2cos', u.l2sq, 2 - 2 * u.cos, 1e-12);
+  close('notebook L2 distance 1.52688 = 2 - 2 * 0.23656', 2 - 2 * 0.2365582, 1.5268836, 1e-6);
+}
+// --- notebook 22: router, refusal gates and prompt budget against the real pipeline runs (rag_eval.json) ---
+{
+  const {readFileSync} = await import('node:fs');
+  const {fileURLToPath} = await import('node:url');
+  const R = JSON.parse(readFileSync(fileURLToPath(new URL('../../../static/data/deep-learning/rag_eval.json', import.meta.url)), 'utf8'));
+  close('19 questions', R.questions.length, 19, 0);
+  const facts = R.questions.filter((q) => q.type === 'fact');
+  eq('fixed router sends all 12 facts to the extractive reader', facts.every((q) => M.ragRoute(q.q) === 'extractive'), true);
+  close('naive router sends 3 facts to the generator', facts.filter((q) => M.ragRouteNaive(q.q) === 'generative').length, 3, 0);
+  eq('explanation questions go to the generator', R.questions.filter((q) => q.type === 'explain').every((q) => M.ragRoute(q.q) === 'generative'), true);
+  eq('JS decision = Python rag_answer for all 19', R.questions.every((q) => { const d = M.ragDecide(q); return d.route === q.finalRoute && d.answer === q.final; }), true);
+  close('facts right: auto / extractive / generative', ['auto', 'extractive', 'generative'].map((mode) => facts.filter((q) => M.ragDecide(q, {mode}).ok).length), [5, 5, 5], 0);
+  eq('World Cup question refused by the cosine gate', M.ragDecide(R.questions.find((q) => q.q.startsWith('Who won'))).route, 'refused');
+  eq('generator 22,500M refused by the support gate', M.ragDecide(facts[4], {mode: 'generative'}).route, 'refused');
+  close('hybrid recall@1,3,5,10', [1, 3, 5, 10].map((k) => R.recall.hybrid[k]), [0.75, 10 / 12, 10 / 12, 11 / 12], 1e-9);
+  const b = M.balancedBudget(R.balanced.chunkTokens);
+  close('balanced prompt: available, passages 1 and 3', [b.available, b.passages[0].tokens, b.passages[2].tokens], [360, 104, 104], 0);
+  close('balanced prompt: used and final within re-tokenization drift', [b.used, b.total], [306, 375], 6);
+}
+// --- detection + autoencoder pages: IoU, NMS and anomaly thresholds against torchvision / scikit-learn runs ---
+{
+  const {readFileSync} = await import('node:fs');
+  close('IoU toy (0,0,4,4) vs (2,2,6,6) = 4/28', M.boxIou([0, 0, 4, 4], [2, 2, 6, 6]), 1 / 7, 1e-12);
+  close('IoU toy 2 (torchvision 0.3913)', M.boxIou([10, 10, 50, 50], [20, 20, 60, 60]), 0.3913043, 1e-6);
+  close('DETR cup vs bowl IoU 0.9865', M.boxIou([172.4, 17.7, 410.8, 287.1], [173.5, 17.7, 412.6, 287.5]), 0.9865, 1e-4);
+  close('DETR spoon vs weak spoon IoU 0.342', M.boxIou([325.1, 65.3, 425.8, 328.2], [324.2, 214.2, 405.0, 328.9]), 0.342, 1e-3);
+  close('cup corners to centre format', M.xyxyToCxcywh([172.4, 17.7, 410.8, 287.1]), [291.6, 152.4, 238.4, 269.4], 1e-6);
+  const T = JSON.parse(readFileSync(new URL('../../../static/data/deep-learning/nms_toy.json', import.meta.url)));
+  for (const t of ['0.3', '0.5', '0.7', '0.9']) eq(`NMS keep at IoU ${t} matches torchvision`, JSON.stringify(M.nmsKeep(T.boxes, T.scores, Number(t))), JSON.stringify(T.keep[t]));
+  eq('NMS 0.5 + score threshold 0.5 drops box 7', JSON.stringify(M.nmsKeep(T.boxes, T.scores, 0.5, 0.5)), JSON.stringify([0, 4]));
+  const A = JSON.parse(readFileSync(new URL('../../../static/data/deep-learning/ae_anomaly.json', import.meta.url)));
+  close('anomaly AUC matches scikit-learn 0.8836', M.rocAuc(A.err, A.label), 0.8836214, 1e-6);
+  const st = M.thresholdStats(A.err, A.label, A.thr95);
+  close('threshold 0.03098: recall 17/45, false alarm 21/405', [st.recall, st.falseAlarm], [17 / 45, 21 / 405], 1e-12);
+}
+// --- AI Engineering, LLM APIs page: sampling filters vs Hugging Face logits warpers, cost and latency formulas ---
+{
+  { const r = M.samplingFilter(M.LLM_NEXT_TOKEN.open.logits, {"T": 1.0});
+    close('HF warpers open {"T": 1.0}: kept 10', [r.kept, ...r.probs], [10, 0.300246, 0.222006, 0.117578, 0.117402, 0.079424, 0.045268, 0.042377, 0.026819, 0.024933, 0.023946], 1e-4); }
+  { const r = M.samplingFilter(M.LLM_NEXT_TOKEN.open.logits, {"T": 1.0, "topP": 0.9});
+    close('HF warpers open {"T": 1.0, "topP": 0.9}: kept 7', [r.kept, ...r.probs], [7, 0.324836, 0.240188, 0.127208, 0.127017, 0.085929, 0.048976, 0.045848, 0.0, 0.0, 0.0], 1e-4); }
+  { const r = M.samplingFilter(M.LLM_NEXT_TOKEN.open.logits, {"T": 0.5, "topP": 0.9});
+    close('HF warpers open {"T": 0.5, "topP": 0.9}: kept 4', [r.kept, ...r.probs], [4, 0.539671, 0.295054, 0.082761, 0.082513, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1e-4); }
+  { const r = M.samplingFilter(M.LLM_NEXT_TOKEN.open.logits, {"T": 1.0, "topK": 3});
+    close('HF warpers open {"T": 1.0, "topK": 3}: kept 3', [r.kept, ...r.probs], [3, 0.469259, 0.346976, 0.183765, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1e-4); }
+  { const r = M.samplingFilter(M.LLM_NEXT_TOKEN.open.logits, {"T": 1.0, "minP": 0.1});
+    close('HF warpers open {"T": 1.0, "minP": 0.1}: kept 7', [r.kept, ...r.probs], [7, 0.324836, 0.240188, 0.127208, 0.127017, 0.085929, 0.048976, 0.045848, 0.0, 0.0, 0.0], 1e-4); }
+  { const r = M.samplingFilter(M.LLM_NEXT_TOKEN.open.logits, {"T": 1.5, "topK": 5, "topP": 0.8, "minP": 0.2});
+    close('HF warpers open {"T": 1.5, "topK": 5, "topP": 0.8, "minP": 0.2}: kept 4', [r.kept, ...r.probs], [4, 0.346298, 0.283166, 0.18536, 0.185175, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1e-4); }
+  { const r = M.samplingFilter(M.LLM_NEXT_TOKEN.closed.logits, {"T": 1.0, "topP": 0.9});
+    close('HF warpers closed {"T": 1.0, "topP": 0.9}: kept 1', [r.kept, ...r.probs], [1, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1e-4); }
+  { const r = M.samplingFilter(M.LLM_NEXT_TOKEN.closed.logits, {"T": 1.5, "topP": 0.99});
+    close('HF warpers closed {"T": 1.5, "topP": 0.99}: kept 2', [r.kept, ...r.probs], [2, 0.944241, 0.055759, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1e-4); }
+  close('cost: 1500 in, 300 out at $1 / $4 per 1M = $0.0027', M.llmRequestCost({nIn: 1500, nOut: 300, inRate: 1, outRate: 4}), 0.0027, 1e-12);
+  close('cost with 1200 cached tokens at $0.10 = $0.00162', M.llmRequestCost({nIn: 1500, nOut: 300, nCached: 1200, inRate: 1, outRate: 4, cachedRate: 0.1}), 0.00162, 1e-12);
+  close('latency 0.213 + 59 x 0.0824 = 5.075 s (measured total 5.08 s)', M.llmLatency(0.213, 0.0824, 60), 5.0746, 1e-9);
+  close('10 turns, 500-token system prompt, 100 tokens per turn = 10,500 input tokens', M.chatHistoryTokens(500, 100, 10), 10500, 0);
+}
+// --- AI Engineering, tool-calling page: compound reliability and agent context growth ---
+{
+  close('0.95 per step over 10 steps = 0.5987', M.agentSuccess(0.95, 10), 0.5987369392383789, 1e-12);
+  close('0.95 per step over 100 steps = 0.0059', M.agentSuccess(0.95, 100), 0.005920529220334, 1e-12);
+  close('0.99 per step over 100 steps = 0.366', M.agentSuccess(0.99, 100), 0.36603234127322926, 1e-12);
+  close('measured loop: 674 tokens, +82 per round, 5 calls = 4,190 input tokens', M.agentInputTokens(674, 82, 5), 4190, 0);
+  close('5th call prompt = 1,002 tokens', M.agentStepPrompt(674, 82, 5), 1002, 0);
+}
 console.log(fails ? `\n${fails} FAILED` : '\nall passed');
 process.exit(fails ? 1 : 0);

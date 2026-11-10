@@ -11,6 +11,12 @@ Seaborn is a statistical layer on top of Matplotlib: you pass a **long-format Da
 
 <FormulaKey />
 
+:::info[Where this page sits]
+**Before:** [Matplotlib: Figures, Axes & the Object-Oriented API](./07-matplotlib-figures-axes.md): Seaborn draws onto Matplotlib Axes, so everything there still applies.
+**This page:** axes-level vs figure-level functions, choosing a statistical plot, histograms and kernel density estimates, reading a box plot, the shared parameters (`hue`, `order`, `log_scale`, `stat`, `errorbar`, `col`), and correlation heatmaps (Pearson vs Spearman).
+**Next:** [Capstone: An End-to-End EDA Pipeline](../09-capstone-eda-pipeline.md).
+:::
+
 ## 🧭 Start Here: Why Seaborn on Top of Matplotlib
 
 On the [Matplotlib page](./07-matplotlib-figures-axes.md), a scatter coloured by tier needed a loop over tiers, one `scatter` call per group and manual legend labels; the error-bar chart needed a `groupby`, a standard-error formula and `errorbar`. Seaborn turns each of those into **one call**, because it understands DataFrames:
@@ -21,6 +27,14 @@ sns.lineplot(data=orders, x="delivery_days", y="rating")          # mean + 95% C
 ```
 
 You describe **what** to show (which column goes on which visual channel), and Seaborn works out **how**: it groups by `hue`, picks colours from the palette, aggregates, computes confidence intervals and builds the legend. Underneath, it still produces normal Matplotlib Axes, so everything from the previous page (formatters, annotations, `savefig`) still applies.
+
+The chapters build up in this order:
+
+1. **Two levels of function**: axes-level functions for your own layouts, figure-level functions for facets.
+2. **Choosing the plot**: which Seaborn function answers which question.
+3. **Distributions: histograms and KDEs**: what a density curve is and how bandwidth changes it.
+4. **Reading a box plot**: quartiles, whiskers and outlier dots.
+5. **Common parameters and correlation**: the arguments every function shares, and Pearson vs Spearman heatmaps.
 
 | New concept | One-line meaning |
 |---|---|
@@ -36,40 +50,11 @@ You describe **what** to show (which column goes on which visual channel), and S
 With Matplotlib you buy the ingredients, chop, season and plate every dish yourself. Seaborn is a restaurant menu: you say "the price distribution, split by category, on a log scale", and the kitchen (which is still Matplotlib) produces it. When the dish needs one extra garnish, you can still reach into the kitchen with the returned `ax`.
 :::
 
-## ⚡ Essential Interview Recall
+## 🔴 1. Two Levels of Function
 
-- 🔴 **Figure-level vs axes-level**: `displot` ↔ `histplot`/`kdeplot`/`ecdfplot`; `catplot` ↔ `boxplot`/`violinplot`/`stripplot`/`barplot`/`countplot`; `relplot` ↔ `scatterplot`/`lineplot`. Figure-level returns a **`FacetGrid`**, takes `col=`/`row=`, `height=`, `aspect=`, and **ignores `ax=`** (with a warning).
-- 🔴 **Data in long format**, columns mapped by name: `x`, `y`, `hue`, `size`, `style`, `col`, `row`.
-- 🔴 **`histplot`**: `bins`, `log_scale=True`, `stat="count"/"density"/"probability"`, `common_norm=False` to normalize each `hue` group separately, `element="step"`, `discrete=True` for integers.
-- 🔴 **`kdeplot`**: a smoothed histogram; **`bw_adjust`** controls smoothness (too small = spiky, too big = blurred); misleading near hard limits and on discrete data (use `cut=0`).
-- 🔴 **`ecdfplot`**: no bins, no bandwidth, every point shown; read medians and percentiles directly off the y-axis.
-- 🔴 **`boxplot`**: box = Q1 to Q3 (IQR), line = median, whiskers = last points within **1.5 × IQR**, dots = points beyond (outlier candidates).
-- 🔴 **`barplot` shows a mean and a 95% CI** (`errorbar=("ci", 95)`, bootstrapped), **not counts**; `countplot` counts rows.
-- 🔴 **`lineplot` aggregates repeated x values** into a mean and a CI band; `errorbar=None` to turn it off (much faster on big data).
-- 🔴 **Correlation heatmap**: `sns.heatmap(df.corr(), annot=True, fmt=".2f", cmap=diverging, vmin=-1, vmax=1, center=0, mask=np.triu(np.ones_like(corr, dtype=bool)))`.
-- 🟠 **`pairplot(df, hue=...)`** = scatter for every pair + distributions on the diagonal; `corner=True` drops the redundant upper half. O(k²) panels.
-- 🟠 **`FacetGrid(df, col=...).map_dataframe(sns.histplot, x=...)`**, **`PairGrid.map_upper/map_lower/map_diag`** for custom grids.
-- 🟠 **`sns.set_theme(style=..., palette=..., context=..., rc={...})`** sets global rcParams; `context` scales fonts for `paper`/`notebook`/`talk`/`poster`.
-- 🟡 Seaborn **0.13** syntax: `errorbar=` replaced `ci=`; `fill=False` for outline boxes and violins; `native_scale`, `log_scale` on categorical plots.
+Seaborn is a statistical layer on top of Matplotlib. You describe **what** to show, which DataFrame column goes on which visual channel (`x`, `y`, `hue`, `size`), and Seaborn works out **how**: it groups the data, picks colours from a palette, aggregates, computes confidence intervals and builds the legend. Underneath, it still draws ordinary Matplotlib Artists, so you can finish any plot with the Matplotlib methods from the previous page.
 
-## 📐 Formula Sheet
-
-| Concept | Formula | In plain words |
-|---|---|---|
-| Kernel density estimate | $\pred{\hat f(x)} = \dfrac{1}{\data{n}\hyper{h}}\sum_i K\!\left(\dfrac{x - \data{x_i}}{\hyper{h}}\right)$ | Add one bump of width h at every data point |
-| ECDF | $\pred{\hat F(x)} = \dfrac{1}{\data{n}}\,\#\{i : \data{x_i} \le x\}$ | Share of values at or below x |
-| Box-plot whiskers | $[\data{Q_1} - 1.5\,\pred{\text{IQR}},\; \data{Q_3} + 1.5\,\pred{\text{IQR}}]$, clipped to the data | Points outside are drawn individually |
-| Pearson correlation | $\pred{r} = \dfrac{\sum (\data{x_i} - \bar x)(\data{y_i} - \bar y)}{\sqrt{\sum (\data{x_i} - \bar x)^2 \sum (\data{y_i} - \bar y)^2}}$ | Strength of a **linear** relationship, −1 to 1 |
-| Spearman correlation | Pearson $\pred{r}$ computed on the **ranks** of x and y | Strength of a **monotonic** relationship; robust to outliers and skew |
-| Bootstrap CI | Resample $\data{n}$ rows with replacement $\hyper{B}$ times; take the 2.5th and 97.5th percentiles of the statistic | Uncertainty without a formula |
-
-:::speak[How would you explore a new dataset visually?]
-"I go from one variable to many. First **distributions** of each numeric column: a histogram with a sensible bin count, on a log scale if it's skewed, plus an ECDF when I need exact percentiles, and count plots for categoricals to spot rare or misspelled labels. Then **comparisons across groups**: box plots or violins of the key metric by category, which immediately show medians, spread and outliers, and bar plots of means with confidence intervals so I don't over-read small differences. Then **relationships**: a correlation heatmap, usually Spearman because business data is skewed, with the upper triangle masked, a pair plot of the most important features coloured by a segment, and scatter or line plots for the pairs that look interesting. In Seaborn I keep the data in long format and map columns to hue, size and col, using axes-level functions when I'm composing a dashboard and figure-level ones like `displot` or `catplot` when I want automatic faceting. On ShopStream this process surfaced the strongest finding in a few minutes: delivery time drives ratings, with a Spearman correlation of minus 0.65."
-:::
-
-## The Mental Model
-
-### 1. Two levels of function
+Its functions come in two levels, and mixing them up is the most common Seaborn mistake. **Axes-level** functions (`histplot`, `boxplot`, `scatterplot`, `heatmap` and the rest) draw onto one Matplotlib Axes, which you can pass in with `ax=`, and they return that Axes. That makes them the right choice inside your own `plt.subplots` or `GridSpec` layout. **Figure-level** functions (`displot`, `catplot`, `relplot`, plus `jointplot` and `pairplot`) create their own Figure and a grid of panels, and they facet automatically with `col=` and `row=`. They return a `FacetGrid`, they size panels with `height` and `aspect`, and they ignore `ax=`, because they own the figure.
 
 ```mermaid
 flowchart TB
@@ -106,7 +91,37 @@ When you're composing a dashboard with `plt.subplots` or `GridSpec`, call **axes
 
 </RuleCard>
 
-### 2. How a KDE is built
+:::tip[🎯 Interview angle]
+**"What's the difference between `histplot` and `displot`?"** `histplot` is axes-level: it draws on one Matplotlib Axes (`ax=`) and returns it, so it fits into your own layouts. `displot` is figure-level: it creates its own figure and a `FacetGrid`, facets with `col=`/`row=` and ignores `ax=`. Use axes-level functions for dashboards and figure-level ones for small multiples.
+:::
+
+## 🔴 2. Choosing the Plot
+
+As with Matplotlib, the question picks the plot, but Seaborn adds the statistics. For the **shape of one numeric variable**, use a histogram or KDE, or an ECDF when you need exact percentiles. For a **numeric variable across categories**, use box, violin, strip or swarm plots, which show the whole distribution per category. For **a mean per category with its uncertainty**, use `barplot` or `pointplot`, remembering that a bar of a mean hides the distribution behind it. For **category frequencies**, use `countplot`, sorted with `order=`.
+
+For **two numeric variables**, a scatter plot (with `alpha` or a hexbin when points overlap), and for a **trend** over an ordered variable, `lineplot`, which aggregates repeated x values and draws a confidence band. `pairplot` shows every pairwise relationship among a few columns, and a **heatmap** of `df.corr()` gives a correlation overview. The table pairs each question with the axes-level and figure-level function and the trap to watch for.
+
+| Question | Axes-level | Figure-level | Watch out for |
+|---|---|---|---|
+| Shape of one numeric variable | `histplot`, `kdeplot` | `displot(kind="hist"/"kde")` | Bin count, bandwidth, log scale |
+| Exact percentiles, comparing distributions | `ecdfplot` | `displot(kind="ecdf")` | Harder for non-technical readers |
+| Numeric by category | `boxplot`, `violinplot`, `stripplot`, `swarmplot` | `catplot(kind=...)` | Violins invent density between points; show n |
+| Mean by category with uncertainty | `barplot`, `pointplot` | `catplot(kind="bar")` | A bar of a **mean** hides the distribution |
+| Frequency of categories | `countplot` | `catplot(kind="count")` | Sort by frequency (`order=`) |
+| Two numeric variables | `scatterplot`, `regplot` | `relplot`, `jointplot`, `lmplot` | Overplotting: `alpha`, `hexbin`, sampling |
+| Trend over an ordered variable | `lineplot` | `relplot(kind="line")` | CI bands are slow on huge data |
+| All pairwise relationships | — | `pairplot`, `PairGrid` | k² panels: pick 3–6 columns |
+| Correlation overview | `heatmap(df.corr())` | `clustermap` | Pearson vs Spearman; correlation ≠ causation |
+
+:::tip[🎯 Interview angle]
+**"How would you explore a new dataset visually?"** Histograms or KDEs (log scale for skewed values) for each numeric column, count plots for categoricals, box plots for numeric-by-category, scatter or pair plots for relationships, and a correlation heatmap (Spearman when there are outliers). Point out the traps: bars of means hide distributions, and overplotting needs alpha or hexbins. The full spoken answer is near the end of the page.
+:::
+
+## 🔴 3. Distributions: Histograms and KDEs
+
+A **histogram** counts how many values fall in each bin, so its appearance depends on the bin width. A **kernel density estimate (KDE)** gives a smooth alternative: it places a small bell-shaped bump on every observation, adds all the bumps together and scales the result so the total area is 1. Where observations cluster, the bumps pile up into a peak; isolated values leave small mounds.
+
+The bump width is the **bandwidth**, and it plays the role that bin width plays in a histogram. Seaborn chooses it with Scott's rule and lets you scale it with `bw_adjust`. Too small, and the curve shows a spike at every data point (on integer delivery days it simply reveals that the data is discrete); too large, and real features such as a long tail are smoothed away. Because a KDE is a smooth curve, it can also suggest values that never occur, such as negative prices, so check it against a histogram, and use a log scale for skewed variables.
 
 <Animation src="seaborn/kde-bumps" caption="Each data point on the axis gets its own small bell-shaped bump. Adding the bumps together gives the smooth density curve. A narrow bandwidth leaves a spike at every point, a wide one blurs real peaks away." />
 
@@ -128,7 +143,15 @@ $$
 Pour a small cup of sand on the floor at the position of every order. Where orders cluster, the piles merge into a hill; isolated orders leave small mounds. The skyline of the sand is the KDE. A tiny cup (small bandwidth) leaves a separate cone per order; a huge bucket (large bandwidth) flattens everything into one gentle dune.
 :::
 
-### 3. Reading a box plot
+:::tip[🎯 Interview angle]
+**"What is a KDE, and what does bandwidth control?"** A kernel density estimate puts a small Gaussian bump on every observation and sums them into a smooth density with area 1. Bandwidth is the bump width: too small gives a spike per point, too large hides real structure such as tails or multiple peaks. Tune it with `bw_adjust` and compare with a histogram.
+:::
+
+## 🔴 4. Reading a Box Plot
+
+A **box plot** summarises a distribution with five landmarks. Sort the values and split them at the quartiles: the **box** spans the middle half of the data, from the first quartile Q1 to the third quartile Q3, and the line inside it is the **median**. The **whiskers** reach out to the furthest data points that still lie within 1.5 interquartile ranges of the box, the same fence used for outlier detection on the cleaning page, and anything beyond them is drawn as an individual **dot**.
+
+Box plots are ideal for comparing a numeric variable across categories, because many boxes fit side by side. Two cautions apply. The dots are **candidates to investigate**, not automatically errors: with skewed data such as prices, many legitimate values sit beyond the whiskers unless you use a log scale. And a box hides the shape inside it (two peaks look the same as one), so pair it with a strip plot or a violin when the shape matters.
 
 <Animation src="seaborn/boxplot-quartiles" caption="Sorted values are split at the quartiles. The box covers the middle half from Q1 to Q3 with a line at the median, the whiskers reach the furthest points within one and a half box lengths, and anything beyond is drawn as a separate dot." />
 
@@ -143,23 +166,15 @@ Pour a small cup of sand on the floor at the position of every order. Where orde
 Line the class up from shortest to tallest. The box is the middle half of the line, the bar inside it is the student exactly in the middle, the whiskers reach out to the shortest and tallest students who still look "typical", and the dots are the few who stand out, like the basketball captain. Nobody is thrown out of the photo for being tall.
 :::
 
-## The Paradigm / Core Concepts
+:::tip[🎯 Interview angle]
+**"How do you read a box plot?"** The box spans Q1 to Q3 (the middle 50%), the line is the median, the whiskers reach the furthest points within 1.5 × IQR of the box, and dots beyond are potential outliers to investigate, not errors by default. Use a log scale for skewed data, and remember a box hides multimodality.
+:::
 
-### 🔴 Choosing the plot
+## 🟠 5. Common Parameters and Correlation
 
-| Question | Axes-level | Figure-level | Watch out for |
-|---|---|---|---|
-| Shape of one numeric variable | `histplot`, `kdeplot` | `displot(kind="hist"/"kde")` | Bin count, bandwidth, log scale |
-| Exact percentiles, comparing distributions | `ecdfplot` | `displot(kind="ecdf")` | Harder for non-technical readers |
-| Numeric by category | `boxplot`, `violinplot`, `stripplot`, `swarmplot` | `catplot(kind=...)` | Violins invent density between points; show n |
-| Mean by category with uncertainty | `barplot`, `pointplot` | `catplot(kind="bar")` | A bar of a **mean** hides the distribution |
-| Frequency of categories | `countplot` | `catplot(kind="count")` | Sort by frequency (`order=`) |
-| Two numeric variables | `scatterplot`, `regplot` | `relplot`, `jointplot`, `lmplot` | Overplotting: `alpha`, `hexbin`, sampling |
-| Trend over an ordered variable | `lineplot` | `relplot(kind="line")` | CI bands are slow on huge data |
-| All pairwise relationships | — | `pairplot`, `PairGrid` | k² panels: pick 3–6 columns |
-| Correlation overview | `heatmap(df.corr())` | `clustermap` | Pearson vs Spearman; correlation ≠ causation |
+Seaborn functions share a consistent vocabulary of arguments, so learning it once covers the whole library. `data=` takes a DataFrame and `x=`/`y=` take column names. `hue=` colours by a column, with `hue_order=` and `palette=` fixing the order and colours; `order=` fixes the category order on the axis. `log_scale=True` switches to a log axis (and log-spaced bins in `histplot`). `stat=` and `common_norm=` choose between counts, densities and probabilities, which matters when comparing groups of different sizes. `errorbar=` chooses the uncertainty shown on bars and lines, and `col=`/`row=` facet figure-level functions.
 
-### 🔴 Common parameters
+For relationships among many numeric columns, a heatmap of the correlation matrix is the standard overview. **Pearson** correlation measures how well a straight line fits, so a few extreme values can dominate it. **Spearman** correlation computes the same thing on the **ranks** of the values, so it measures whether one variable consistently rises or falls with the other, without assuming a straight line and without being dominated by outliers. On ShopStream, unit price vs revenue has Pearson 0.852 but Spearman 0.929. In every case, correlation is not causation.
 
 | Parameter | Does | Example |
 |---|---|---|
@@ -185,7 +200,11 @@ $$
 
 </Formula>
 
-## ⚙️ Under the Hood (Seaborn Internals)
+:::tip[🎯 Interview angle]
+**"When would you use Spearman instead of Pearson correlation?"** When the relationship is monotonic but not linear, or when outliers could dominate: Spearman is Pearson on ranks, so it measures consistent ordering and resists extremes (price vs revenue: Pearson 0.852, Spearman 0.929). Plot either with `sns.heatmap(df.corr(method=...))`, and never read correlation as causation.
+:::
+
+## ⚙️ Going Deeper (Seaborn Internals)
 
 - **Seaborn computes, then calls Matplotlib**: `histplot` bins with NumPy (`np.histogram_bin_edges`), `kdeplot` evaluates a Gaussian KDE on a grid, `barplot`/`lineplot` group with pandas and **bootstrap** the estimator (1,000 resamples by default, `n_boot=`), then draw with `ax.bar`, `ax.fill_between` and friends.
 - **Bootstrapping cost**: `lineplot` with `errorbar=("ci", 95)` resamples every x group 1,000 times. On millions of rows this dominates runtime; use `errorbar="se"` (analytic) or `None`, or aggregate first.
@@ -539,3 +558,36 @@ A stakeholder asked why the delivery-time violin plot extended below zero days.
 - **`heatmap` without `vmin`/`vmax`** rescales the colours to each matrix's own range, so a 0.2 correlation can look as dark as 0.9 on another chart.
 - **`sns.set_theme()` changes global rcParams** for the whole session, including plain Matplotlib plots made later; use `with sns.axes_style("white"):` for a temporary style.
 - **Overplotting**: 5,000+ points in a scatter hide density; use `alpha`, smaller markers, `histplot(x, y)` (2-D histogram) or `kdeplot(x, y)`.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **Figure-level vs axes-level**: `displot` ↔ `histplot`/`kdeplot`/`ecdfplot`; `catplot` ↔ `boxplot`/`violinplot`/`stripplot`/`barplot`/`countplot`; `relplot` ↔ `scatterplot`/`lineplot`. Figure-level returns a **`FacetGrid`**, takes `col=`/`row=`, `height=`, `aspect=`, and **ignores `ax=`** (with a warning).
+- 🔴 **Data in long format**, columns mapped by name: `x`, `y`, `hue`, `size`, `style`, `col`, `row`.
+- 🔴 **`histplot`**: `bins`, `log_scale=True`, `stat="count"/"density"/"probability"`, `common_norm=False` to normalize each `hue` group separately, `element="step"`, `discrete=True` for integers.
+- 🔴 **`kdeplot`**: a smoothed histogram; **`bw_adjust`** controls smoothness (too small = spiky, too big = blurred); misleading near hard limits and on discrete data (use `cut=0`).
+- 🔴 **`ecdfplot`**: no bins, no bandwidth, every point shown; read medians and percentiles directly off the y-axis.
+- 🔴 **`boxplot`**: box = Q1 to Q3 (IQR), line = median, whiskers = last points within **1.5 × IQR**, dots = points beyond (outlier candidates).
+- 🔴 **`barplot` shows a mean and a 95% CI** (`errorbar=("ci", 95)`, bootstrapped), **not counts**; `countplot` counts rows.
+- 🔴 **`lineplot` aggregates repeated x values** into a mean and a CI band; `errorbar=None` to turn it off (much faster on big data).
+- 🔴 **Correlation heatmap**: `sns.heatmap(df.corr(), annot=True, fmt=".2f", cmap=diverging, vmin=-1, vmax=1, center=0, mask=np.triu(np.ones_like(corr, dtype=bool)))`.
+- 🟠 **`pairplot(df, hue=...)`** = scatter for every pair + distributions on the diagonal; `corner=True` drops the redundant upper half. O(k²) panels.
+- 🟠 **`FacetGrid(df, col=...).map_dataframe(sns.histplot, x=...)`**, **`PairGrid.map_upper/map_lower/map_diag`** for custom grids.
+- 🟠 **`sns.set_theme(style=..., palette=..., context=..., rc={...})`** sets global rcParams; `context` scales fonts for `paper`/`notebook`/`talk`/`poster`.
+- 🟡 Seaborn **0.13** syntax: `errorbar=` replaced `ci=`; `fill=False` for outline boxes and violins; `native_scale`, `log_scale` on categorical plots.
+
+:::speak[How would you explore a new dataset visually?]
+"I go from one variable to many. First **distributions** of each numeric column: a histogram with a sensible bin count, on a log scale if it's skewed, plus an ECDF when I need exact percentiles, and count plots for categoricals to spot rare or misspelled labels. Then **comparisons across groups**: box plots or violins of the key metric by category, which immediately show medians, spread and outliers, and bar plots of means with confidence intervals so I don't over-read small differences. Then **relationships**: a correlation heatmap, usually Spearman because business data is skewed, with the upper triangle masked, a pair plot of the most important features coloured by a segment, and scatter or line plots for the pairs that look interesting. In Seaborn I keep the data in long format and map columns to hue, size and col, using axes-level functions when I'm composing a dashboard and figure-level ones like `displot` or `catplot` when I want automatic faceting. On ShopStream this process surfaced the strongest finding in a few minutes: delivery time drives ratings, with a Spearman correlation of minus 0.65."
+:::
+
+## 📐 Formula Sheet
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Kernel density estimate | $\pred{\hat f(x)} = \dfrac{1}{\data{n}\hyper{h}}\sum_i K\!\left(\dfrac{x - \data{x_i}}{\hyper{h}}\right)$ | Add one bump of width h at every data point |
+| ECDF | $\pred{\hat F(x)} = \dfrac{1}{\data{n}}\,\#\{i : \data{x_i} \le x\}$ | Share of values at or below x |
+| Box-plot whiskers | $[\data{Q_1} - 1.5\,\pred{\text{IQR}},\; \data{Q_3} + 1.5\,\pred{\text{IQR}}]$, clipped to the data | Points outside are drawn individually |
+| Pearson correlation | $\pred{r} = \dfrac{\sum (\data{x_i} - \bar x)(\data{y_i} - \bar y)}{\sqrt{\sum (\data{x_i} - \bar x)^2 \sum (\data{y_i} - \bar y)^2}}$ | Strength of a **linear** relationship, −1 to 1 |
+| Spearman correlation | Pearson $\pred{r}$ computed on the **ranks** of x and y | Strength of a **monotonic** relationship; robust to outliers and skew |
+| Bootstrap CI | Resample $\data{n}$ rows with replacement $\hyper{B}$ times; take the 2.5th and 97.5th percentiles of the statistic | Uncertainty without a formula |

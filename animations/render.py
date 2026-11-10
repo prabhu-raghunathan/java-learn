@@ -120,6 +120,19 @@ MANIFEST = {
     "stacked-encoder/attention-by-layer": ("stacked_encoder_scenes.py", "AttentionByLayer"),
     "hf/pipeline-steps":               ("hf_scenes.py", "PipelineSteps"),
     "hf/confidence-saturation":        ("hf_scenes.py", "ConfidenceSaturation"),
+    "docqa/chunk-window":              ("docqa_scenes.py", "ChunkWindow"),
+    "docqa/chunk-ranking":             ("docqa_scenes.py", "ChunkRanking"),
+    "docqa/offsets-to-labels":         ("docqa_scenes.py", "OffsetsToLabels"),
+    "rr/semantic-neighbours":          ("rr_scenes.py", "SemanticNeighbours"),
+    "rr/retrieve-then-read":           ("rr_scenes.py", "RetrieveThenRead"),
+    "rr/minmax-stretch":               ("rr_scenes.py", "MinMaxStretch"),
+    "rag/token-by-token":              ("rag_scenes.py", "TokenByToken"),
+    "rag/hybrid-fusion":               ("rag_scenes.py", "HybridFusion"),
+    "rag/route-and-refuse":            ("rag_scenes.py", "RouteAndRefuse"),
+    "vision/iou-then-nms":             ("vision_scenes.py", "IouThenNms"),
+    "vision/semantic-vs-instance":     ("vision_scenes.py", "SemanticVsInstance"),
+    "generative/autoencoder-bottleneck": ("generative_scenes.py", "BottleneckSqueeze"),
+    "generative/gan-mode-collapse":    ("generative_scenes.py", "GanModeCollapse"),
     # Core Java
     "jvm/gc-generations":          ("java_scenes.py", "GcGenerations"),
     "oop/init-order":              ("java_scenes.py", "InitOrder"),
@@ -149,6 +162,14 @@ MANIFEST = {
     "python/exception-propagation":("python_scenes.py", "ExceptionPropagation"),
     "python/gil-threads-vs-processes": ("python_scenes.py", "GilThreadsVsProcesses"),
     "python/asyncio-event-loop":   ("python_scenes.py", "AsyncioEventLoop"),
+    # AI Engineering: Working with LLM APIs and Prompt Engineering
+    "llm-api/chat-template":       ("llm_api_scenes.py", "ChatTemplateAssembly"),
+    "llm-api/sampling-filters":    ("llm_api_scenes.py", "SamplingFilters"),
+    "llm-api/streaming-timeline":  ("llm_api_scenes.py", "StreamingTimeline"),
+    # AI Engineering: Tool Calling and the ReAct Agent Loop
+    "agent/tool-call-loop":        ("agent_scenes.py", "ToolCallLoop"),
+    "agent/react-trace":           ("agent_scenes.py", "ReactTrace"),
+    "agent/compound-reliability":  ("agent_scenes.py", "CompoundReliability"),
 }
 
 QUALITY = "-qm"   # 1280x720 @ 30 fps: crisp text, small files (~0.2–0.6 MB each)

@@ -9,34 +9,49 @@ A **`dict`** maps **hashable keys** to values and a **`set`** stores **unique ha
 
 <PriorityKey lang="Python" v="3.9" />
 
-## ⚡ Essential Interview Recall
 
-- 🔴 **`dict`** = mutable mapping of **key → value**. Keys must be **hashable** (immutable: `str`, `int`, `tuple` of immutables, `frozenset`); values can be anything.
-- 🔴 **Average O(1)** for `d[k]`, `d[k] = v`, `del d[k]`, `k in d`. Worst case O(n) when many keys collide.
-- 🔴 **Insertion order is guaranteed since 3.7** (implementation detail in 3.6). Updating an existing key keeps its position; deleting and re-adding moves it to the end.
-- 🔴 `d[k]` raises **`KeyError`** for a missing key; **`d.get(k, default)`** returns the default; **`d.setdefault(k, default)`** inserts it too.
-- 🔴 **Never change a dict's size while iterating** over it → `RuntimeError: dictionary changed size during iteration`. Iterate over `list(d)` or build a new dict.
-- 🔴 `keys()`, `values()`, `items()` return **live views**, not copies; `in` on a dict checks **keys**.
-- 🔴 **Set** = unordered collection of **unique** hashable items; `{}` is an **empty dict**, use **`set()`**. No indexing or slicing.
-- 🔴 Set algebra: union `|`, intersection `&`, difference `-`, symmetric difference `^`; `issubset`, `issuperset`, `isdisjoint`. `remove()` raises `KeyError` for a missing item, **`discard()` doesn't**.
-- 🔴 **Hash contract**: if `a == b` then `hash(a) == hash(b)`. That's why `1`, `1.0` and `True` collapse into one key and `{1, 1.0, True} == {1}`.
-- 🟠 Merge dicts with **`d1 | d2`** <Since v="3.9" lang="Python" /> (right side wins) or `{**d1, **d2}`; `d1 |= d2` updates in place.
-- 🟠 **`Counter`**: counts hashables, `most_common(k)`, supports `+ - & |`; a missing key reads as **0**.
-- 🟠 **`defaultdict(factory)`** creates missing values on **read**: `defaultdict(list)` for grouping, `defaultdict(int)` for counting. Even just reading a missing key **inserts** it.
-- 🟠 **`deque`**: O(1) `append`/`appendleft`/`pop`/`popleft`; `maxlen` turns it into a sliding window.
-- 🟠 **`heapq`** is a **min-heap** on a plain list: `heappush`/`heappop` O(log n), `nlargest`/`nsmallest` for top-k in O(n log k).
-- 🟡 **`hash()` of `str` and `bytes` is randomized per process** (`PYTHONHASHSEED`): never use it for sharding, caching keys on disk or reproducible splits. Use `hashlib`.
-- 🟡 **`dict.fromkeys(keys, [])` shares ONE list** among all keys; use a dict comprehension.
-- 🟡 CPython dicts use a **compact layout**: a small **index array** of slots plus a dense **entries array** in insertion order, resized at 2/3 full.
-
-:::speak[How does a Python dict work, and why is lookup O(1)?]
-"A dict is a **hash table**. To store `d[key] = value`, Python calls `hash(key)`, masks it to pick a slot in an **index table**, and if the slot is taken it **probes** other slots using a perturbation formula that mixes in the higher bits of the hash, until it finds a free one. The slot stores an index into a dense **entries array**, which holds the hash, the key and the value **in insertion order**. That's why dicts iterate in insertion order since 3.7. A lookup repeats the same probe sequence and compares the stored hash first, then the key with `==`. On average that's a constant number of probes, so O(1). To keep it that way the table **resizes when it's two-thirds full**. It also explains the rules: keys must be **hashable** and their hash must never change, and two equal objects must have **equal hashes**, otherwise lookups go to the wrong slot."
+:::info[Where this page sits]
+**Before:** [Lists, Tuples & Strings](./03-lists-tuples-strings.md): sequences, O(n) membership in a list, and why only immutable things are hashable.
+**This page:** hash tables in Python: how a `dict` stores and finds keys, the dict API, sets and set algebra, the hash contract, and the `collections` toolbox (`Counter`, `defaultdict`, `OrderedDict`, `deque`, `ChainMap`, `namedtuple`) plus `heapq` and `bisect`.
+**Next:** [Functions, Scope & Closures](./05-functions-scope-closures.md).
 :::
 
-## The Mental Model
+## 🧭 Start Here
 
-### 1. Inside a dict: index table + entries
+The previous page ended with a cost problem: asking whether an item is `in` a list means scanning it from the start, so the work grows with the list. Dictionaries and sets solve that problem. Both are **hash tables**: they turn a key into a number (its **hash**), use that number to jump straight to a slot, and therefore answer lookups, inserts, deletes and membership tests in **O(1) on average**, however many items they hold. A `dict` stores a value for each key; a `set` stores just the keys.
 
+For a Java developer, `dict` plays the role of `HashMap` (but ordered, like `LinkedHashMap`) and `set` plays `HashSet`. The ideas carry over: keys need a stable hash and a matching equality test, collisions are resolved inside the table, and the table grows before it gets too full. The details differ, and they are what interviews probe: CPython uses open addressing with a perturbed probe sequence rather than per-bucket chains, dicts keep insertion order as a language guarantee, and a class that overrides `__eq__` silently loses its `__hash__`.
+
+The chapters build up in this order:
+
+1. **How a dict works**: hashing, the index table and the entries array, collisions and probing.
+2. **The dict API**: reading safely, updating, deleting, merging and iterating.
+3. **Sets and fast membership**: why `in set` beats `in list`, the memory price, and set algebra.
+4. **The hashing rules**: the hash contract and what is or isn't hashable.
+5. **The `collections` toolbox**: `Counter`, `defaultdict`, `OrderedDict`, `deque`, `ChainMap`, `namedtuple`, `heapq` and `bisect`, and how to pick one.
+
+| New concept | One-line meaning |
+|---|---|
+| **Hash table** | A table where a key's hash picks the slot, giving O(1) average lookups |
+| **Hash** | An integer computed from a key with `hash()`; equal keys must get equal hashes |
+| **Collision** | Two keys whose hashes point at the same slot |
+| **Probing (open addressing)** | Trying other slots in a fixed order until a free one is found |
+| **Load factor** | How full the table is; CPython dicts resize at 2/3 full |
+| **Insertion order** | Dicts iterate in the order keys were first added (guaranteed since 3.7) |
+| **`frozenset`** | An immutable, hashable set |
+| **`collections`** | Standard-library module of specialised containers |
+
+:::analogy[A phone book versus a pile of business cards]
+Finding a number in a pile of business cards means going through them one by one: that's a list. A phone book jumps you to the right page from the first letter of the name: that's a hash table. Both hold the same contacts; one of them answers "where is this person?" without looking at everyone else.
+:::
+
+## 🔴 1. How a Dict Works
+
+A `dict` maps **keys** to **values**. To store `d[key] = value`, Python first calls `hash(key)` to get an integer, then keeps only the low bits of that integer (a bit mask) to choose a **slot** in a table. Since Python 3.6, CPython's dict is a **compact** design made of two arrays: a small, sparse **index table** whose slots hold positions, and a dense **entries array** that holds `(hash, key, value)` records in the order they were inserted. The slot doesn't hold the key itself; it points at the entry. That split is why dicts are both memory-efficient and **ordered**: iteration simply walks the entries array.
+
+Two different keys can map to the same slot; this is a **collision**. CPython doesn't hang a linked list off the slot, as Java's `HashMap` does. Instead it uses **open addressing**: it computes the next slot to try with a fixed formula that also mixes in the higher bits of the hash, and keeps probing until it finds a free slot. A lookup repeats exactly the same probe sequence. At each occupied slot it compares the stored hash first, and only if the hashes match does it call `==` on the keys. Because the table is never allowed to get too full (it resizes at two-thirds), the expected number of probes stays small and constant, which is where the O(1) average comes from.
+
+This mechanism explains the rules you'll meet later. A key must be **hashable**, and its hash must never change while it's in the table, otherwise a later lookup follows the wrong probe sequence and the item is lost. Equal keys must produce equal hashes, otherwise the dict could store the "same" key twice. The diagram and animation below show keys 3, 11 and 19 all colliding on slot 3 of an 8-slot table and being probed into different slots, while the entries array keeps their insertion order.
 ```mermaid
 flowchart LR
     subgraph Index["indices (8 slots)"]
@@ -66,23 +81,17 @@ flowchart LR
 You hand over your coat (the value) and the attendant computes a hook number from your name (the hash). To get it back you don't search every hook, you go straight to the computed one. If two names land on the same hook, the attendant follows a fixed rule to the next free hook, and follows the same rule when you come back. That's why a coat whose name tag changes (a mutable key) can never be found again.
 :::
 
-### 2. Choosing a structure
+:::tip[🎯 Interview angle]
+**"How does a Python dict work, and why is lookup O(1)?"** It's a hash table: `hash(key)` picks a slot in an index table, collisions are resolved by probing with a perturbation formula, and the slot points into a dense entries array kept in insertion order. Lookups repeat the same probe sequence, comparing the stored hash before calling `==`, and the table resizes at two-thirds full, so the expected number of probes is constant. The full 60-second spoken answer is at the end of the page.
+:::
 
-```mermaid
-flowchart TB
-    Q{"What do you need?"} -->|"look up a value by key"| D["dict"]
-    Q -->|"unique items / fast membership"| S["set (frozenset if it must be hashable)"]
-    Q -->|"count things"| C["Counter"]
-    Q -->|"group items into lists"| DD["defaultdict(list)"]
-    Q -->|"queue, sliding window"| DQ["deque(maxlen=k)"]
-    Q -->|"top-k / priority queue"| H["heapq"]
-    Q -->|"LRU cache"| OD["OrderedDict.move_to_end, or functools.lru_cache"]
-```
+## 🔴 2. The Dict API
 
-## The Paradigm / Core Concepts
+Most dict bugs come from choosing the wrong way to read a key. `d[k]` is the strict read: it raises `KeyError` if the key is missing, which is what you want when a missing key really is an error. `d.get(k, default)` is the safe read: it returns the default (or `None`) and leaves the dict unchanged. `d.setdefault(k, default)` is read-or-insert: if the key is missing it stores the default and returns it, which is handy for building up lists but does mutate the dict.
 
-### 🔴 Dict operations
+Writing is simpler. `d[k] = v` adds or overwrites a single key, `update()` copies many keys in, and since Python 3.9 the `|` operator merges two dicts into a new one (with `|=` as the in-place form). In every merge form, when both sides have the same key, **the right-hand side wins**, which is exactly the behaviour you want for "defaults, overridden by user config". Deleting uses `del d[k]` (raises if missing) or `pop(k, default)` (returns the value), and `popitem()` removes the most recently inserted pair.
 
+Iterating over a dict iterates over its **keys**; use `.values()` or `.items()` for the rest. These methods return **views**, live windows onto the dict rather than copies. One rule matters here: you must not add or remove keys while iterating over a dict, or Python raises `RuntimeError` because the size changed. Iterate over `list(d)` if you need to delete as you go. The `in` operator on a dict checks **keys**, never values.
 | Operation | Code | Missing key behaviour | Cost |
 |---|---|---|---|
 | Read | `d[k]` | **`KeyError`** | O(1) |
@@ -96,8 +105,17 @@ flowchart TB
 | Merge | `d1 \| d2`, `{**d1, **d2}`, `d1 \|= d2` | Right side wins | O(len(d2)) |
 | Iterate | `for k in d`, `.keys()`, `.values()`, `.items()` | — | O(n) |
 
-### 🔴 Dict vs set vs list for lookups
+:::tip[🎯 Interview angle]
+**"What's the difference between `d[k]`, `d.get(k)` and `d.setdefault(k, v)`?"** `d[k]` raises `KeyError` when the key is missing, `get` returns a default without changing the dict, and `setdefault` inserts the default and returns it. Add that merges (`|`, `update`, `**`) let the right side win, that `in` checks keys, and that changing a dict's size while iterating raises `RuntimeError`.
+:::
 
+## 🔴 3. Sets and Fast Membership
+
+A `set` is a hash table that stores only keys: an unordered collection of **unique, hashable** items. Adding a duplicate does nothing, which makes `set(items)` the quickest way to deduplicate. Because it is a hash table, `x in s` costs O(1) on average instead of the O(n) scan a list needs. The measurement below shows how large that difference gets for a million items, and also what it costs: a set uses several times the memory of a list holding the same numbers, because it keeps empty slots and stores hashes.
+
+That trade-off gives a simple rule for interviews and production code alike: if you test membership repeatedly inside a loop, convert the list to a set once, outside the loop. The reverse is also true: if you need order, indexing or duplicates, a set is the wrong tool, because its iteration order is arbitrary and can change between runs for strings.
+
+Sets also support the operations of **set algebra**: union, intersection, difference and symmetric difference, plus subset, superset and disjointness tests. Each has a method form and an operator form. The method forms accept any iterable, while the operators insist that both sides are sets. When a set itself must be hashable (to be a dict key or an element of another set), use `frozenset`, its immutable counterpart.
 | | `list` | `set` | `dict` |
 |---|---|---|---|
 | `x in c` | O(n) | **O(1)** | **O(1)** (keys) |
@@ -114,8 +132,6 @@ flowchart TB
 A list is a stack of party invitations you have to flip through one by one to find a name. A set is the bouncer's guest list sorted into lettered pages: one glance at the right page answers "is this person invited?". And writing the same name twice on the list doesn't let them in twice.
 :::
 
-### 🔴 Set operations
-
 | Operation | Method | Operator | `A = {1, 2, 3}`, `B = {3, 4, 5}` |
 |---|---|---|---|
 | Union (in A or B) | `A.union(B)` | `A \| B` | `{1, 2, 3, 4, 5}` |
@@ -129,8 +145,15 @@ A list is a stack of party invitations you have to flip through one by one to fi
 - **Modify**: `add(x)`, `update(iterable)`, `remove(x)` (raises), **`discard(x)`** (silent), `pop()` (an arbitrary item), `clear()`.
 - **`frozenset`** is the immutable, hashable set: usable as a dict key or inside another set.
 
-### 🔴 The hashing rules
+:::tip[🎯 Interview angle]
+**"Why is `x in my_set` faster than `x in my_list`?"** A set is a hash table, so membership hashes `x` once and checks a constant number of slots, O(1) on average, while a list compares element by element, O(n). Quote the trade-off: the set costs several times the memory and has no order. Mention that set operators need sets while the methods accept any iterable, and `frozenset` is the hashable version.
+:::
 
+## 🔴 4. The Hashing Rules
+
+Everything on this page depends on one contract between `__hash__` and `__eq__`. A hash table uses the hash to decide **where to look** and `==` to confirm **that it found the right key**. If two equal objects had different hashes, they would be sent to different slots, so the table could store both, or fail to find one using the other. That's why the first rule is "equal objects must have equal hashes". The reverse is not required: two different objects may share a hash, which is just a collision.
+
+The second rule is that a key's hash must not change while it is stored. Mutable built-ins (`list`, `dict`, `set`) therefore are not hashable at all, and a tuple is hashable only when everything inside it is. Ordinary class instances are hashable by default, using their identity. The third rule catches many people writing their own classes: if you override `__eq__` and don't also define `__hash__`, Python sets `__hash__` to `None`, and instances can no longer be dict keys or set members. Frozen dataclasses and `NamedTuple`s generate a matching `__hash__` for you.
 <RuleCard name="The hash contract" tag="__hash__ / __eq__" why="A hash table finds the slot with hash() and confirms with ==, so equal objects with different hashes would be stored twice or never found." remember="Equal objects, equal hashes, frozen keys.">
 
 1. If `a == b`, then `hash(a) == hash(b)` (the reverse is not required: collisions are allowed).
@@ -146,8 +169,17 @@ A list is a stack of party invitations you have to flip through one by one to fi
 | Instances of normal classes (hash by identity) | Classes that define `__eq__` but not `__hash__` |
 | Frozen dataclasses, `NamedTuple`s, enums | Regular (non-frozen) dataclasses with `eq=True` |
 
-### 🟠 The `collections` toolbox (+ `heapq`, `bisect`)
+:::tip[🎯 Interview angle]
+**"What makes an object hashable, and what happens if you override `__eq__` only?"** It needs a `__hash__` that is consistent with `__eq__` (equal objects, equal hashes) and that never changes while the object is stored, which in practice means it must be immutable. If a class overrides `__eq__` without `__hash__`, Python sets `__hash__ = None` and the instances become unhashable. Use a frozen dataclass or define `__hash__` from the same fields as `__eq__`.
+:::
 
+## 🟠 5. The `collections` Toolbox
+
+Plain dicts, sets and lists cover most needs, but several patterns recur so often that the standard library ships specialised containers for them. **`Counter`** is a dict of counts with `most_common(k)` and arithmetic between counters, and a missing key reads as 0. **`defaultdict`** calls a factory to build a value the first time a missing key is accessed, which turns grouping code into a single line. **`OrderedDict`** adds order operations such as `move_to_end` and `popitem(last=False)`, which make it the standard building block for an LRU cache.
+
+**`deque`** is a double-ended queue with O(1) appends and pops at both ends, and an optional `maxlen` that automatically discards the oldest items: exactly what you need for BFS, sliding windows or the last *k* messages of a conversation. **`ChainMap`** layers several dicts so that the first one holding a key wins, which models "command-line args over environment variables over defaults" without copying. **`namedtuple`** gives tuples field names.
+
+Two modules outside `collections` complete the toolbox. **`heapq`** turns an ordinary list into a binary min-heap, with `nlargest`/`nsmallest` for top-*k* queries, and **`bisect`** performs binary search on a sorted list, for example to bucket a score against a list of thresholds. The decision tree below maps each common need to its tool.
 | Tool | What it is | Signature move | Typical AI / interview use |
 |---|---|---|---|
 | `Counter` | dict subclass of counts | `most_common(k)`, `c["missing"] == 0`, `+ - & \|` | Word frequencies, class balance, anagram checks |
@@ -163,7 +195,22 @@ A list is a stack of party invitations you have to flip through one by one to fi
 With a plain dict you must check whether a folder exists before filing a document in it. A `defaultdict(list)` is a cabinet that creates an empty folder the moment you ask for one, so you can just file. The catch: merely *asking* whether a folder is there also creates it.
 :::
 
-## ⚙️ Under the Hood (CPython Internals)
+```mermaid
+flowchart TB
+    Q{"What do you need?"} -->|"look up a value by key"| D["dict"]
+    Q -->|"unique items / fast membership"| S["set (frozenset if it must be hashable)"]
+    Q -->|"count things"| C["Counter"]
+    Q -->|"group items into lists"| DD["defaultdict(list)"]
+    Q -->|"queue, sliding window"| DQ["deque(maxlen=k)"]
+    Q -->|"top-k / priority queue"| H["heapq"]
+    Q -->|"LRU cache"| OD["OrderedDict.move_to_end, or functools.lru_cache"]
+```
+
+:::tip[🎯 Interview angle]
+**"How would you count word frequencies, group items, or keep the last k events?"** Use `Counter` (and `most_common(k)`) for counting, `defaultdict(list)` for grouping, and `deque(maxlen=k)` for a rolling window; `heapq.nlargest` gives top-k without sorting everything. Warn that merely reading a missing key on a `defaultdict` inserts it, so test with `in` or `.get` on hot paths.
+:::
+
+## ⚙️ Going Deeper (CPython Internals)
 
 - **Compact dict (3.6+)**: two arrays. A sparse **indices** array (1, 2, 4 or 8 bytes per slot, depending on table size) and a dense **entries** array of `(hash, key, value)` in insertion order. Insertion order falls out of the design for free, and the dict uses 20–25% less memory than the old single-table layout.
 - **Probing**: start at `i = hash & mask`; on a collision set `perturb >>= 5` and `i = (5 * i + perturb + 1) & mask`. The perturbation brings the **high bits** of the hash into play, so keys that agree on their low bits still spread out. Verified above: keys 3, 11 and 19 all start at slot 3 of an 8-slot table and land in slots 3, 0 and 1.
@@ -561,3 +608,29 @@ A classifier's predicted class indices mapped to the wrong label names after the
 - **`set.pop()` isn't random**: it removes an arbitrary element that depends on the table layout. Use `random.choice(list(s))` for sampling.
 - **A `Counter` subtraction drops non-positive counts** (`Counter(a=1) - Counter(a=2)` is empty). Use `c.subtract(other)` to keep negative counts.
 - **`heapq` is a min-heap only**: for a max-heap push negated priorities, or use `nlargest`. Tuples with equal priorities compare their next element, so add a tie-breaker counter when the payload isn't comparable.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **`dict`** = mutable mapping of **key → value**. Keys must be **hashable** (immutable: `str`, `int`, `tuple` of immutables, `frozenset`); values can be anything.
+- 🔴 **Average O(1)** for `d[k]`, `d[k] = v`, `del d[k]`, `k in d`. Worst case O(n) when many keys collide.
+- 🔴 **Insertion order is guaranteed since 3.7** (implementation detail in 3.6). Updating an existing key keeps its position; deleting and re-adding moves it to the end.
+- 🔴 `d[k]` raises **`KeyError`** for a missing key; **`d.get(k, default)`** returns the default; **`d.setdefault(k, default)`** inserts it too.
+- 🔴 **Never change a dict's size while iterating** over it → `RuntimeError: dictionary changed size during iteration`. Iterate over `list(d)` or build a new dict.
+- 🔴 `keys()`, `values()`, `items()` return **live views**, not copies; `in` on a dict checks **keys**.
+- 🔴 **Set** = unordered collection of **unique** hashable items; `{}` is an **empty dict**, use **`set()`**. No indexing or slicing.
+- 🔴 Set algebra: union `|`, intersection `&`, difference `-`, symmetric difference `^`; `issubset`, `issuperset`, `isdisjoint`. `remove()` raises `KeyError` for a missing item, **`discard()` doesn't**.
+- 🔴 **Hash contract**: if `a == b` then `hash(a) == hash(b)`. That's why `1`, `1.0` and `True` collapse into one key and `{1, 1.0, True} == {1}`.
+- 🟠 Merge dicts with **`d1 | d2`** <Since v="3.9" lang="Python" /> (right side wins) or `{**d1, **d2}`; `d1 |= d2` updates in place.
+- 🟠 **`Counter`**: counts hashables, `most_common(k)`, supports `+ - & |`; a missing key reads as **0**.
+- 🟠 **`defaultdict(factory)`** creates missing values on **read**: `defaultdict(list)` for grouping, `defaultdict(int)` for counting. Even just reading a missing key **inserts** it.
+- 🟠 **`deque`**: O(1) `append`/`appendleft`/`pop`/`popleft`; `maxlen` turns it into a sliding window.
+- 🟠 **`heapq`** is a **min-heap** on a plain list: `heappush`/`heappop` O(log n), `nlargest`/`nsmallest` for top-k in O(n log k).
+- 🟡 **`hash()` of `str` and `bytes` is randomized per process** (`PYTHONHASHSEED`): never use it for sharding, caching keys on disk or reproducible splits. Use `hashlib`.
+- 🟡 **`dict.fromkeys(keys, [])` shares ONE list** among all keys; use a dict comprehension.
+- 🟡 CPython dicts use a **compact layout**: a small **index array** of slots plus a dense **entries array** in insertion order, resized at 2/3 full.
+
+:::speak[How does a Python dict work, and why is lookup O(1)?]
+"A dict is a **hash table**. To store `d[key] = value`, Python calls `hash(key)`, masks it to pick a slot in an **index table**, and if the slot is taken it **probes** other slots using a perturbation formula that mixes in the higher bits of the hash, until it finds a free one. The slot stores an index into a dense **entries array**, which holds the hash, the key and the value **in insertion order**. That's why dicts iterate in insertion order since 3.7. A lookup repeats the same probe sequence and compares the stored hash first, then the key with `==`. On average that's a constant number of probes, so O(1). To keep it that way the table **resizes when it's two-thirds full**. It also explains the rules: keys must be **hashable** and their hash must never change, and two equal objects must have **equal hashes**, otherwise lookups go to the wrong slot."
+:::

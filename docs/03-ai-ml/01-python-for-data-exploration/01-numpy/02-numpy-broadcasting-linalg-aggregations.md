@@ -11,6 +11,12 @@ sidebar_position: 2
 
 <FormulaKey />
 
+:::info[Where this page sits]
+**Before:** [NumPy: Arrays, Memory Layout, dtypes & Indexing](./01-numpy-arrays-memory-indexing.md): the buffer, shape, strides and views that every idea on this page relies on.
+**This page:** broadcasting, reshaping and combining arrays, aggregations along an axis (with `keepdims` and `ddof`), and linear algebra: matrix products, solving, least squares, norms and cosine similarity.
+**Next:** [Pandas: Structures, Loading & Indexing](../02-pandas/03-pandas-structures-loading-indexing.md).
+:::
+
 ## 🧭 Start Here: Four Ideas That Make NumPy Click
 
 **1. Broadcasting: "pretend the smaller array is repeated".** To subtract each column's mean from a `(5020, 3)` feature matrix, you subtract a `(3,)` vector. NumPy lines the shapes up from the right (`(5020, 3)` vs `(3,)`), sees the vector is missing the first dimension, and *acts as if* it were repeated 5,020 times, without actually building that copy (it uses a **stride of 0**). Without broadcasting you'd write a loop or tile the vector by hand.
@@ -20,6 +26,13 @@ sidebar_position: 2
 **3. Axis: "which direction do I collapse?"** Every aggregation (`sum`, `mean`, `max`, `argmax`, `std`) can work on the whole array or **along one axis**. The axis you name is the one that **disappears**: `M.sum(axis=0)` adds down the rows and leaves one number per column.
 
 **4. Linear algebra: the language of models.** A dense layer is `X @ W + b`; a cosine similarity search is a normalized matrix product; linear regression is a least-squares solve. NumPy's `np.linalg` calls optimized LAPACK/BLAS libraries, so these are some of the fastest operations you can run on a CPU.
+
+The chapters follow those four ideas in order:
+
+1. **Broadcasting**: the right-to-left shape rule, and standardizing features in one line.
+2. **Reshaping and combining**: `reshape`, `ravel` vs `flatten`, transposes, `concatenate` vs `stack`, splitting.
+3. **Aggregations and `axis`**: which dimension disappears, `keepdims`, `argmax` and `ddof`.
+4. **Linear algebra**: `@`, solving instead of inverting, least squares, norms and cosine similarity.
 
 | New concept | One-line meaning |
 |---|---|
@@ -31,44 +44,13 @@ sidebar_position: 2
 | **Norm** | The length of a vector (L2 = straight-line distance, L1 = sum of absolute values) |
 | **Condition number** | How much a matrix amplifies rounding error; huge = numerically dangerous to invert |
 
-## ⚡ Essential Interview Recall
+## 🔴 1. Broadcasting
 
-- 🔴 **Broadcasting rule**: align shapes from the **right**; each pair of dimensions must be **equal**, or one of them **1**, or **missing**. Result size = the larger of each pair. Otherwise `ValueError: operands could not be broadcast together with shapes (4,3) (4,)`.
-- 🔴 `(3, 1) + (1, 4)` → `(3, 4)`; `(4, 3) + (3,)` → `(4, 3)`; `(4, 3) + (4,)` → **error** (fix with `v[:, None]`).
-- 🔴 Broadcasting **doesn't copy**: `np.broadcast_to` gives strides like `(0, 8)`, a read-only view.
-- 🔴 **`axis=0`** → one result **per column** (collapse rows); **`axis=1`** → one result **per row**. Use **`keepdims=True`** when you'll divide the original by the result.
-- 🔴 **`reshape(-1, k)`**: `-1` means "infer this dimension"; total size must stay the same.
-- 🔴 **`ravel()` returns a view when it can, `flatten()` always copies**.
-- 🔴 **`*` is element-wise; `@` / `np.matmul` / `np.dot` (2-D) is matrix multiplication**. Inner dimensions must match: `(n, d) @ (d, k)` → `(n, k)`. `@` broadcasts over leading batch dimensions.
-- 🔴 **Solve, don't invert**: `np.linalg.solve(A, b)` is faster and more accurate than `np.linalg.inv(A) @ b`.
-- 🔴 **`np.std` defaults to `ddof=0` (population), pandas `.std()` defaults to `ddof=1` (sample)**: on `[2, 4, 4, 4, 5, 5, 7, 9]` they give **2.0** vs **2.1381**.
-- 🔴 **`argmax`** returns a **flat index** without `axis`; convert with `np.unravel_index(i, M.shape)`.
-- 🔴 **`np.where(cond, a, b)`** = vectorized if/else; `np.where(cond)` alone returns the **indices** where it's true. `np.select` handles several conditions.
-- 🟠 NaN poisons `mean`/`sum`/`std`; use `np.nanmean`, `np.nansum`, `np.nanmedian`.
-- 🟠 **Stacking**: `concatenate` joins along an **existing** axis; `stack` creates a **new** axis; `vstack`/`hstack` are shorthands (rows / columns).
-- 🟠 Norms: `np.linalg.norm(v)` (L2), `ord=1` (L1), `ord=np.inf` (max); `axis=1` for row-wise norms → cosine similarity.
-- 🟡 **NumPy → PyTorch**: `torch.from_numpy` **shares memory** (zero-copy, same dtype: `float64` stays `float64`); `torch.tensor(arr)` **copies**; negative strides and read-only arrays need `.copy()`; `tensor.numpy()` needs `.detach().cpu()` first.
+Arithmetic between two arrays works element by element, which is easy when both have the same shape. **Broadcasting** is NumPy's rule for combining arrays of **different** shapes without writing loops or copying data. The classic example is standardizing a feature matrix: you subtract a `(3,)` vector of column means from a `(5020, 3)` matrix, and NumPy applies the vector to every row.
 
-## 📐 Formula Sheet
+The rule is mechanical. Write the two shapes right-aligned and compare them dimension by dimension, from right to left. Each pair must either be **equal**, or one of them must be **1** or missing. A size-1 or missing dimension is stretched to match the other; if any pair is two different sizes, neither of them 1, NumPy raises `ValueError: operands could not be broadcast together`. So `(4, 3)` with `(3,)` works (the vector is stretched over 4 rows), but `(4, 3)` with `(4,)` fails, because 3 and 4 don't match; you must turn the vector into a column with `v[:, None]`, giving shape `(4, 1)`.
 
-| Concept | Formula | In plain words |
-|---|---|---|
-| Mean | $\pred{\mu} = \frac{1}{\data{N}}\sum_i \data{x_i}$ | Sum divided by count |
-| Variance | $\pred{\sigma^2} = \frac{1}{\data{N} - \hyper{\text{ddof}}}\sum_i (\data{x_i} - \pred{\mu})^2$ | Average squared distance from the mean |
-| Standard deviation | $\pred{\sigma} = \sqrt{\pred{\sigma^2}}$ | Typical distance from the mean, in the data's units |
-| z-score (standardization) | $\pred{z_i} = \dfrac{\data{x_i} - \pred{\mu}}{\pred{\sigma}}$ | How many standard deviations from the mean |
-| Matrix product | $\pred{C_{ij}} = \sum_k \data{A_{ik}}\,\data{B_{kj}}$ | Row of A dot column of B |
-| Lp norm | $\pred{\lVert x \rVert_p} = \left(\sum_i \lvert \data{x_i}\rvert^{\hyper{p}}\right)^{1/\hyper{p}}$ | p = 2: length; p = 1: total absolute size |
-| Cosine similarity | $\pred{\cos\theta} = \dfrac{\data{a}\cdot\data{b}}{\lVert \data{a}\rVert\,\lVert \data{b}\rVert}$ | Angle between vectors, ignoring their lengths |
-| Linear system | $\data{A}\pred{x} = \data{b}$, solved as $\pred{x} = \texttt{solve}(\data{A}, \data{b})$ | Find x without forming $A^{-1}$ |
-
-:::speak[Explain NumPy broadcasting]
-"Broadcasting is how NumPy applies an operation to arrays of different shapes without copying data. It compares the shapes **from the rightmost dimension** backwards. Two dimensions are compatible if they're **equal**, or **one of them is 1**, or **one is missing**, and the result takes the larger size. So a `(5020, 3)` feature matrix minus a `(3,)` vector of column means works: the vector is treated as `(1, 3)` and stretched across all 5,020 rows. Under the hood the stretched dimension gets a **stride of zero**, so the same three numbers are reused and nothing is materialized. When shapes don't line up, I add an axis explicitly: to subtract per-row means I use `keepdims=True` or `[:, None]` to get `(5020, 1)`. The same mechanism handles adding a bias in `X @ W + b` and computing all pairwise distances with `A[:, None, :] - B[None, :, :]`. The one danger is accidental broadcasting: `(n,)` minus `(n, 1)` silently produces an `(n, n)` matrix."
-:::
-
-## The Mental Model
-
-### 1. The broadcasting check
+The stretching is **virtual**. NumPy doesn't build the repeated copy; it reads the same values again using a stride of 0, so broadcasting costs no extra memory for the stretched operand. Inserting size-1 axes deliberately lets you build grids of combinations, such as an outer sum from a column and a row, or every pairwise difference between two sets of points, which is how distance matrices are computed without loops.
 
 ```mermaid
 flowchart TB
@@ -85,25 +67,6 @@ flowchart TB
 :::analogy[Broadcasting is one recipe for a whole table]
 A wedding caterer doesn't write a separate recipe card for each of the 300 guests; one card says "add 2 spoons of sugar" and the kitchen applies it to every cup. Broadcasting is that single card (the small array) applied to every row of the big one, without photocopying the card 300 times.
 :::
-
-### 2. What `axis` removes
-
-```mermaid
-flowchart LR
-    M["M shape (2, 3)<br/>[[3, 7, 2],<br/> [9, 1, 5]]"] -->|"sum(axis=0): collapse rows"| A0["[12, 8, 7]<br/>shape (3,)"]
-    M -->|"sum(axis=1): collapse columns"| A1["[12, 15]<br/>shape (2,)"]
-    M -->|"sum()"| A2["27<br/>scalar"]
-```
-
-<Animation src="numpy/axis-aggregation" caption="With axis=0 the two rows are squashed together, leaving one total per column. With axis=1 each row is squashed across its columns, leaving one total per row. The axis you name is the one that disappears from the shape." />
-
-:::analogy[axis is the direction you fold a paper table]
-Fold a printed table top-to-bottom and every column piles onto itself: you get one number per column (`axis=0`). Fold it left-to-right and every row piles up: one number per row (`axis=1`). The axis you name is the direction of the fold, and that dimension is gone afterwards.
-:::
-
-## The Paradigm / Core Concepts
-
-### 🔴 Broadcasting examples
 
 | Left shape | Right shape | Result | Typical use |
 |---|---|---|---|
@@ -134,7 +97,15 @@ $$
 
 </Formula>
 
-### 🔴 Reshaping and combining
+:::tip[🎯 Interview angle]
+**"Explain NumPy broadcasting. Why does `(4, 3) + (4,)` fail?"** Shapes are compared right to left; each pair must be equal or one of them 1 (or missing), and size-1 dimensions are stretched virtually with a zero stride, so no copy is made. `(4, 3)` and `(4,)` compare 3 against 4 and fail; reshape the vector to `(4, 1)` with `v[:, None]`. The full spoken answer is near the end of the page.
+:::
+
+## 🔴 2. Reshaping and Combining
+
+Because an array is a buffer plus shape and strides, the same numbers can be viewed as many different grids. `reshape` changes the shape without changing the number of elements: 12 values can be `(12,)`, `(3, 4)` or `(2, 2, 3)`, and `-1` asks NumPy to work out one dimension for you. When the data is contiguous, the result is a view and costs nothing. Deep learning code reshapes constantly, for example turning images from `(H, W, C)` into `(C, H, W)` with `transpose` or `np.moveaxis`, and adding a batch dimension with `a[None]`.
+
+Flattening has two versions that differ in whether they copy: `ravel()` returns a view when it can (and copies only when the layout requires it, as for a transposed array), while `flatten()` always copies. To combine arrays, `np.concatenate` joins along an **existing** axis (two `(2, 2)` arrays become `(4, 2)` or `(2, 4)`), while `np.stack` creates a **new** axis (they become `(2, 2, 2)`). `vstack`, `hstack` and `column_stack` are shorthands. Joining always copies; splitting with `split` or `array_split` returns views.
 
 | Function | Does | View or copy | Example |
 |---|---|---|---|
@@ -148,7 +119,70 @@ $$
 | `np.stack([A, B], axis=k)` | Join along a **new** axis | Copy | Two `(2, 2)` → `(2, 2, 2)` |
 | `np.split(a, 3)` / `np.array_split(a, 3)` | Cut into pieces | Views | `split` needs equal pieces; `array_split` doesn't |
 
-### 🔴 Matrix operations
+:::tip[🎯 Interview angle]
+**"What's the difference between `ravel` and `flatten`, and between `concatenate` and `stack`?"** `ravel` returns a view when the array is contiguous and copies only when it must; `flatten` always copies. `concatenate` joins along an existing axis, `stack` adds a new one. Reshape and transpose are views, so they're free.
+:::
+
+## 🔴 3. Aggregations and `axis`
+
+Aggregations such as `sum`, `mean`, `max`, `std` and `argmax` reduce many numbers to fewer. Called with no `axis`, they reduce the whole array to a single value. With `axis=k`, they reduce **along** axis `k`, and that axis **disappears** from the result's shape. For a `(2, 3)` matrix, `sum(axis=0)` collapses the rows and leaves one total per column, shape `(3,)`; `sum(axis=1)` collapses the columns and leaves one total per row, shape `(2,)`. Note that `argmax` with no axis returns a **flat** index into the raveled array.
+
+The disappearing axis causes a common broadcasting failure. Dividing each row of a `(4, 3)` array by its row total with `F / F.sum(axis=1)` fails, because the totals have shape `(4,)`, which lines up against the 3 columns. Passing **`keepdims=True`** keeps the collapsed axis as size 1, giving `(4, 1)`, which broadcasts correctly. Column-wise operations usually work without it, because a `(d,)` result already aligns from the right.
+
+Spread statistics carry one more subtlety: **`ddof`**, which sets the divisor of the variance to `N - ddof`. NumPy's default is 0 (the population variance), pandas' default is 1 (the sample variance), so the same data gives slightly different standard deviations in the two libraries.
+
+```mermaid
+flowchart LR
+    M["M shape (2, 3)<br/>[[3, 7, 2],<br/> [9, 1, 5]]"] -->|"sum(axis=0): collapse rows"| A0["[12, 8, 7]<br/>shape (3,)"]
+    M -->|"sum(axis=1): collapse columns"| A1["[12, 15]<br/>shape (2,)"]
+    M -->|"sum()"| A2["27<br/>scalar"]
+```
+
+<Animation src="numpy/axis-aggregation" caption="With axis=0 the two rows are squashed together, leaving one total per column. With axis=1 each row is squashed across its columns, leaving one total per row. The axis you name is the one that disappears from the shape." />
+
+:::analogy[axis is the direction you fold a paper table]
+Fold a printed table top-to-bottom and every column piles onto itself: you get one number per column (`axis=0`). Fold it left-to-right and every row piles up: one number per row (`axis=1`). The axis you name is the direction of the fold, and that dimension is gone afterwards.
+:::
+
+| Function | No `axis` | `axis=0` on `[[3, 7, 2], [9, 1, 5]]` | `axis=1` |
+|---|---|---|---|
+| `sum` | `27` | `[12  8  7]` | `[12 15]` |
+| `mean` | `4.5` | `[6.  4.  3.5]` | `[4. 5.]` |
+| `max` / `min` | `9` / `1` | per column | `[7 9]` / `[2 1]` |
+| `argmax` / `argmin` | `3` (**flat index**) | `argmin`: `[0 1 0]` | `argmax`: `[1 0]` |
+| `median`, `std`, `var`, `percentile` | whole array | per column | per row |
+| `cumsum`, `diff`, `sort`, `argsort` | — | along the axis | along the axis |
+
+<RuleCard name="Use keepdims when you divide by an aggregate" tag="axis and broadcasting" why="Collapsing an axis drops it from the shape, and a (n,) result no longer lines up with an (n, d) array from the right." remember="Keep the axis you collapse.">
+
+`F / F.sum(axis=1)` fails (`(4, 3)` vs `(4,)`), while `F / F.sum(axis=1, keepdims=True)` divides each row by its own total (`(4, 3)` vs `(4, 1)`). Column-wise operations (`axis=0`) usually work without it because the result `(d,)` already aligns from the right.
+
+</RuleCard>
+
+<Formula name="Variance and ddof" tag="Spread" words="The average squared distance from the mean. Dividing by N - 1 instead of N corrects the bias when you estimate a population from a sample." remember="NumPy divides by N, pandas by N minus 1.">
+
+$$
+\pred{\sigma^2} = \frac{1}{\data{N} - \hyper{\text{ddof}}}\sum_{i=1}^{\data{N}} (\data{x_i} - \pred{\mu})^2
+$$
+
+- $\hyper{\text{ddof}}$: 0 in NumPy's default (population variance), 1 in pandas' default (sample variance)
+- $\pred{\mu}$: the mean of the $\data{N}$ values
+
+**Example:** `[2, 4, 4, 4, 5, 5, 7, 9]` has $\mu = 5$ and squared deviations summing to 32. `ddof=0`: $32/8 = 4.0$, $\sigma = 2.0$. `ddof=1`: $32/7 = 4.5714$, $\sigma = 2.1381$ (what `pd.Series(d).std()` prints).
+
+</Formula>
+
+:::tip[🎯 Interview angle]
+**"What does `axis=0` mean in `M.sum(axis=0)`, and why does row-normalization need `keepdims`?"** The named axis is the one that disappears: `axis=0` collapses the rows and returns one value per column. Dividing by row totals needs `keepdims=True` so the totals have shape `(n, 1)` and broadcast across columns. Also remember NumPy's `std` uses `ddof=0` while pandas uses `ddof=1`.
+:::
+
+## 🔴 4. Linear Algebra
+
+Linear algebra is the language of models: a dense layer computes `X @ W + b`, a nearest-neighbour search is a matrix product of normalized embeddings, and linear regression is a least-squares solve. Be clear about the two products: `A * B` multiplies **element by element** (with broadcasting), while `A @ B` is the **matrix product**, which needs the inner dimensions to match, `(n, d) @ (d, k)` giving `(n, k)`, and which also broadcasts over leading batch dimensions.
+
+For systems of equations, the key habit is **solve, don't invert**. Computing `np.linalg.inv(A) @ b` does extra work and accumulates more rounding error than `np.linalg.solve(A, b)`, which solves the system directly; for regression on a non-square design matrix, `np.linalg.lstsq` gives the least-squares solution in one call, and `pinv` handles singular matrices. These functions call optimized LAPACK and BLAS libraries, so they are among the fastest operations you can run on a CPU.
+
+Norms measure the length of a vector (the L2 norm is straight-line length), and they lead directly to **cosine similarity**, which compares the direction of two vectors while ignoring their lengths. Normalize every row to unit length, and a single matrix product then gives every pairwise similarity at once: the core operation of embedding search in RAG systems.
 
 | Operation | NumPy | Shapes | Note |
 |---|---|---|---|
@@ -180,37 +214,11 @@ $$
 
 </Formula>
 
-### 🔴 Aggregations
+:::tip[🎯 Interview angle]
+**"Why use `np.linalg.solve` instead of `inv`, and how do you compute cosine similarity for many embeddings?"** `solve` solves the system directly, which is faster and more accurate than forming the inverse and multiplying. For cosine similarity, divide each row by its L2 norm (with `keepdims=True`) and take `E @ E.T`: one matrix product gives every pairwise similarity.
+:::
 
-| Function | No `axis` | `axis=0` on `[[3, 7, 2], [9, 1, 5]]` | `axis=1` |
-|---|---|---|---|
-| `sum` | `27` | `[12  8  7]` | `[12 15]` |
-| `mean` | `4.5` | `[6.  4.  3.5]` | `[4. 5.]` |
-| `max` / `min` | `9` / `1` | per column | `[7 9]` / `[2 1]` |
-| `argmax` / `argmin` | `3` (**flat index**) | `argmin`: `[0 1 0]` | `argmax`: `[1 0]` |
-| `median`, `std`, `var`, `percentile` | whole array | per column | per row |
-| `cumsum`, `diff`, `sort`, `argsort` | — | along the axis | along the axis |
-
-<RuleCard name="Use keepdims when you divide by an aggregate" tag="axis and broadcasting" why="Collapsing an axis drops it from the shape, and a (n,) result no longer lines up with an (n, d) array from the right." remember="Keep the axis you collapse.">
-
-`F / F.sum(axis=1)` fails (`(4, 3)` vs `(4,)`), while `F / F.sum(axis=1, keepdims=True)` divides each row by its own total (`(4, 3)` vs `(4, 1)`). Column-wise operations (`axis=0`) usually work without it because the result `(d,)` already aligns from the right.
-
-</RuleCard>
-
-<Formula name="Variance and ddof" tag="Spread" words="The average squared distance from the mean. Dividing by N - 1 instead of N corrects the bias when you estimate a population from a sample." remember="NumPy divides by N, pandas by N minus 1.">
-
-$$
-\pred{\sigma^2} = \frac{1}{\data{N} - \hyper{\text{ddof}}}\sum_{i=1}^{\data{N}} (\data{x_i} - \pred{\mu})^2
-$$
-
-- $\hyper{\text{ddof}}$: 0 in NumPy's default (population variance), 1 in pandas' default (sample variance)
-- $\pred{\mu}$: the mean of the $\data{N}$ values
-
-**Example:** `[2, 4, 4, 4, 5, 5, 7, 9]` has $\mu = 5$ and squared deviations summing to 32. `ddof=0`: $32/8 = 4.0$, $\sigma = 2.0$. `ddof=1`: $32/7 = 4.5714$, $\sigma = 2.1381$ (what `pd.Series(d).std()` prints).
-
-</Formula>
-
-## ⚙️ Under the Hood (NumPy Internals)
+## ⚙️ Going Deeper (NumPy Internals)
 
 - **Broadcasting is stride tricks**: a stretched dimension gets stride **0**, so the iterator re-reads the same memory. `np.broadcast_to(np.array([1, 2, 3]), (4, 3)).strides` is `(0, 8)` and the result is **read-only** (writing to it would write the same cell four times).
 - **The ufunc iterator (`nditer`)** combines the broadcast shapes, chooses an iteration order that's memory-friendly for all operands, and calls an inner C loop over the longest contiguous run. That's why mixed-layout operations still run fast.
@@ -591,3 +599,40 @@ A model served in a Java service received features standardized with a different
 - **`argsort` for top-k is O(n log n)**; `argpartition` is O(n) and returns the top k unordered.
 - **Integer division results**: `np.array([1, 2]) / 2` is `float64`; `//` keeps integers and floors toward −∞ like Python.
 - **Matrix inverse of a near-singular matrix doesn't raise**: it returns huge numbers. Check `np.linalg.cond`, prefer `solve`, `lstsq` or `pinv`.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **Broadcasting rule**: align shapes from the **right**; each pair of dimensions must be **equal**, or one of them **1**, or **missing**. Result size = the larger of each pair. Otherwise `ValueError: operands could not be broadcast together with shapes (4,3) (4,)`.
+- 🔴 `(3, 1) + (1, 4)` → `(3, 4)`; `(4, 3) + (3,)` → `(4, 3)`; `(4, 3) + (4,)` → **error** (fix with `v[:, None]`).
+- 🔴 Broadcasting **doesn't copy**: `np.broadcast_to` gives strides like `(0, 8)`, a read-only view.
+- 🔴 **`axis=0`** → one result **per column** (collapse rows); **`axis=1`** → one result **per row**. Use **`keepdims=True`** when you'll divide the original by the result.
+- 🔴 **`reshape(-1, k)`**: `-1` means "infer this dimension"; total size must stay the same.
+- 🔴 **`ravel()` returns a view when it can, `flatten()` always copies**.
+- 🔴 **`*` is element-wise; `@` / `np.matmul` / `np.dot` (2-D) is matrix multiplication**. Inner dimensions must match: `(n, d) @ (d, k)` → `(n, k)`. `@` broadcasts over leading batch dimensions.
+- 🔴 **Solve, don't invert**: `np.linalg.solve(A, b)` is faster and more accurate than `np.linalg.inv(A) @ b`.
+- 🔴 **`np.std` defaults to `ddof=0` (population), pandas `.std()` defaults to `ddof=1` (sample)**: on `[2, 4, 4, 4, 5, 5, 7, 9]` they give **2.0** vs **2.1381**.
+- 🔴 **`argmax`** returns a **flat index** without `axis`; convert with `np.unravel_index(i, M.shape)`.
+- 🔴 **`np.where(cond, a, b)`** = vectorized if/else; `np.where(cond)` alone returns the **indices** where it's true. `np.select` handles several conditions.
+- 🟠 NaN poisons `mean`/`sum`/`std`; use `np.nanmean`, `np.nansum`, `np.nanmedian`.
+- 🟠 **Stacking**: `concatenate` joins along an **existing** axis; `stack` creates a **new** axis; `vstack`/`hstack` are shorthands (rows / columns).
+- 🟠 Norms: `np.linalg.norm(v)` (L2), `ord=1` (L1), `ord=np.inf` (max); `axis=1` for row-wise norms → cosine similarity.
+- 🟡 **NumPy → PyTorch**: `torch.from_numpy` **shares memory** (zero-copy, same dtype: `float64` stays `float64`); `torch.tensor(arr)` **copies**; negative strides and read-only arrays need `.copy()`; `tensor.numpy()` needs `.detach().cpu()` first.
+
+:::speak[Explain NumPy broadcasting]
+"Broadcasting is how NumPy applies an operation to arrays of different shapes without copying data. It compares the shapes **from the rightmost dimension** backwards. Two dimensions are compatible if they're **equal**, or **one of them is 1**, or **one is missing**, and the result takes the larger size. So a `(5020, 3)` feature matrix minus a `(3,)` vector of column means works: the vector is treated as `(1, 3)` and stretched across all 5,020 rows. Under the hood the stretched dimension gets a **stride of zero**, so the same three numbers are reused and nothing is materialized. When shapes don't line up, I add an axis explicitly: to subtract per-row means I use `keepdims=True` or `[:, None]` to get `(5020, 1)`. The same mechanism handles adding a bias in `X @ W + b` and computing all pairwise distances with `A[:, None, :] - B[None, :, :]`. The one danger is accidental broadcasting: `(n,)` minus `(n, 1)` silently produces an `(n, n)` matrix."
+:::
+
+## 📐 Formula Sheet
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Mean | $\pred{\mu} = \frac{1}{\data{N}}\sum_i \data{x_i}$ | Sum divided by count |
+| Variance | $\pred{\sigma^2} = \frac{1}{\data{N} - \hyper{\text{ddof}}}\sum_i (\data{x_i} - \pred{\mu})^2$ | Average squared distance from the mean |
+| Standard deviation | $\pred{\sigma} = \sqrt{\pred{\sigma^2}}$ | Typical distance from the mean, in the data's units |
+| z-score (standardization) | $\pred{z_i} = \dfrac{\data{x_i} - \pred{\mu}}{\pred{\sigma}}$ | How many standard deviations from the mean |
+| Matrix product | $\pred{C_{ij}} = \sum_k \data{A_{ik}}\,\data{B_{kj}}$ | Row of A dot column of B |
+| Lp norm | $\pred{\lVert x \rVert_p} = \left(\sum_i \lvert \data{x_i}\rvert^{\hyper{p}}\right)^{1/\hyper{p}}$ | p = 2: length; p = 1: total absolute size |
+| Cosine similarity | $\pred{\cos\theta} = \dfrac{\data{a}\cdot\data{b}}{\lVert \data{a}\rVert\,\lVert \data{b}\rVert}$ | Angle between vectors, ignoring their lengths |
+| Linear system | $\data{A}\pred{x} = \data{b}$, solved as $\pred{x} = \texttt{solve}(\data{A}, \data{b})$ | Find x without forming $A^{-1}$ |

@@ -9,34 +9,51 @@ Every major AI framework is built on Python OOP: PyTorch's `nn.Module` and `Data
 
 <PriorityKey lang="Python" v="3.10" />
 
-## ⚡ Essential Interview Recall
 
-- 🔴 **Class** = blueprint; **object (instance)** = a concrete thing with its own state. **`__init__`** initializes a new instance (the object is created just before, by `__new__`).
-- 🔴 **`self`** is the instance, passed **explicitly**: `model.train(5)` is `MLModel.train(model, 5)`.
-- 🔴 **Class attributes** are shared by all instances; **instance attributes** live in each object's `__dict__`. A **mutable class attribute** (`layers = []`) is shared state: a classic bug.
-- 🔴 **Attribute lookup**: instance `__dict__` → class → base classes in **MRO** order. Assigning through an instance (`self.count += 1`) creates an **instance** attribute that shadows the class one.
-- 🔴 **Instance method** (`self`), **`@classmethod`** (`cls`: alternative constructors like `from_pretrained`), **`@staticmethod`** (no implicit argument: a utility grouped with the class).
-- 🔴 **Encapsulation by convention**: `name` public, `_name` "internal", `__name` **name-mangled** to `_ClassName__name` (to avoid clashes in subclasses, not for security).
-- 🔴 **`@property`** turns a method into an attribute with optional validation in the setter; no Java-style `getX()`/`setX()`.
-- 🔴 **`super().__init__()`** must be called in subclasses that define `__init__`, or the parent's setup never runs (in PyTorch: `cannot assign module before Module.__init__() call`).
-- 🔴 **Polymorphism through duck typing**: anything with a `predict()` method can be used where a predictor is expected; no shared interface needed.
-- 🔴 **Abstraction**: `abc.ABC` + `@abstractmethod` → instantiating a class with unimplemented abstract methods raises `TypeError`.
-- 🔴 **Dunder methods** hook into syntax: `__repr__`/`__str__` (printing), `__len__`/`__getitem__` (`len`, indexing, PyTorch `Dataset`), `__call__` (`model(x)`), `__eq__`/`__hash__`, `__add__` (operators), `__enter__`/`__exit__` (`with`).
-- 🟠 **MRO (C3 linearization)**: `D(B, C)` with both inheriting `A` gives `D → B → C → A → object`. `super()` means "**next in the MRO**", which is how cooperative multiple inheritance and mixins work.
-- 🟠 Defining **`__eq__` without `__hash__`** makes instances **unhashable** (`__hash__` is set to `None`).
-- 🟠 **`@dataclass`** generates `__init__`, `__repr__`, `__eq__`; `frozen=True` makes it immutable and hashable; mutable defaults need **`field(default_factory=list)`**.
-- 🟡 **`__slots__`** removes the per-instance `__dict__`: about 96 → 56 bytes per small object in our measurement, and no new attributes can be added.
-- 🟡 **`typing.Protocol`** <Since v="3.8" lang="Python" /> = **structural** typing (duck typing that type checkers understand), versus nominal ABCs.
-- 🟡 Classes are objects too: `type(MLModel) is type`. Methods are **descriptors** that bind `self` on attribute access; `property` is a descriptor as well.
-
-:::speak[Why do we call model(x) instead of model.forward(x) in PyTorch?]
-"Because `nn.Module` implements the **`__call__`** dunder method, and calling an instance like a function goes through it. `__call__` does more than run `forward`: it runs any registered **forward pre-hooks**, then calls `forward`, then runs **forward hooks**, and it plays well with things like `torch.compile`, mixed precision and tools that rely on hooks, such as feature extractors and some profilers. If I call `forward` directly I skip all of that, so hooks silently don't fire. The same design shows up in the rest of `nn.Module`: it overrides **`__setattr__`**, so when I write `self.fc1 = nn.Linear(4, 8)` inside `__init__`, the layer is **registered** in an internal dictionary. That's how `model.parameters()`, `model.to('cuda')` and `state_dict()` find every weight, and it's why I must call `super().__init__()` first, and why a plain Python list of layers isn't registered: I need `nn.ModuleList`."
+:::info[Where this page sits]
+**Before:** [Comprehensions, Generators & Decorators](./06-comprehensions-generators-decorators.md): the iterator protocol and decorators (`@property`, `@classmethod` and `@dataclass` are decorators too).
+**This page:** classes and instances, attribute lookup, the three kinds of methods, encapsulation and properties, inheritance with `super()` and the MRO, polymorphism and abstraction (ABC vs Protocol), the dunder methods, and data-holding classes (`@dataclass`, `NamedTuple`, pydantic).
+**Next:** [Exceptions, Files & Context Managers](./08-exceptions-files-context-managers.md).
 :::
 
-## The Mental Model
+## 🧭 Start Here
 
-### 1. Where an attribute is found
+Object-oriented programming lets you bundle **data** and the **behaviour** that operates on it into one unit, a class, and then create as many independent objects from it as you need. That's not an academic exercise in AI work: PyTorch models are subclasses of `nn.Module`, datasets implement `__len__` and `__getitem__`, scikit-learn estimators share a `fit`/`predict` shape, and Hugging Face loads models through class methods like `from_pretrained`. Reading or writing any of that code means reading and writing Python classes.
 
+If you know Java OOP, the concepts are familiar but the enforcement is different. Python has no `private` keyword: privacy is a naming convention. It has no interfaces: polymorphism is **duck typing** ("if it has a `predict` method, it's a predictor"), with optional abstract base classes or protocols when you want a checked contract. It supports **multiple inheritance**, resolved by a deterministic method resolution order. And instead of getters and setters, it uses **properties** that look like plain attributes. Python also lets classes plug into its syntax through **dunder methods** (`__len__`, `__call__`, `__add__`), which is how `model(x)` and `len(dataset)` work.
+
+The chapters build up in this order:
+
+1. **Classes, objects and attributes**: `__init__`, `self`, class vs instance attributes, and how attribute lookup works.
+2. **Three kinds of methods**: instance methods, `@classmethod` and `@staticmethod`.
+3. **Encapsulation**: access conventions, name mangling and `@property`.
+4. **Inheritance, `super()` and the MRO**: overriding, cooperative calls and multiple inheritance.
+5. **Polymorphism and abstraction**: the four pillars the Python way, and ABC vs Protocol.
+6. **Dunder methods**: hooking your objects into Python's syntax, and the eq/hash contract.
+7. **Data-holding classes**: plain class vs `@dataclass` vs `NamedTuple` vs pydantic.
+
+| New concept | One-line meaning |
+|---|---|
+| **Class / instance** | A blueprint / one concrete object built from it with its own state |
+| **`self`** | The instance a method was called on, passed explicitly as the first parameter |
+| **Class attribute** | Defined on the class and shared by every instance |
+| **Instance attribute** | Stored in one object's `__dict__` |
+| **MRO** | Method Resolution Order: the fixed order Python searches classes for an attribute |
+| **Duck typing** | An object fits wherever its methods fit; no shared base class needed |
+| **Dunder method** | A double-underscore method (`__len__`, `__call__`) that Python calls for built-in syntax |
+| **`@dataclass`** | Decorator that generates `__init__`, `__repr__` and `__eq__` from field declarations |
+
+:::analogy[A class is a cookie cutter]
+The class is the cutter: it defines the shape once. Each cookie you press out is an instance with its own toppings (instance attributes), while things printed on the cutter itself (class attributes) are shared by every cookie. Inheritance is making a new cutter by modifying an existing one; duck typing is the bakery accepting any cookie that fits in the box, whatever cutter made it.
+:::
+
+## 🔴 1. Classes, Objects and Attributes
+
+A **class** is a blueprint; an **object** (or **instance**) is a concrete thing built from it with its own state. Calling the class, `MLModel("bert")`, first creates an empty object (via `__new__`) and then calls **`__init__`** to fill it in. `__init__` is an initializer, not quite a constructor: the object already exists when it runs. Inside methods, **`self`** is that instance, and Python passes it **explicitly** as the first parameter: `model.train(5)` is literally `MLModel.train(model, 5)`.
+
+Attributes live in two places. **Instance attributes**, usually assigned in `__init__` as `self.name = ...`, are stored in each object's own `__dict__`, so every instance has its own copy. **Class attributes**, assigned directly in the class body, live on the class and are **shared** by all instances. Shared immutable values (a default, a version string) are fine; a shared **mutable** class attribute such as `layers = []` is a classic bug, because appending through one instance changes it for all of them.
+
+When you read `obj.attr`, Python searches in a fixed order: the instance's `__dict__`, then the class, then the base classes in MRO order, and finally a `__getattr__` hook if the class defines one; otherwise it raises `AttributeError`. Writing is different: assigning `obj.attr = value` always writes to the **instance**. That's why `self.count += 1` on a class attribute doesn't update the class: it reads the class value, adds one and stores a **new instance attribute** that shadows the class one from then on.
 ```mermaid
 flowchart TB
     Q["model.framework"] --> I{"In model.__dict__?<br/>(instance attributes)"}
@@ -56,8 +73,50 @@ flowchart TB
 When you need a stapler you first look on your own desk (the instance), then on the team's shared shelf (the class), then in the department cupboard (the base classes). Putting your own stapler on your desk doesn't remove the shared one; it just means you'll always find yours first. That's exactly what `self.count += 1` does to a class attribute.
 :::
 
-### 2. Multiple inheritance and the MRO
+:::tip[🎯 Interview angle]
+**"What's the difference between a class attribute and an instance attribute?"** A class attribute is defined in the class body and shared by all instances; an instance attribute lives in each object's `__dict__`. Lookup goes instance, then class, then bases in MRO order, but assignment through an instance always creates an instance attribute, so `self.count += 1` shadows the class value. A mutable class attribute like `layers = []` is shared state and a common bug.
+:::
 
+## 🔴 2. Three Kinds of Methods
+
+Methods defined in a class come in three kinds, distinguished by what they receive as their first argument. An ordinary **instance method** receives the instance as `self` and can read and change both instance and class state; `forward`, `fit` and `predict` are instance methods. A **`@classmethod`** receives the **class** as `cls`, so it can work with class-level state and, most importantly, create instances.
+
+The main use of a class method is an **alternative constructor**: a named way to build an object from a different kind of input, such as `AutoModel.from_pretrained(name)` or `dict.fromkeys(keys)`. Because `cls` is whichever class the method was called on, a factory inherited by a subclass returns an instance of the subclass, which a hard-coded constructor couldn't do. A **`@staticmethod`** receives nothing implicit; it's a plain function that lives in the class's namespace because it logically belongs there, such as a helper that estimates memory from a parameter count.
+| | Instance method | `@classmethod` | `@staticmethod` |
+|---|---|---|---|
+| First parameter | `self` (the instance) | `cls` (the class) | None |
+| Can read/modify | Instance and class state | Class state only | Neither |
+| Called as | `obj.m()` | `Cls.m()` or `obj.m()` | `Cls.m()` or `obj.m()` |
+| Typical use | `.forward()`, `.fit()`, `.predict()` | **Alternative constructors**: `AutoModel.from_pretrained("bert-base-uncased")`, `dict.fromkeys`, `ModelConfig.from_preset("small")` | Helper maths: `estimate_vram_mb(num_params)` |
+| Inheritance | Polymorphic | `cls` is the **subclass** when called on one, so factories return the right type | Plain function |
+
+:::tip[🎯 Interview angle]
+**"When would you use `@classmethod` versus `@staticmethod`?"** A class method gets `cls`, so it's the tool for alternative constructors (`from_pretrained`, `from_config`) and it returns the right subclass when inherited. A static method gets no implicit argument; it's a utility function grouped with the class. Instance methods get `self` and work on one object's state.
+:::
+
+## 🔴 3. Encapsulation: Access Conventions and `@property`
+
+Python has no `private` or `protected` keywords. Instead it relies on naming conventions that the community respects. A plain name is **public** API. A single leading underscore, `_name`, means "internal; don't use this from outside", but nothing stops you. A double leading underscore, `__name`, triggers **name mangling**: the compiler renames it to `_ClassName__name`. That is not a security feature; its purpose is to stop a subclass that happens to use the same attribute name from overwriting the parent's value.
+
+Where Java uses `getX()` and `setX()`, Python uses **`@property`**. You start with a plain public attribute; if you later need validation or a computed value, you turn it into a property, and callers keep writing `opt.lr` and `opt.lr = 0.01` without any change. The getter is the method decorated with `@property`, and the setter is a second method decorated with `@lr.setter`, where you can reject invalid values such as a negative learning rate.
+| Name | Meaning | Enforced? | Accessible as |
+|---|---|---|---|
+| `self.name` | Public API | — | `obj.name` |
+| `self._name` | "Internal: don't touch from outside" | ❌ convention only (also skipped by `from m import *`) | `obj._name` still works |
+| `self.__name` | Avoid clashes with subclass attributes | Partly: **renamed** to `_ClassName__name` | `obj._ClassName__name` |
+| `self.__name__` | Reserved for Python's special names | — | Don't invent your own dunders |
+
+:::tip[🎯 Interview angle]
+**"How do you make an attribute private in Python?"** You can't enforce it: `_name` is a convention for internal use, and `__name` is name-mangled to `_ClassName__name` to avoid clashes in subclasses, not for security. For controlled access use `@property` with a setter that validates, so the public interface stays a plain attribute.
+:::
+
+## 🔴 4. Inheritance, `super()` and the MRO
+
+A class can **inherit** from another, `class Net(nn.Module)`, gaining all its methods and attributes and **overriding** whichever it wants to change. When a subclass defines its own `__init__`, the parent's `__init__` does not run automatically: you must call **`super().__init__()`**, usually as the first line. Forgetting it leaves the parent's setup undone, which in PyTorch produces the error `cannot assign module before Module.__init__() call`.
+
+Python also allows **multiple inheritance**, which raises the question of which parent's method wins. Python answers it with the **Method Resolution Order (MRO)**, computed once per class by an algorithm called **C3 linearization**. It guarantees that every class comes before its parents and that the bases keep the order you listed them in. For the classic diamond, `D(B, C)` where both `B` and `C` inherit from `A`, the MRO is `D, B, C, A, object`: the shared parent appears once, after both of its children.
+
+This changes what `super()` means. It doesn't mean "my parent"; it means "**the next class in the MRO of the object's actual type**". In the diamond, `B`'s `super()` call goes to `C`, a class `B` knows nothing about. That's what makes **cooperative** multiple inheritance and mixins work: if every class calls `super()`, each class in the chain runs exactly once.
 ```mermaid
 flowchart TB
     A["A (base)"] --> B["B(A)"]
@@ -73,20 +132,15 @@ flowchart TB
 Every class in the hierarchy gets one turn to run its part of `__init__`, in a fixed order decided before the race starts. `super()` just means "hand the baton to the next runner in the line-up", which may be a teammate you've never met (`B` hands to `C`). The shared parent `A` always runs after all of its children, and nobody runs twice.
 :::
 
-## The Paradigm / Core Concepts
+:::tip[🎯 Interview angle]
+**"What is the MRO, and what does `super()` actually call?"** The MRO is the order Python searches classes, computed by C3 linearization so children come before parents and base order is preserved; for `D(B, C)` over a shared `A` it's `D, B, C, A, object`. `super()` calls the next class in the MRO of the instance's type, not necessarily the direct parent, so cooperative calls visit each class once. Always call `super().__init__()` in a subclass `__init__`.
+:::
 
-### 🔴 Three kinds of methods
+## 🔴 5. Polymorphism and Abstraction
 
-| | Instance method | `@classmethod` | `@staticmethod` |
-|---|---|---|---|
-| First parameter | `self` (the instance) | `cls` (the class) | None |
-| Can read/modify | Instance and class state | Class state only | Neither |
-| Called as | `obj.m()` | `Cls.m()` or `obj.m()` | `Cls.m()` or `obj.m()` |
-| Typical use | `.forward()`, `.fit()`, `.predict()` | **Alternative constructors**: `AutoModel.from_pretrained("bert-base-uncased")`, `dict.fromkeys`, `ModelConfig.from_preset("small")` | Helper maths: `estimate_vram_mb(num_params)` |
-| Inheritance | Polymorphic | `cls` is the **subclass** when called on one, so factories return the right type | Plain function |
+The four classic pillars of OOP (encapsulation, inheritance, polymorphism, abstraction) all exist in Python, but they are realised differently from Java. The biggest difference is **polymorphism through duck typing**: Python never checks an object's declared type before calling a method, only whether the method exists. Any object with `fit` and `predict` can go into a scikit-learn pipeline; any object with `__len__` and `__getitem__` can be a dataset. No shared interface is required.
 
-### 🔴 The four pillars, Python style
-
+Sometimes you do want a checked contract, for example a `BaseLLMProvider` that every provider must implement. **`abc.ABC`** plus **`@abstractmethod`** gives you that: a class that leaves an abstract method unimplemented cannot be instantiated, and trying raises `TypeError`. This is **nominal** typing, because a class must explicitly inherit from the ABC to count. **`typing.Protocol`** is the **structural** alternative: it describes the methods an object must have, and any object with those methods matches, with no inheritance. Type checkers enforce it statically; at run time it only checks when marked `@runtime_checkable`, and then only that the methods exist.
 | Pillar | Python mechanism | Java equivalent | AI example |
 |---|---|---|---|
 | **Encapsulation** | `_protected`, `__private` (name mangling), `@property` | `private` + getters/setters (enforced) | `Optimizer.lr` property that rejects negative learning rates |
@@ -94,17 +148,24 @@ Every class in the hierarchy gets one turn to run its part of `__init__`, in a f
 | **Polymorphism** | **Duck typing**, method overriding, operator overloading via dunders | Interfaces, overriding, overloading by signature | Any object with `fit`/`predict` works in a scikit-learn `Pipeline` |
 | **Abstraction** | `abc.ABC` + `@abstractmethod`, or `typing.Protocol` | `abstract class`, `interface` | `BaseLLMProvider.generate()` contract for OpenAI / Anthropic / local models |
 
-### 🔴 Access levels
+| | `abc.ABC` | `typing.Protocol` |
+|---|---|---|
+| Typing style | **Nominal**: must inherit from it | **Structural**: anything with the right methods matches |
+| Enforced when | **At instantiation** (missing abstract methods → `TypeError`) | By the **type checker** (and `isinstance` with `@runtime_checkable`, which only checks that the methods exist) |
+| Can provide shared code | ✅ concrete methods | Rarely |
+| Use when | You own the hierarchy (`BaseLLMProvider` and your providers) | You accept third-party objects ("anything with `predict`") |
 
-| Name | Meaning | Enforced? | Accessible as |
-|---|---|---|---|
-| `self.name` | Public API | — | `obj.name` |
-| `self._name` | "Internal: don't touch from outside" | ❌ convention only (also skipped by `from m import *`) | `obj._name` still works |
-| `self.__name` | Avoid clashes with subclass attributes | Partly: **renamed** to `_ClassName__name` | `obj._ClassName__name` |
-| `self.__name__` | Reserved for Python's special names | — | Don't invent your own dunders |
+:::tip[🎯 Interview angle]
+**"How does Python do polymorphism without interfaces?"** Through duck typing: any object with the right methods works, whatever its class. When you need an enforced contract, use `abc.ABC` with `@abstractmethod` (nominal; instantiating an incomplete subclass raises `TypeError`), or `typing.Protocol` (structural; checked by type checkers) when you accept third-party objects you don't control.
+:::
 
-### 🔴 The dunder methods that matter
+## 🔴 6. Dunder Methods
 
+**Dunder** ("double underscore") methods are how your classes plug into Python's built-in syntax. When Python evaluates `len(obj)` it calls `obj.__len__()`; `obj[i]` calls `__getitem__`; `for x in obj` calls `__iter__`; `obj(x)` calls `__call__`; `a + b` calls `__add__`; `with obj:` calls `__enter__` and `__exit__`. You never call these methods directly; you implement them, and every built-in feature that uses them starts working with your objects.
+
+This is the design behind the AI frameworks you use daily. A map-style PyTorch `Dataset` is any class with `__len__` and `__getitem__`. Calling `model(x)` goes through `nn.Module.__call__`, which runs hooks around `forward`. Tensors overload arithmetic through `__add__`, `__mul__` and `__matmul__`. `torch.no_grad()` is a context manager. Two printing methods are worth distinguishing: `__repr__` gives an unambiguous developer view (used by the debugger and inside containers) and `__str__` gives the readable view used by `print`.
+
+One pair needs care: `__eq__` and `__hash__`. If you define `__eq__`, Python sets `__hash__` to `None` unless you also define it, and instances can no longer go in sets or be dict keys. Define `__hash__` from the same immutable fields that `__eq__` compares, or let `@dataclass(frozen=True)` do it for you.
 | Method | Triggered by | Why it matters in AI code |
 |---|---|---|
 | `__init__(self, ...)` | `Cls(...)` | Create layers, load paths, set hyperparameters |
@@ -129,8 +190,15 @@ If you define `__eq__`, Python sets `__hash__ = None` (instances become unhashab
 
 </RuleCard>
 
-### 🟠 Data-holding classes compared
+:::tip[🎯 Interview angle]
+**"What does a class need to work as a PyTorch `Dataset`, and why call `model(x)` rather than `model.forward(x)`?"** A map-style dataset needs `__len__` and `__getitem__`. `model(x)` goes through `__call__`, which runs hooks around `forward`; calling `forward` directly skips them. Mention that overriding `__eq__` without `__hash__` makes instances unhashable. The full spoken answer is at the end of the page.
+:::
 
+## 🟠 7. Data-Holding Classes
+
+Many classes exist mainly to hold data: a training config, a record, an API payload. Writing `__init__`, `__repr__` and `__eq__` by hand for each one is repetitive and error-prone, so Python offers generators for that boilerplate. **`@dataclass`** reads the annotated fields in the class body and generates those methods; `frozen=True` makes instances immutable and hashable. A mutable default needs `field(default_factory=list)`, for the same reason that mutable default arguments are dangerous.
+
+`typing.NamedTuple` creates an immutable tuple with named fields, which is ideal for small records. **pydantic**'s `BaseModel` goes further than the others: it **validates and coerces** data at run time according to the type hints, which is why it's the standard for API request and response bodies and for LLM structured output. The table compares the four options.
 | | Plain class | `@dataclass` | `typing.NamedTuple` | pydantic `BaseModel` |
 |---|---|---|---|---|
 | Boilerplate | Write `__init__`, `__repr__`, `__eq__` yourself | Generated | Generated | Generated |
@@ -139,16 +207,11 @@ If you define `__eq__`, Python sets `__hash__ = None` (instances become unhashab
 | Hashable | By identity | Only if `frozen=True` (or `eq=False`) | ✅ | If frozen |
 | Typical use | Behaviour-heavy objects | Configs, records (`TrainingArguments`) | Small immutable records | API request/response bodies, LLM structured output |
 
-### 🟡 ABC vs Protocol
+:::tip[🎯 Interview angle]
+**"When would you use `@dataclass` versus pydantic?"** A dataclass generates `__init__`, `__repr__` and `__eq__` but does no run-time type checking, so it suits internal configs and records; use `frozen=True` for immutability and `field(default_factory=list)` for mutable defaults. pydantic validates and coerces at run time, so use it at system boundaries: API payloads and LLM structured outputs.
+:::
 
-| | `abc.ABC` | `typing.Protocol` |
-|---|---|---|
-| Typing style | **Nominal**: must inherit from it | **Structural**: anything with the right methods matches |
-| Enforced when | **At instantiation** (missing abstract methods → `TypeError`) | By the **type checker** (and `isinstance` with `@runtime_checkable`, which only checks that the methods exist) |
-| Can provide shared code | ✅ concrete methods | Rarely |
-| Use when | You own the hierarchy (`BaseLLMProvider` and your providers) | You accept third-party objects ("anything with `predict`") |
-
-## ⚙️ Under the Hood (CPython Internals)
+## ⚙️ Going Deeper (CPython Internals)
 
 - **Object creation**: `MLModel("bert")` calls `type.__call__`, which calls `MLModel.__new__(cls)` (allocates the object) and then `__init__(self, "bert")` (fills it in). Override `__new__` only for immutables or singletons.
 - **Every instance has a `__dict__`** (unless `__slots__` is used): an attribute dict, often **key-sharing** across instances of the same class. That flexibility costs memory: about **96 bytes per small object** with two attributes in our measurement versus **56 with `__slots__`**.
@@ -769,3 +832,29 @@ A RAG service created one `Retriever` object per request. Under concurrency, ans
 - **Dataclass inheritance order**: fields with defaults can't be followed by fields without defaults across a parent and child class; `@dataclass(kw_only=True)` <Since v="3.10" lang="Python" /> avoids the problem.
 - **Pickling**: instances of classes defined inside functions, lambdas stored as attributes, and open file handles can't be pickled, which breaks `multiprocessing`, `DataLoader(num_workers>0)` on macOS/Windows (spawn start method) and model saving with `torch.save(model)`. Prefer saving `state_dict()`.
 - **Monkey-patching**: Python lets you replace methods at run time (`obj.method = ...`); handy in tests (`unittest.mock.patch`), dangerous in production code.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **Class** = blueprint; **object (instance)** = a concrete thing with its own state. **`__init__`** initializes a new instance (the object is created just before, by `__new__`).
+- 🔴 **`self`** is the instance, passed **explicitly**: `model.train(5)` is `MLModel.train(model, 5)`.
+- 🔴 **Class attributes** are shared by all instances; **instance attributes** live in each object's `__dict__`. A **mutable class attribute** (`layers = []`) is shared state: a classic bug.
+- 🔴 **Attribute lookup**: instance `__dict__` → class → base classes in **MRO** order. Assigning through an instance (`self.count += 1`) creates an **instance** attribute that shadows the class one.
+- 🔴 **Instance method** (`self`), **`@classmethod`** (`cls`: alternative constructors like `from_pretrained`), **`@staticmethod`** (no implicit argument: a utility grouped with the class).
+- 🔴 **Encapsulation by convention**: `name` public, `_name` "internal", `__name` **name-mangled** to `_ClassName__name` (to avoid clashes in subclasses, not for security).
+- 🔴 **`@property`** turns a method into an attribute with optional validation in the setter; no Java-style `getX()`/`setX()`.
+- 🔴 **`super().__init__()`** must be called in subclasses that define `__init__`, or the parent's setup never runs (in PyTorch: `cannot assign module before Module.__init__() call`).
+- 🔴 **Polymorphism through duck typing**: anything with a `predict()` method can be used where a predictor is expected; no shared interface needed.
+- 🔴 **Abstraction**: `abc.ABC` + `@abstractmethod` → instantiating a class with unimplemented abstract methods raises `TypeError`.
+- 🔴 **Dunder methods** hook into syntax: `__repr__`/`__str__` (printing), `__len__`/`__getitem__` (`len`, indexing, PyTorch `Dataset`), `__call__` (`model(x)`), `__eq__`/`__hash__`, `__add__` (operators), `__enter__`/`__exit__` (`with`).
+- 🟠 **MRO (C3 linearization)**: `D(B, C)` with both inheriting `A` gives `D → B → C → A → object`. `super()` means "**next in the MRO**", which is how cooperative multiple inheritance and mixins work.
+- 🟠 Defining **`__eq__` without `__hash__`** makes instances **unhashable** (`__hash__` is set to `None`).
+- 🟠 **`@dataclass`** generates `__init__`, `__repr__`, `__eq__`; `frozen=True` makes it immutable and hashable; mutable defaults need **`field(default_factory=list)`**.
+- 🟡 **`__slots__`** removes the per-instance `__dict__`: about 96 → 56 bytes per small object in our measurement, and no new attributes can be added.
+- 🟡 **`typing.Protocol`** <Since v="3.8" lang="Python" /> = **structural** typing (duck typing that type checkers understand), versus nominal ABCs.
+- 🟡 Classes are objects too: `type(MLModel) is type`. Methods are **descriptors** that bind `self` on attribute access; `property` is a descriptor as well.
+
+:::speak[Why do we call model(x) instead of model.forward(x) in PyTorch?]
+"Because `nn.Module` implements the **`__call__`** dunder method, and calling an instance like a function goes through it. `__call__` does more than run `forward`: it runs any registered **forward pre-hooks**, then calls `forward`, then runs **forward hooks**, and it plays well with things like `torch.compile`, mixed precision and tools that rely on hooks, such as feature extractors and some profilers. If I call `forward` directly I skip all of that, so hooks silently don't fire. The same design shows up in the rest of `nn.Module`: it overrides **`__setattr__`**, so when I write `self.fc1 = nn.Linear(4, 8)` inside `__init__`, the layer is **registered** in an internal dictionary. That's how `model.parameters()`, `model.to('cuda')` and `state_dict()` find every weight, and it's why I must call `super().__init__()` first, and why a plain Python list of layers isn't registered: I need `nn.ModuleList`."
+:::

@@ -9,33 +9,51 @@ In standard CPython the **GIL** lets only one thread execute Python bytecode at 
 
 <PriorityKey lang="Python" v="3.11" />
 
-## ⚡ Essential Interview Recall
 
-- 🔴 **Concurrency** = dealing with many tasks at once (interleaving); **parallelism** = doing many at the same instant (multiple cores).
-- 🔴 **GIL** = a lock in CPython that allows **one thread at a time** to run Python bytecode. It exists to keep reference counting and the C API simple and fast.
-- 🔴 The GIL is **released during blocking I/O** (sockets, files, `time.sleep`) and by well-behaved **C extensions** (NumPy, PyTorch, tokenizers). So threads **do** help I/O-bound work and native code, but **not** pure-Python CPU work.
-- 🔴 **Pick the model**: I/O-bound with many waits → **`asyncio`** (or a thread pool); CPU-bound Python → **`multiprocessing` / `ProcessPoolExecutor`**; numeric → **vectorize** (NumPy, PyTorch); GPU work → already parallel and asynchronous.
-- 🔴 **`async def`** defines a **coroutine**; **`await`** pauses it and gives control back to the **event loop**; `asyncio.gather` runs coroutines concurrently and returns results **in input order**.
-- 🔴 **Never call blocking code inside `async def`** (`time.sleep`, `requests.get`, a sync SDK client): it freezes the whole event loop. Use async libraries (`httpx.AsyncClient`, `AsyncOpenAI`, `AsyncAnthropic`) or `await asyncio.to_thread(fn)`.
-- 🔴 **Bound concurrency** with `asyncio.Semaphore(n)` (or a pool's `max_workers`), or 10,000 simultaneous LLM calls become a storm of 429 rate-limit errors.
-- 🔴 **Race conditions** still exist with the GIL: `counter += 1` is several bytecodes, so threads can interleave. Protect shared state with `threading.Lock` (or avoid sharing).
-- 🔴 **Processes don't share memory**: arguments and results are **pickled** across process boundaries (so lambdas and local functions fail); guard the entry point with `if __name__ == "__main__":`.
-- 🟠 Memory = **reference counting** (immediate freeing) + **generational cyclic GC** (for reference cycles). `gc.collect()` forces a pass; `weakref` refers without keeping alive.
-- 🟠 Python objects are big: **1M floats in a list ≈ 32 MB** vs **8 MB** as a NumPy `float64` array (4 MB as `float32`).
-- 🟠 **Measure first**: `timeit` for snippets, **`cProfile`** for where time goes, `tracemalloc` for memory, py-spy / scalene for production. Then vectorize, cache, or move the hot loop to native code.
-- 🟠 PyTorch `DataLoader(num_workers=k)` uses **worker processes** to sidestep the GIL for preprocessing; `pin_memory=True` speeds CPU→GPU copies.
-- 🟡 **Free-threaded Python** (`python3.14t`, PEP 703/779): threads run in parallel on all cores, at the cost of slower single-thread code and extensions that must be rebuilt for it. Check with `sys._is_gil_enabled()`.
-- 🟡 Since **3.14** the default `multiprocessing` start method on Linux is **`forkserver`** (macOS and Windows use **`spawn`**): child processes no longer inherit the parent's memory by `fork`.
-- 🟡 Structured concurrency: **`asyncio.TaskGroup`** and **`asyncio.timeout`** <Since v="3.11" lang="Python" /> cancel sibling tasks on failure and enforce deadlines.
-
-:::speak[What is the GIL and how do you work around it?]
-"The GIL is a mutex inside CPython that only lets **one thread execute Python bytecode at a time**. It exists because CPython manages memory with reference counts, and one big lock made that, and C extensions, simple and fast. The consequence is that threads **don't speed up CPU-bound pure-Python code**: in my benchmark two threads running a Python loop were actually slower than running it twice sequentially. But the GIL is **released while waiting on I/O** and inside native code. So for an LLM service that spends its time waiting on HTTP calls I use **asyncio** with an async client and a **semaphore** to cap concurrency. For CPU-heavy preprocessing I use **multiple processes**: `ProcessPoolExecutor` or `DataLoader` workers. And for numeric work I **vectorize** with NumPy or PyTorch, which run in C or on the GPU and release the GIL. Python 3.13 added an optional free-threaded build without the GIL, supported since 3.14, but it isn't the default yet and needs compatible extensions."
+:::info[Where this page sits]
+**Before:** [Exceptions, Files & Context Managers](./08-exceptions-files-context-managers.md): `with`, cleanup and error handling, which every concurrent program needs.
+**This page:** concurrency vs parallelism, the GIL, threads vs processes vs `asyncio` (with measured timings), race conditions, memory management (reference counting and the cyclic GC) and the performance toolbox. It is the last page of the Python Fundamentals section.
+**Next:** [Python for Data Exploration](../01-python-for-data-exploration/00-overview.md), starting with NumPy.
 :::
 
-## The Mental Model
+## 🧭 Start Here
 
-### 1. Pick the concurrency model by the bottleneck
+An AI service spends most of its life **waiting**: for an LLM API to answer, for a vector database, for files from object storage. A preprocessing job, in contrast, spends its life **computing**: tokenizing, parsing, resizing images. Making either one faster means doing several things at once, and Python offers three tools for that: **threads**, **processes** and **`asyncio`**. Picking the right one depends entirely on whether the bottleneck is waiting or computing, and the reason is a CPython detail every Python interview asks about: the **Global Interpreter Lock (GIL)**.
 
+The GIL allows only one thread at a time to execute Python bytecode. Threads still help when the work is mostly waiting, because the GIL is released while a thread blocks on I/O. But for pure-Python computation, threads take turns rather than running in parallel, so you need separate processes (each with its own interpreter and GIL), vectorized libraries such as NumPy and PyTorch (which run their loops in C and release the GIL), or the new free-threaded build. For thousands of concurrent network calls, `asyncio` runs everything on one thread and switches between tasks whenever one of them is waiting.
+
+The page closes with memory and performance: how CPython frees objects (reference counting plus a cyclic garbage collector), why Python objects are so much bigger than NumPy array elements, and the order in which to reach for performance tools, which always begins with measuring.
+
+The chapters build up in this order:
+
+1. **Picking a concurrency model**: concurrency vs parallelism, and threads vs processes vs `asyncio`.
+2. **The GIL: threads vs processes**: what the GIL is, when it's released, race conditions, and measured timings.
+3. **`asyncio`**: coroutines, the event loop, and the rule never to block it.
+4. **Memory management**: reference counting, the cyclic GC and `weakref`.
+5. **The performance toolbox**: measure, profile, then fix in the right order.
+
+| New concept | One-line meaning |
+|---|---|
+| **Concurrency** | Making progress on many tasks by interleaving them |
+| **Parallelism** | Running many tasks at the same instant on multiple cores |
+| **GIL** | CPython's lock that lets only one thread run Python bytecode at a time |
+| **I/O-bound / CPU-bound** | Time spent waiting on network or disk / time spent computing |
+| **Coroutine** | A function defined with `async def` that can pause at `await` |
+| **Event loop** | The scheduler that runs coroutines on one thread and resumes them when their I/O is ready |
+| **Race condition** | A bug where the result depends on how threads interleave |
+| **Reference counting** | Freeing an object the moment nothing refers to it any more |
+
+:::analogy[A kitchen with one stove]
+Cooks who mostly wait for deliveries (I/O-bound work) can share one stove without slowing each other down: whoever is cooking uses it while the rest wait at the door. Cooks who all need to fry for an hour (CPU-bound work) gain nothing from sharing; they need separate kitchens (processes). The GIL is that single stove in each kitchen.
+:::
+
+## 🔴 1. Picking a Concurrency Model
+
+Two words are often used interchangeably but mean different things. **Concurrency** is about *dealing* with many tasks at once: a single worker can make progress on several tasks by switching between them whenever one is blocked. **Parallelism** is about *doing* many tasks at the same instant, which requires several CPU cores working simultaneously. A web server handling a thousand slow API calls needs concurrency; crunching a large corpus needs parallelism.
+
+The first question is always **where the time goes**. If the program mostly waits on the network or disk (LLM APIs, databases, S3), it is **I/O-bound**, and the answer is `asyncio` with an async client, or a thread pool when the library only offers a synchronous API. If it spends its time executing Python code, it is **CPU-bound**, and the answer is multiple processes (or the free-threaded build). If the work is numeric, the best answer is usually to **vectorize** it with NumPy or PyTorch, which moves the loop into optimized C code. And if you don't know where the time goes, you profile before choosing anything.
+
+The three tools differ in what they share and how they switch. Threads share memory and are switched **preemptively** by the OS and interpreter, so shared data needs locks. Processes have **separate memory**, so data is copied between them by pickling, which costs time but avoids locks. `asyncio` runs all tasks on **one thread** and switches **cooperatively**, only at `await` points, which makes each task very cheap (kilobytes rather than megabytes).
 ```mermaid
 flowchart TB
     Q{"Where does the time go?"} -->|"waiting on network / disk<br/>(LLM APIs, DB, S3)"| IO{"Many concurrent waits?<br/>Async libraries available?"}
@@ -45,26 +63,6 @@ flowchart TB
     Q -->|"numeric arrays"| V["Vectorize: NumPy / PyTorch<br/>(C, BLAS, CUDA; GIL released)"]
     Q -->|"don't know"| M["Profile first: cProfile, py-spy"]
 ```
-
-### 2. Threads vs processes under the GIL
-
-<Animation src="python/gil-threads-vs-processes" caption="With the GIL, two threads take turns holding the lock, so CPU-bound Python work runs one slice at a time and takes as long as running it sequentially, or longer. Two processes each have their own interpreter and GIL, so both cores work at once. Timings are from the benchmark on this page." />
-
-:::analogy[The GIL is a single microphone on a panel]
-Several panellists (threads) share one microphone (the GIL). Only the one holding it can speak (run Python code). If they mostly wait for questions from the audience (I/O), sharing the mic costs nothing; they hand it over while waiting. If they all want to give long speeches (CPU work), they just take turns, and the session doesn't get shorter. Separate rooms with their own microphones (processes) are the only way to have several speeches at once.
-:::
-
-### 3. The asyncio event loop
-
-<Animation src="python/asyncio-event-loop" caption="One thread runs the event loop. Each coroutine runs until it awaits a network call, then hands control back so the loop can start or resume another one. Eight half-second LLM calls overlap and finish in about half a second instead of four." />
-
-:::analogy[An event loop is one waiter serving many tables]
-A waiter (the single thread) takes an order at table 1, hands it to the kitchen (the API call) and, instead of standing there waiting, moves on to table 2, table 3, and so on, coming back to each table when its food is ready (`await` resumes). One waiter serves a whole room, but only if nobody makes them stand still: a blocking call like `time.sleep` is a customer who makes the waiter wait at their table while every other table goes hungry.
-:::
-
-## The Paradigm / Core Concepts
-
-### 🔴 Threads vs processes vs asyncio
 
 | | `threading` / `ThreadPoolExecutor` | `multiprocessing` / `ProcessPoolExecutor` | `asyncio` |
 |---|---|---|---|
@@ -76,11 +74,46 @@ A waiter (the single thread) takes an order at table 1, hands it to the kitchen 
 | Overhead per task | ~MB of stack per thread | Tens of MB per process, slow start | ~KB per coroutine |
 | AI examples | Calling a sync SDK in parallel, image decoding with PIL | Tokenizing a corpus, feature extraction, `DataLoader` workers | LLM fan-out, RAG retrieval from several stores, streaming responses |
 
-### 🔴 Measured on this page (2-core machine, CPython 3.14.6)
+:::tip[🎯 Interview angle]
+**"You need to call an LLM API 10,000 times. Threads, processes or asyncio?"** It's I/O-bound, so `asyncio` with an async client and a `Semaphore` to cap concurrency (or a thread pool if the SDK is sync-only); processes would add overhead without helping. Contrast with CPU-bound Python work, which needs processes, and numeric work, which should be vectorized.
+:::
+
+## 🔴 2. The GIL: Threads vs Processes
+
+The **Global Interpreter Lock** is a lock inside CPython that a thread must hold to execute Python bytecode, so only one thread runs Python code at any moment. It exists because every object carries a reference count that changes constantly; one global lock made those updates safe without per-object locking, which kept single-threaded code fast and C extensions simple. The cost is that threads cannot run pure-Python computation in parallel.
+
+The GIL is not held all the time, though. A thread **releases it while blocking on I/O** (sockets, files, `time.sleep`), and well-written **C extensions** such as NumPy, PyTorch and fast tokenizers release it during their heavy work. That's why threads genuinely speed up I/O-bound programs and native code. For CPU-bound Python, two threads just take turns, and the switching overhead can make them slower than running sequentially, as the measurement below shows. **Processes** sidestep the GIL because each process has its own interpreter and its own GIL; the price is that arguments and results must be **pickled** between processes (so lambdas and local functions can't be sent), and the entry point must be guarded with `if __name__ == "__main__":`. Python 3.14's **free-threaded** build removes the GIL entirely, at the cost of slower single-threaded code.
+
+The GIL does **not** make your code thread-safe. A statement like `counter += 1` compiles to several bytecode steps (load, add, store), and a thread can be switched out between them, so two threads can read the same old value and one update is lost. That's a **race condition**, and the fix is to protect shared state with a `threading.Lock`, or to avoid sharing state at all.
+
+Measured on this page (2-core machine, CPython 3.14.6):
 
 | Workload | Sequential | 2 threads | 2 processes | Free-threaded 3.14t, 2 threads |
 |---|---|---|---|---|
 | Pure-Python loop, run twice | 0.69 s | **0.86 s** (slower: GIL contention) | **0.48 s** | **0.46 s** (but its sequential run took 0.96 s) |
+
+<Animation src="python/gil-threads-vs-processes" caption="With the GIL, two threads take turns holding the lock, so CPU-bound Python work runs one slice at a time and takes as long as running it sequentially, or longer. Two processes each have their own interpreter and GIL, so both cores work at once. Timings are from the benchmark on this page." />
+
+:::analogy[The GIL is a single microphone on a panel]
+Several panellists (threads) share one microphone (the GIL). Only the one holding it can speak (run Python code). If they mostly wait for questions from the audience (I/O), sharing the mic costs nothing; they hand it over while waiting. If they all want to give long speeches (CPU work), they just take turns, and the session doesn't get shorter. Separate rooms with their own microphones (processes) are the only way to have several speeches at once.
+:::
+
+:::tip[🎯 Interview angle]
+**"What is the GIL, and does it make Python code thread-safe?"** It's a CPython lock that lets one thread run Python bytecode at a time; it's released during blocking I/O and by C extensions, so threads help I/O-bound and native work but not pure-Python CPU work (our two threads took 0.86 s against 0.69 s sequentially; two processes took 0.48 s). It does not make code thread-safe: `counter += 1` is several bytecodes, so use a `Lock`. The full spoken answer is at the end of the page.
+:::
+
+## 🔴 3. `asyncio`
+
+`asyncio` achieves concurrency on a **single thread**. A function defined with `async def` is a **coroutine function**: calling it doesn't run it but returns a coroutine object. Inside a coroutine, `await` marks a point where the coroutine waits for something, typically a network response, and **hands control back to the event loop**. The **event loop** keeps track of every waiting coroutine, asks the operating system which network operations have completed, and resumes the corresponding coroutines. While one request is waiting for an LLM, the loop runs others, so eight half-second calls finish in about half a second instead of four.
+
+To run several coroutines at once you schedule them together, for example with `asyncio.gather`, which returns their results in the order you passed them. For production code, two more tools matter: `asyncio.Semaphore(n)` caps how many requests are in flight, so you don't trigger a flood of rate-limit errors, and `asyncio.TaskGroup` with `asyncio.timeout` (3.11+) cancel sibling tasks on failure and enforce deadlines.
+
+The model has one strict rule: because every coroutine shares one thread, a call that blocks without awaiting **stops everything**. `time.sleep`, `requests.get` or a synchronous SDK client inside `async def` freezes the whole loop, so concurrent requests run one after another; the measurement shows four half-second sleeps taking two seconds. Use async libraries, or push unavoidable blocking calls onto a thread with `await asyncio.to_thread(fn)`.
+<Animation src="python/asyncio-event-loop" caption="One thread runs the event loop. Each coroutine runs until it awaits a network call, then hands control back so the loop can start or resume another one. Eight half-second LLM calls overlap and finish in about half a second instead of four." />
+
+:::analogy[An event loop is one waiter serving many tables]
+A waiter (the single thread) takes an order at table 1, hands it to the kitchen (the API call) and, instead of standing there waiting, moves on to table 2, table 3, and so on, coming back to each table when its food is ready (`await` resumes). One waiter serves a whole room, but only if nobody makes them stand still: a blocking call like `time.sleep` is a customer who makes the waiter wait at their table while every other table goes hungry.
+:::
 
 | Workload | Sequential | 8 threads | `asyncio.gather` |
 |---|---|---|---|
@@ -94,8 +127,17 @@ Inside `async def`, every slow operation must be **awaited**: `await asyncio.sle
 
 </RuleCard>
 
-### 🟠 Memory management
+:::tip[🎯 Interview angle]
+**"What happens if you call `time.sleep` or a sync HTTP client inside `async def`?"** It blocks the event loop's only thread, so every other coroutine stalls until it returns: four blocking half-second sleeps took 2.00 s instead of 0.50 s. Await async equivalents (`asyncio.sleep`, `httpx.AsyncClient`, an async SDK) or wrap the blocking call with `asyncio.to_thread`, and cap concurrency with a `Semaphore`.
+:::
 
+## 🟠 4. Memory Management
+
+CPython frees memory mainly through **reference counting**. Every object records how many references point to it; when that count drops to zero (the last variable is reassigned, the list holding it is cleared), the object is freed **immediately**. That makes memory release deterministic, and most objects die this way. Its weakness is **reference cycles**: two objects that refer to each other never reach zero even when nothing else can reach them.
+
+For those, CPython runs a **cyclic garbage collector** periodically. It tracks only container objects (the only kind that can form cycles), groups them into generations by age, and looks for groups that are reachable only from each other. You can force a pass with `gc.collect()`. When you need to refer to an object without keeping it alive, for a cache or an observer list, use a **`weakref`**.
+
+Python objects are also large, which matters for data work: every float in a list is a full object with a header, plus an 8-byte pointer in the list, while a NumPy array stores raw 8-byte (or 4-byte) numbers contiguously. Reducing memory therefore usually means using arrays, generators or `__slots__` rather than tuning the garbage collector.
 | Mechanism | What it frees | When | Notes |
 |---|---|---|---|
 | **Reference counting** | Any object whose count drops to 0 | **Immediately** | Deterministic; most objects die this way |
@@ -103,8 +145,15 @@ Inside `async def`, every slow operation must be **awaited**: `await asyncio.sle
 | **`weakref`** | — | — | Refer to an object without keeping it alive (caches, observers) |
 | **`__slots__`, generators, arrays** | — | — | Ways to **use less** memory in the first place |
 
-### 🟠 Performance toolbox (in the order to reach for them)
+:::tip[🎯 Interview angle]
+**"How does Python manage memory?"** Mainly reference counting, which frees an object as soon as its count reaches zero, plus a generational cyclic garbage collector that finds groups of objects referencing only each other. `gc.collect()` forces a pass and `weakref` refers to an object without keeping it alive. Mention that a million floats take about 32 MB in a list against 8 MB in a NumPy `float64` array.
+:::
 
+## 🟠 5. The Performance Toolbox
+
+The most important rule of optimization is to **measure before changing anything**, because intuition about where time goes is usually wrong. Use `timeit` or `time.perf_counter` to time a snippet, then a profiler such as `cProfile` (or py-spy and scalene on a running process) to find which functions actually dominate. Only then decide what to change.
+
+The fixes come in a sensible order. A better **algorithm or data structure** (a set instead of a list for lookups, a heap for top-*k*) beats every micro-optimization. Next, **vectorize** numeric loops with NumPy, pandas or PyTorch, which moves the loop into compiled code. Then **cache** results you compute repeatedly, then **parallelize** across cores or overlap waits, and only last **compile** the remaining hot loop with tools such as Numba, Cython or `torch.compile`. The table lists the steps with the tools for each.
 | Step | Tool | What it tells you / does |
 |---|---|---|
 | 1. Measure | `timeit`, `time.perf_counter` | How long a snippet takes (use `perf_counter`, not `time.time`) |
@@ -115,7 +164,11 @@ Inside `async def`, every slow operation must be **awaited**: `await asyncio.sle
 | 6. Parallelize | Processes, async I/O | Use more cores, overlap waits |
 | 7. Compile | Numba, Cython, `torch.compile`, writing a Rust/C++ extension | When the hot loop can't be vectorized |
 
-## ⚙️ Under the Hood (CPython Internals)
+:::tip[🎯 Interview angle]
+**"A Python data pipeline is slow. How do you speed it up?"** Measure first: `cProfile` or py-spy to find the hot spot. Then fix in order: a better algorithm or data structure, vectorize with NumPy or PyTorch (about 160× for a sum of squares in our measurement), cache repeated work, parallelize with processes or async I/O, and only then compile the hot loop.
+:::
+
+## ⚙️ Going Deeper (CPython Internals)
 
 - **Why the GIL exists**: every object's reference count is updated constantly; without a global lock each update would need an atomic instruction or a per-object lock. The GIL made single-threaded code fast and C extensions easy to write, at the cost of parallel Python threads.
 - **Switching**: a thread holding the GIL is asked to drop it every **switch interval** (`sys.getswitchinterval()` → 5 ms) so other threads get a turn; blocking I/O calls and well-behaved C code release it voluntarily (`Py_BEGIN_ALLOW_THREADS`). Two CPU-bound threads fighting over it add switching overhead, which is why our threaded run was **slower** than sequential.
@@ -553,3 +606,28 @@ A vision model trained much slower than expected on 8 GPUs; `nvidia-smi` showed 
 - **`queue.Queue` for threads, `multiprocessing.Queue` for processes, `asyncio.Queue` for coroutines**: they aren't interchangeable.
 - **Thread-safety of built-ins**: single operations like `list.append` and `dict[k] = v` are atomic under the GIL in CPython, but compound operations (check-then-set, `+=`) are not, and none of this is guaranteed by the language. Use locks or queues.
 - **`del tensor` may not free GPU memory immediately**: other references (the autograd graph, a list of losses holding tensors instead of `.item()` floats, an exception traceback) keep it alive. Store `loss.item()`, not `loss`.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **Concurrency** = dealing with many tasks at once (interleaving); **parallelism** = doing many at the same instant (multiple cores).
+- 🔴 **GIL** = a lock in CPython that allows **one thread at a time** to run Python bytecode. It exists to keep reference counting and the C API simple and fast.
+- 🔴 The GIL is **released during blocking I/O** (sockets, files, `time.sleep`) and by well-behaved **C extensions** (NumPy, PyTorch, tokenizers). So threads **do** help I/O-bound work and native code, but **not** pure-Python CPU work.
+- 🔴 **Pick the model**: I/O-bound with many waits → **`asyncio`** (or a thread pool); CPU-bound Python → **`multiprocessing` / `ProcessPoolExecutor`**; numeric → **vectorize** (NumPy, PyTorch); GPU work → already parallel and asynchronous.
+- 🔴 **`async def`** defines a **coroutine**; **`await`** pauses it and gives control back to the **event loop**; `asyncio.gather` runs coroutines concurrently and returns results **in input order**.
+- 🔴 **Never call blocking code inside `async def`** (`time.sleep`, `requests.get`, a sync SDK client): it freezes the whole event loop. Use async libraries (`httpx.AsyncClient`, `AsyncOpenAI`, `AsyncAnthropic`) or `await asyncio.to_thread(fn)`.
+- 🔴 **Bound concurrency** with `asyncio.Semaphore(n)` (or a pool's `max_workers`), or 10,000 simultaneous LLM calls become a storm of 429 rate-limit errors.
+- 🔴 **Race conditions** still exist with the GIL: `counter += 1` is several bytecodes, so threads can interleave. Protect shared state with `threading.Lock` (or avoid sharing).
+- 🔴 **Processes don't share memory**: arguments and results are **pickled** across process boundaries (so lambdas and local functions fail); guard the entry point with `if __name__ == "__main__":`.
+- 🟠 Memory = **reference counting** (immediate freeing) + **generational cyclic GC** (for reference cycles). `gc.collect()` forces a pass; `weakref` refers without keeping alive.
+- 🟠 Python objects are big: **1M floats in a list ≈ 32 MB** vs **8 MB** as a NumPy `float64` array (4 MB as `float32`).
+- 🟠 **Measure first**: `timeit` for snippets, **`cProfile`** for where time goes, `tracemalloc` for memory, py-spy / scalene for production. Then vectorize, cache, or move the hot loop to native code.
+- 🟠 PyTorch `DataLoader(num_workers=k)` uses **worker processes** to sidestep the GIL for preprocessing; `pin_memory=True` speeds CPU→GPU copies.
+- 🟡 **Free-threaded Python** (`python3.14t`, PEP 703/779): threads run in parallel on all cores, at the cost of slower single-thread code and extensions that must be rebuilt for it. Check with `sys._is_gil_enabled()`.
+- 🟡 Since **3.14** the default `multiprocessing` start method on Linux is **`forkserver`** (macOS and Windows use **`spawn`**): child processes no longer inherit the parent's memory by `fork`.
+- 🟡 Structured concurrency: **`asyncio.TaskGroup`** and **`asyncio.timeout`** <Since v="3.11" lang="Python" /> cancel sibling tasks on failure and enforce deadlines.
+
+:::speak[What is the GIL and how do you work around it?]
+"The GIL is a mutex inside CPython that only lets **one thread execute Python bytecode at a time**. It exists because CPython manages memory with reference counts, and one big lock made that, and C extensions, simple and fast. The consequence is that threads **don't speed up CPU-bound pure-Python code**: in my benchmark two threads running a Python loop were actually slower than running it twice sequentially. But the GIL is **released while waiting on I/O** and inside native code. So for an LLM service that spends its time waiting on HTTP calls I use **asyncio** with an async client and a **semaphore** to cap concurrency. For CPU-heavy preprocessing I use **multiple processes**: `ProcessPoolExecutor` or `DataLoader` workers. And for numeric work I **vectorize** with NumPy or PyTorch, which run in C or on the GPU and release the GIL. Python 3.13 added an optional free-threaded build without the GIL, supported since 3.14, but it isn't the default yet and needs compatible extensions."
+:::

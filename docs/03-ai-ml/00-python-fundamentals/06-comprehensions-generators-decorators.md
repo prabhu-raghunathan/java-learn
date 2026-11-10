@@ -9,69 +9,51 @@ sidebar_position: 6
 
 <PriorityKey lang="Python" v="3.10" />
 
-## ⚡ Essential Interview Recall
 
-- 🔴 **List comprehension**: `[expr for item in iterable if condition]`. A **filter** `if` goes at the **end**; an **`if … else`** transformation goes at the **front**: `[a if c else b for x in xs]`.
-- 🔴 Nested comprehensions read **left to right like nested `for` loops top to bottom**: `[x for row in matrix for x in row]` flattens.
-- 🔴 **Four kinds**: list `[...]`, dict `{k: v ...}`, set `{...}`, and **generator expression `(...)`**, which is lazy (208 bytes vs 800,984 bytes for 100,000 squares).
-- 🔴 **Iterable** = has `__iter__` (list, str, dict, file). **Iterator** = has `__iter__` **and** `__next__`, remembers its position, and is **single-use**. A `for` loop calls `iter()` once, then `next()` until `StopIteration`.
-- 🔴 **Generator function** = any function containing `yield`. Calling it runs **nothing**; it returns a generator object. Each `next()` resumes until the next `yield`, keeping local state.
-- 🔴 **Generators are single-use**: once exhausted, iterating again yields nothing (`sum(gen)` twice → `5` then `0`).
-- 🔴 **Decorator** = a callable that takes a function and returns a replacement. `@timer` above `def f` means `f = timer(f)`.
-- 🔴 Always use **`@functools.wraps(func)`** in the wrapper, or the decorated function loses its `__name__`, `__doc__` and signature (it becomes `wrapper`).
-- 🔴 A decorator **with arguments** needs **three levels**: `retry(max_attempts=3)` returns the actual decorator, which returns the wrapper.
-- 🟠 **Stacked decorators** apply **bottom-up** (the one closest to `def` wraps first) and run **top-down** at call time.
-- 🟠 Decorators run **at definition (import) time**; the wrapper runs at **call** time.
-- 🟠 **`yield from sub`** delegates to a sub-generator; `gen.send(x)` sends a value **into** a paused generator; a generator's `return value` travels inside `StopIteration.value`.
-- 🟠 Comprehension variables **don't leak** into the enclosing scope (unlike a `for` loop's variable). Since 3.12 comprehensions are **inlined** (PEP 709), so no hidden function call.
-- 🟡 **`itertools`**: `islice`, `chain`, `count`, `cycle`, `product` (grid search), `combinations`, `groupby` (**sort first!**), `accumulate`, `pairwise` <Since v="3.10" lang="Python" />, `batched` <Since v="3.12" lang="Python" />.
-- 🟡 Common real decorators: `@property`, `@staticmethod`, `@classmethod`, `@functools.cache`, `@dataclass`, `@torch.no_grad()`, `@app.get(...)` (FastAPI), `@pytest.fixture`, `@tool` (agent frameworks).
-
-:::speak[What is a generator and why would you use one?]
-"A generator is a function that uses `yield` instead of `return`. Calling it doesn't run the body; it returns a generator object. Each time I call `next()` on it, or a `for` loop does, it runs until the next `yield`, hands that value back, and **freezes**, keeping its local variables and position. When the function ends it raises `StopIteration`. The benefit is **lazy evaluation**: it produces one item at a time, so memory stays constant no matter how big the data is. I use generators to stream a 50 GB JSONL file line by line, to build preprocessing pipelines where each stage pulls from the previous one, and to stream LLM tokens to a client as they arrive. The trade-offs: a generator is **single-use**, it has no `len()`, and you can't index into it. If I need multiple passes I either recreate it or make a class whose `__iter__` is a generator, which is exactly how a PyTorch `IterableDataset` works."
+:::info[Where this page sits]
+**Before:** [Functions, Scope & Closures](./05-functions-scope-closures.md): first-class functions and closures, which are exactly what a decorator is built from.
+**This page:** comprehensions (list, dict, set, generator expression), the iterator protocol, generator functions and lazy pipelines, decorators (simple, with arguments, class-based, stacked) and the `itertools` toolbox.
+**Next:** [OOP in Python](./07-oop-in-python.md).
 :::
 
-## The Mental Model
+## 🧭 Start Here
 
-### 1. Iterable → iterator → values
+This page is about three features that make Python code feel like Python: **comprehensions**, **generators** and **decorators**. They look like syntax tricks, but each one rests on a simple mechanism, and interviewers check that you know the mechanism. A comprehension is a compact loop that builds a collection. A generator is a function that can pause and resume, producing values one at a time. A decorator is a function that takes a function and returns a replacement for it.
 
-```mermaid
-flowchart LR
-    I["Iterable<br/>(list, str, file, Dataset)"] -->|"iter(obj)"| T["Iterator<br/>(remembers its position)"]
-    T -->|"next()"| V1["value 1"]
-    T -->|"next()"| V2["value 2"]
-    T -->|"next()"| X["StopIteration<br/>(the for loop ends)"]
-```
+The thread that ties them together is **iteration**. Every `for` loop in Python, whether over a list, a file, a dict or a PyTorch `DataLoader`, follows the same **iterator protocol**: ask the object for an iterator with `iter()`, then call `next()` until it raises `StopIteration`. Comprehensions consume iterables; generators *are* iterators that you write as ordinary functions. Understanding that protocol is what lets you stream a file far larger than memory, build a preprocessing pipeline, or explain why a dataset object yields nothing on its second epoch.
 
-### 2. A generator pauses at every `yield`
+Decorators come last because they build on the previous page: a decorator is a closure that wraps another function. They are everywhere in real AI code, from `@torch.no_grad()` and `@functools.cache` to web routes (`@app.get`) and agent tool registration (`@tool`).
 
-<Animation src="python/generator-pause" caption="Creating the generator runs none of its body. Each next call resumes the function from where it paused, runs to the next yield, hands the value out and freezes again with its local variables intact. Falling off the end raises StopIteration." />
+The chapters build up in this order:
 
-:::analogy[A generator is a vending machine, a list is a buffet]
-A list is a buffet: every dish is cooked up front and laid out, taking space whether you eat it or not. A generator is a vending machine: it makes one item each time you press the button, remembers where it is in its stock, and takes almost no counter space. Once it's empty it stays empty until someone refills it (creates a new generator).
+1. **Comprehensions**: the six patterns, where the `if` goes, and the four comprehension types.
+2. **Iterables and iterators**: the protocol behind every `for` loop.
+3. **Generators**: functions that pause at `yield`, and why laziness saves memory.
+4. **Decorators**: wrapping functions, `functools.wraps`, decorators with arguments and stacking.
+5. **`itertools`**: the standard toolbox for lazy iteration.
+
+| New concept | One-line meaning |
+|---|---|
+| **Comprehension** | A one-expression loop that builds a list, dict or set |
+| **Generator expression** | A comprehension in `( )` that produces items lazily |
+| **Iterable** | An object with `__iter__`; you can loop over it |
+| **Iterator** | An object with `__iter__` and `__next__`; it remembers its position and is single-use |
+| **Generator** | A function containing `yield`; calling it returns an iterator that runs lazily |
+| **Lazy evaluation** | Producing each value only when it is asked for |
+| **Decorator** | A callable that takes a function and returns a replacement; `@d` means `f = d(f)` |
+| **`functools.wraps`** | Copies the original function's name, docstring and signature onto the wrapper |
+
+:::analogy[An assembly line versus a warehouse]
+Building a full list first is like manufacturing every product and storing it in a warehouse before anyone orders. A generator pipeline is an assembly line: each station hands one item to the next as soon as it's ready, so the floor never fills up. A decorator is a station you bolt onto the front and back of an existing machine (a timer, a quality check) without opening the machine itself.
 :::
 
-### 3. A decorator wraps the original
+## 🔴 1. Comprehensions
 
-```mermaid
-flowchart TB
-    D["@timer<br/>def train_step(...)"] -->|"at definition time"| R["train_step = timer(train_step)"]
-    R --> W["name train_step now points to wrapper"]
-    W -->|"call train_step(100)"| B["wrapper: start the clock"]
-    B --> O["original train_step(100)"]
-    O --> A["wrapper: print the elapsed time, return the result"]
-```
+A **list comprehension** builds a new list from an iterable in a single expression: `[expr for item in iterable if condition]`. It reads like the sentence "the list of `expr` for each `item` in `iterable`, keeping only those that satisfy `condition`". Compared with an empty list plus a `for` loop and `append`, it is shorter, makes the intent obvious, and is usually a little faster because CPython uses a dedicated bytecode to append.
 
-<Animation src="python/decorator-wrap" caption="The decorator receives the original function, builds a wrapper around it and the name is rebound to the wrapper. A call now runs the wrapper's before-code, the original function, then the after-code." />
+Two placements of `if` mean different things, and mixing them up is a common interview check. An `if` **at the end** is a **filter**: it decides whether an item is included at all. An `if … else` expression **at the front** chooses **which value** each item becomes, and every item is kept. That's why `[x if x > 0 else 0 for x in xs]` (a ReLU) is valid, while putting `else` after the `for` is a syntax error. Several `for` clauses in one comprehension behave like nested loops written top to bottom, which is how you flatten a matrix; a comprehension inside another comprehension builds or transposes a 2-D structure.
 
-:::analogy[A decorator is gift wrapping]
-The present inside (your function) doesn't change. The wrapping adds something around it: a card that's read before opening (logging), a timer, a "try again if the box is stuck" note (retry). `functools.wraps` is the label on the outside that still says what's inside; without it every present just says "wrapper".
-:::
-
-## The Paradigm / Core Concepts
-
-### 🔴 The six comprehension patterns
-
+The same syntax works for four results. Square brackets give a `list`, braces with `key: value` give a `dict`, braces with single values give a `set`, and parentheses give a **generator expression**, which doesn't build anything up front and instead produces items lazily (chapter 3). A comprehension's loop variable stays inside the comprehension and does not leak into the surrounding scope, unlike the variable of an ordinary `for` loop.
 | # | Pattern | Syntax | Example → result |
 |---|---|---|---|
 | 1 | Transform (map) | `[f(x) for x in xs]` | Pixel normalization `[p / 255 for p in pixels]` |
@@ -89,8 +71,6 @@ The present inside (your function) doesn't change. The wrapping adds something a
 
 </RuleCard>
 
-### 🔴 Comprehension types
-
 | Type | Syntax | Returns | AI use case |
 |---|---|---|---|
 | List | `[x for x in it]` | `list` | Transforming batches, features, file paths |
@@ -98,7 +78,41 @@ The present inside (your function) doesn't change. The wrapping adds something a
 | Set | `{x for x in it}` | `set` | Unique labels, unique tokens |
 | Generator expression | `(x for x in it)` | generator | Streaming huge data; feeding `sum`, `any`, `max` without building a list |
 
-### 🔴 Normal function vs generator function
+:::tip[🎯 Interview angle]
+**"Where does the `if` go in a list comprehension?"** A filter `if` goes at the end and drops items; an `a if cond else b` expression goes at the front and transforms every item. Mention the four types (list, dict, set, generator expression), that multiple `for` clauses read like nested loops, and that a generator expression is lazy, so `sum(x * x for x in data)` never builds the list.
+:::
+
+## 🔴 2. Iterables and Iterators
+
+An **iterable** is anything you can loop over: it has an `__iter__` method that returns an iterator. Lists, strings, dicts, files and ranges are iterables. An **iterator** is the object that actually walks through the values: it has a `__next__` method that returns the next value each time it's called, and raises `StopIteration` when there are none left. An iterator also has `__iter__` (returning itself), so it can be used directly in a `for` loop.
+
+A `for` loop is just this protocol in disguise. `for x in obj:` calls `iter(obj)` once to get an iterator, then calls `next()` on it repeatedly, binding each result to `x`, and stops quietly when `StopIteration` is raised. The distinction matters because an iterator **remembers its position and is single-use**: once exhausted, it stays exhausted. A list can be looped over many times because each loop asks it for a fresh iterator; a `map` object, a file object or a generator can be consumed only once.
+
+This is the root of a production bug you'll meet in the Going Deeper section: a data class whose `__iter__` returns `self` works for the first epoch and yields nothing for the second. A container that should be iterable many times must return a **new** iterator from `__iter__` every time.
+```mermaid
+flowchart LR
+    I["Iterable<br/>(list, str, file, Dataset)"] -->|"iter(obj)"| T["Iterator<br/>(remembers its position)"]
+    T -->|"next()"| V1["value 1"]
+    T -->|"next()"| V2["value 2"]
+    T -->|"next()"| X["StopIteration<br/>(the for loop ends)"]
+```
+
+:::tip[🎯 Interview angle]
+**"What's the difference between an iterable and an iterator?"** An iterable has `__iter__` and can produce iterators; an iterator has `__next__` (and `__iter__` returning itself), remembers its position and is single-use. A `for` loop calls `iter()` once and `next()` until `StopIteration`. That's why a list can be looped repeatedly but a generator or `map` object only once.
+:::
+
+## 🔴 3. Generators
+
+Writing an iterator class by hand (with `__iter__`, `__next__` and an index) is tedious. A **generator function** does the same job with ordinary code: any function that contains `yield` is a generator function. Calling it **runs none of its body**; it immediately returns a generator object, which is an iterator. Each `next()` call resumes the function from where it last stopped, runs until the next `yield`, hands that value out and **pauses**, keeping all its local variables and its position. When the function finishes, the generator raises `StopIteration` and the loop ends.
+
+The payoff is **lazy evaluation**. A function that returns a list builds every value before returning, so its memory grows with the data. A generator holds only its current state and produces one value at a time, so its memory stays constant however many values it will yield. That's why generators are the standard tool for reading files too big for memory line by line, chaining preprocessing stages into a **pipeline** where each stage pulls items from the previous one, and streaming LLM tokens to a client as they arrive.
+
+The trade-offs follow from the same design: a generator is **single-use**, has no `len()` and can't be indexed. Three extra features are worth knowing: `yield from` delegates to a sub-generator, `send()` pushes a value into a paused generator, and a generator's `return value` travels inside the final `StopIteration`.
+<Animation src="python/generator-pause" caption="Creating the generator runs none of its body. Each next call resumes the function from where it paused, runs to the next yield, hands the value out and freezes again with its local variables intact. Falling off the end raises StopIteration." />
+
+:::analogy[A generator is a vending machine, a list is a buffet]
+A list is a buffet: every dish is cooked up front and laid out, taking space whether you eat it or not. A generator is a vending machine: it makes one item each time you press the button, remembers where it is in its stock, and takes almost no counter space. Once it's empty it stays empty until someone refills it (creates a new generator).
+:::
 
 | | Normal function (`return`) | Generator function (`yield`) |
 |---|---|---|
@@ -109,7 +123,31 @@ The present inside (your function) doesn't change. The wrapping adds something a
 | Reuse | The returned list can be looped many times | **Single-use**; create a new one to iterate again |
 | `len()`, indexing | ✅ on the returned list | ❌ |
 
-### 🟠 Decorator shapes
+:::tip[🎯 Interview angle]
+**"What is a generator and why would you use one?"** A function with `yield`: calling it returns an iterator, and each `next()` runs to the next `yield` and pauses with its state intact. It gives lazy evaluation with constant memory, ideal for streaming large files, pipelines and token streams. Mention the trade-offs: single-use, no `len()`, no indexing. The full spoken answer is at the end of the page.
+:::
+
+## 🔴 4. Decorators
+
+A **decorator** is a callable that takes a function and returns a replacement for it. The `@` syntax is shorthand: writing `@timer` above `def train_step(...)` means exactly `train_step = timer(train_step)`. Typically the decorator defines an inner **wrapper** function that does something before and after calling the original (start a clock, log, check arguments, retry on failure) and returns that wrapper. Because the wrapper is a closure, it remembers which original function it wraps. The decorator runs **once, when the function is defined** (usually at import time); the wrapper runs on **every call**.
+
+A correct wrapper accepts `*args, **kwargs` and passes them through, so it works for any signature, and returns the original's result. It should also be decorated with **`functools.wraps(func)`**. Without it, the decorated function reports the wrapper's name, docstring and signature, which breaks debugging, documentation and any tool that inspects signatures, including frameworks that build LLM tool schemas from them.
+
+Decorators come in a few shapes. A decorator **with arguments**, such as `@retry(max_attempts=3)`, needs three levels: the outer call takes the arguments and returns the real decorator, which returns the wrapper. A **class-based** decorator stores state on an instance and implements `__call__`. A **registering** decorator records the function somewhere and returns it unchanged. When several decorators are **stacked**, the one closest to `def` is applied first, and at call time they run from the top down.
+```mermaid
+flowchart TB
+    D["@timer<br/>def train_step(...)"] -->|"at definition time"| R["train_step = timer(train_step)"]
+    R --> W["name train_step now points to wrapper"]
+    W -->|"call train_step(100)"| B["wrapper: start the clock"]
+    B --> O["original train_step(100)"]
+    O --> A["wrapper: print the elapsed time, return the result"]
+```
+
+<Animation src="python/decorator-wrap" caption="The decorator receives the original function, builds a wrapper around it and the name is rebound to the wrapper. A call now runs the wrapper's before-code, the original function, then the after-code." />
+
+:::analogy[A decorator is gift wrapping]
+The present inside (your function) doesn't change. The wrapping adds something around it: a card that's read before opening (logging), a timer, a "try again if the box is stuck" note (retry). `functools.wraps` is the label on the outside that still says what's inside; without it every present just says "wrapper".
+:::
 
 | Shape | Signature | Example |
 |---|---|---|
@@ -119,8 +157,15 @@ The present inside (your function) doesn't change. The wrapping adds something a
 | Registering | Returns the function unchanged after recording it | Tool registries, plugin systems, `@pytest.fixture` |
 | Built-in | | `@property`, `@classmethod`, `@staticmethod`, `@functools.cache`, `@dataclass` |
 
-### 🟡 `itertools` cheat sheet
+:::tip[🎯 Interview angle]
+**"Write a timing decorator, and why do you need `functools.wraps`?"** Define `timer(func)` returning a `wrapper(*args, **kwargs)` that records the time, calls `func`, prints the elapsed time and returns the result; `@timer` means `f = timer(f)`. `wraps` copies the original's name, docstring and signature onto the wrapper. For arguments, add a third level: `retry(n)` returns the decorator.
+:::
 
+## 🟡 5. `itertools`
+
+The `itertools` module is the standard library's toolbox of lazy building blocks. Each function takes iterables and returns an iterator, so they compose into pipelines without building intermediate lists. `islice` takes the first *n* items of any iterator (essential with the infinite iterators `count`, `cycle` and `repeat`), `chain` joins iterables end to end, and `accumulate` produces running totals.
+
+Several functions map directly onto common tasks. `product` generates a Cartesian product, which is a hyperparameter grid in one line; `combinations` gives unordered subsets; `pairwise` yields overlapping neighbours; and `batched` splits a stream into fixed-size chunks, which is how you send items to an API in batches. The one function that regularly causes bugs is `groupby`: it groups only **consecutive** items with the same key, so you must sort by that key first (or use a `defaultdict(list)`).
 | Function | Does | Example → result |
 |---|---|---|
 | `islice(it, n)` | First n items of any iterator | `islice(count(10, 5), 4)` → `10, 15, 20, 25` |
@@ -133,7 +178,11 @@ The present inside (your function) doesn't change. The wrapping adds something a
 | `batched(it, n)` | Fixed-size chunks (last may be short) | `range(7), 3` → `(0,1,2), (3,4,5), (6,)` |
 | `cycle`, `count`, `repeat` | Infinite iterators | Always pair with `islice` or a `break` |
 
-## ⚙️ Under the Hood (CPython Internals)
+:::tip[🎯 Interview angle]
+**"How would you generate a hyperparameter grid or process a stream in batches?"** `itertools.product(lrs, batch_sizes)` yields every combination lazily and `itertools.batched(stream, n)` (3.12+) yields fixed-size tuples. Warn that `groupby` groups only consecutive equal keys, so sort first, and that infinite iterators like `count` and `cycle` need `islice` or a `break`.
+:::
+
+## ⚙️ Going Deeper (CPython Internals)
 
 - **Comprehension speed** comes from the dedicated `LIST_APPEND` bytecode instead of looking up and calling `out.append` each iteration. In our 3.14 run a 1,000-item comprehension was **13% faster** than the `for` + `append` loop, and `list(map(lambda ...))` was the **slowest** (a Python function call per item). Speed-ups of 10–30% are typical; readability is the bigger win.
 - **PEP 709 (3.12)** inlined list, dict and set comprehensions into the enclosing function, so they no longer create a hidden function object and frame per evaluation. The iteration variable is still isolated: `x = 10; [x for x in range(3)]` leaves `x == 10`.
@@ -725,3 +774,27 @@ An LLM agent registered tools by reading each function's `__name__`, docstring a
 - **Decorators run at import time**: an expensive decorator (loading a model, opening a connection) slows every import of that module. Do heavy setup lazily inside the wrapper.
 - **Decorating methods**: the wrapper receives `self` as the first positional argument, which `*args` handles automatically; `@staticmethod` / `@classmethod` should be the **outermost** decorator.
 - **Generators and `with`**: a `with open(...)` inside a generator keeps the file open until the generator is exhausted or closed. Abandoned generators hold resources until garbage collection.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **List comprehension**: `[expr for item in iterable if condition]`. A **filter** `if` goes at the **end**; an **`if … else`** transformation goes at the **front**: `[a if c else b for x in xs]`.
+- 🔴 Nested comprehensions read **left to right like nested `for` loops top to bottom**: `[x for row in matrix for x in row]` flattens.
+- 🔴 **Four kinds**: list `[...]`, dict `{k: v ...}`, set `{...}`, and **generator expression `(...)`**, which is lazy (208 bytes vs 800,984 bytes for 100,000 squares).
+- 🔴 **Iterable** = has `__iter__` (list, str, dict, file). **Iterator** = has `__iter__` **and** `__next__`, remembers its position, and is **single-use**. A `for` loop calls `iter()` once, then `next()` until `StopIteration`.
+- 🔴 **Generator function** = any function containing `yield`. Calling it runs **nothing**; it returns a generator object. Each `next()` resumes until the next `yield`, keeping local state.
+- 🔴 **Generators are single-use**: once exhausted, iterating again yields nothing (`sum(gen)` twice → `5` then `0`).
+- 🔴 **Decorator** = a callable that takes a function and returns a replacement. `@timer` above `def f` means `f = timer(f)`.
+- 🔴 Always use **`@functools.wraps(func)`** in the wrapper, or the decorated function loses its `__name__`, `__doc__` and signature (it becomes `wrapper`).
+- 🔴 A decorator **with arguments** needs **three levels**: `retry(max_attempts=3)` returns the actual decorator, which returns the wrapper.
+- 🟠 **Stacked decorators** apply **bottom-up** (the one closest to `def` wraps first) and run **top-down** at call time.
+- 🟠 Decorators run **at definition (import) time**; the wrapper runs at **call** time.
+- 🟠 **`yield from sub`** delegates to a sub-generator; `gen.send(x)` sends a value **into** a paused generator; a generator's `return value` travels inside `StopIteration.value`.
+- 🟠 Comprehension variables **don't leak** into the enclosing scope (unlike a `for` loop's variable). Since 3.12 comprehensions are **inlined** (PEP 709), so no hidden function call.
+- 🟡 **`itertools`**: `islice`, `chain`, `count`, `cycle`, `product` (grid search), `combinations`, `groupby` (**sort first!**), `accumulate`, `pairwise` <Since v="3.10" lang="Python" />, `batched` <Since v="3.12" lang="Python" />.
+- 🟡 Common real decorators: `@property`, `@staticmethod`, `@classmethod`, `@functools.cache`, `@dataclass`, `@torch.no_grad()`, `@app.get(...)` (FastAPI), `@pytest.fixture`, `@tool` (agent frameworks).
+
+:::speak[What is a generator and why would you use one?]
+"A generator is a function that uses `yield` instead of `return`. Calling it doesn't run the body; it returns a generator object. Each time I call `next()` on it, or a `for` loop does, it runs until the next `yield`, hands that value back, and **freezes**, keeping its local variables and position. When the function ends it raises `StopIteration`. The benefit is **lazy evaluation**: it produces one item at a time, so memory stays constant no matter how big the data is. I use generators to stream a 50 GB JSONL file line by line, to build preprocessing pipelines where each stage pulls from the previous one, and to stream LLM tokens to a client as they arrive. The trade-offs: a generator is **single-use**, it has no `len()`, and you can't index into it. If I need multiple passes I either recreate it or make a class whose `__iter__` is a generator, which is exactly how a PyTorch `IterableDataset` works."
+:::

@@ -9,6 +9,12 @@ Data comes in two shapes. **Long** (one row per observation: category, month, re
 
 <PriorityKey lang="pandas" v="3.0" />
 
+:::info[Where this page sits]
+**Before:** [Pandas: GroupBy, Apply & Transform](./05-pandas-groupby-apply-transform.md): `groupby(...).agg(...).unstack()` is itself a reshape.
+**This page:** long vs wide data, `pivot_table`, `pivot`, `melt`, `stack`/`unstack` and `crosstab`; combining tables with `concat`, `merge` (the four joins) and `join`; and catching bad merges with `validate` and `indicator`.
+**Next:** [Matplotlib: Figures, Axes & the Object-Oriented API](../03-visualization/07-matplotlib-figures-axes.md).
+:::
+
 ## 🧭 Start Here: Shapes and Joins
 
 **Reshaping.** The same numbers can be laid out in different ways. ShopStream's monthly revenue per category is 30 numbers (5 categories × 6 months):
@@ -19,6 +25,13 @@ Data comes in two shapes. **Long** (one row per observation: category, month, re
 Moving between them is a daily task, and interviewers like it because it tests whether you understand what an index is.
 
 **Combining.** Real data lives in several tables. ShopStream has `orders` (one row per order) and `customers` (one row per customer). To ask "do Gold customers spend more?" you must bring `tier` onto each order: a **join** on `customer_id`. Joins go wrong in two classic ways: keys that **don't match** (rows disappear or get NaN) and keys that **repeat** (rows multiply). pandas has a switch for each.
+
+The chapters build up in this order:
+
+1. **Long and wide data**: the two layouts and when each is wanted.
+2. **Reshaping functions**: `pivot_table`, `pivot`, `melt`, `stack`/`unstack` and `crosstab`.
+3. **Combining tables**: `concat` versus `merge` versus `join`.
+4. **Joins and how they go wrong**: inner, left, right and outer, and catching unmatched or duplicated keys.
 
 | New concept | One-line meaning |
 |---|---|
@@ -35,28 +48,11 @@ Moving between them is a daily task, and interviewers like it because it tests w
 A shop's till roll is long format: one line per item sold, with the date, product and price. The owner's monthly summary sheet is wide: one row per product, one column per month. `pivot_table` is the accountant turning the till roll into the summary; `melt` is tearing the summary back into one line per cell so a machine can process it.
 :::
 
-## ⚡ Essential Interview Recall
+## 🔴 1. Long and Wide Data
 
-- 🔴 **`pivot_table(index, columns, values, aggfunc)`** aggregates duplicates (default `aggfunc="mean"`!); **`pivot`** raises `ValueError: Index contains duplicate entries, cannot reshape` if any cell has two values.
-- 🔴 **`melt(id_vars, value_vars, var_name, value_name)`** is the inverse: 5 × 6 wide → **30** long rows.
-- 🔴 **`unstack()`** moves the **innermost row-index level** to columns; **`stack()`** moves the innermost column level back into the index. `unstack(fill_value=0)` avoids NaN for missing combinations.
-- 🔴 **`pd.crosstab(a, b)`** counts; `normalize="index"` gives row proportions; `values=` + `aggfunc=` aggregates a third column; `margins=True` adds totals.
-- 🔴 **`concat`** stacks objects along an axis and **aligns the other axis by label** (missing columns → NaN). Use `ignore_index=True` for a fresh 0..n-1 index, `keys=` to label the sources.
-- 🔴 **`merge(how=...)`**: `inner` = matching keys only, `left` = all left rows, `right` = all right rows, `outer` = everything.
-- 🔴 **`validate="m:1"`** (also `"1:1"`, `"1:m"`) raises `MergeError` when the key isn't unique where it should be. A duplicate customer row would turn 4,946 orders into **4,976**.
-- 🔴 **`indicator=True`** adds `_merge` = `both` / `left_only` / `right_only`: on ShopStream, **100** orders are `left_only` (the `C9999` orphans).
-- 🟠 Key **dtypes must match**: `int64` vs `str` raises `ValueError: You are trying to merge on int64 and str columns`.
-- 🟠 Same column names on both sides get suffixes `_x`, `_y` (set `suffixes=`).
-- 🟠 **m:m joins produce the Cartesian product** per key: 3 rows × 4 rows with the same key → **12**.
-- 🟡 **pandas matches NaN keys to each other** (SQL never does): drop or fill missing keys before merging.
+The same numbers can be arranged in different shapes. ShopStream's monthly revenue per category is 30 numbers (5 categories × 6 months). In **long** (or **tidy**) form they are 30 rows with columns `category`, `month` and `revenue`: every column is a variable and every row is one observation. In **wide** form they are 5 rows, one per category, with one column per month.
 
-:::speak[Explain the different types of joins and how you'd catch a bad merge.]
-"`merge` joins two DataFrames on key columns, like SQL. An **inner** join keeps only keys present in both tables, a **left** join keeps every row of the left table and fills NaN where the right has no match, **right** is the mirror, and **outer** keeps everything. For enrichment, like adding customer tier to orders, I use a **left** join from the fact table so no orders disappear. Two things go wrong silently. First, **unmatched keys**: I pass `indicator=True` and count `left_only` rows; on our data 100 orders point to a placeholder customer. Second, **duplicate keys** on the side that should be unique: one duplicated customer row multiplies all of that customer's orders and inflates revenue. I pass `validate='m:1'`, which raises a `MergeError` instead. Afterwards I assert the row count is unchanged. I also check that key dtypes match and remember that pandas, unlike SQL, matches NaN keys to each other."
-:::
-
-## The Mental Model
-
-### 1. Reshaping between long and wide
+Each layout has its users. `groupby`, Seaborn, databases and most modelling code want **long** data, because adding a new month just adds rows and every operation can refer to a column by name. People, heatmaps and spreadsheets want **wide** data, because a grid is easy to scan. So moving between the two is a daily task: `pivot_table` goes from long to wide, `melt` goes back, and `unstack`/`stack` move a level between the row index and the columns. Interviewers like this topic because doing it correctly requires understanding what the index is.
 
 ```mermaid
 flowchart LR
@@ -68,27 +64,15 @@ flowchart LR
 
 <Animation src="pandas/melt-pivot" caption="A wide table of revenue per category and month is melted: each month column is peeled off and stacked underneath, giving one row per category and month. pivot_table runs the same movement in reverse." />
 
-### 2. The four joins
-
-```mermaid
-flowchart TB
-    O["orders: 4,946 rows<br/>customer_id: 200 real ids + C9999"] --> J{"merge on customer_id"}
-    C["customers: 200 rows<br/>customer_id unique"] --> J
-    J -->|"inner"| I["4,846 rows: orphans dropped"]
-    J -->|"left"| LF["4,946 rows: orphans get NaN city and tier"]
-    J -->|"right"| R["4,846 rows: plus any customer with no orders"]
-    J -->|"outer"| OU["4,946 rows: everything"]
-```
-
-<Animation src="pandas/merge-joins" caption="Order rows and customer rows are matched by customer_id. Matching pairs join up; the C9999 orders have no partner, so an inner join drops them while a left join keeps them with empty customer columns. A duplicated customer row makes its orders appear twice." />
-
-:::analogy[validate is the bouncer checking guest lists]
-Joining orders to customers is like seating wedding guests from an RSVP list at tables from a seating chart. If the seating chart accidentally lists one guest at two tables, that guest gets two meals and the bill goes up. `validate="m:1"` is the coordinator checking the seating chart has each name only once **before** dinner is served, instead of discovering it on the invoice.
+:::tip[🎯 Interview angle]
+**"What's the difference between long and wide format, and how do you convert between them?"** Long (tidy) data has one row per observation and one column per variable, which `groupby`, Seaborn and databases expect; wide data spreads one variable across columns, which suits people and heatmaps. Convert long to wide with `pivot_table` (or `unstack`) and wide to long with `melt` (or `stack`).
 :::
 
-## The Paradigm / Core Concepts
+## 🔴 2. Reshaping Functions
 
-### 🔴 Reshaping functions
+**`pivot_table`** is the general long-to-wide tool: you choose which column supplies the rows (`index`), which supplies the new columns (`columns`) and which supplies the values. Whenever several input rows land in the same cell, it combines them with `aggfunc`, whose default is the **mean**. That default is a classic trap: asking for revenue per category and month without `aggfunc="sum"` gives the **average order value**, and the table looks perfectly plausible. **`pivot`** does the same reshaping without aggregating, so it raises an error if any (row, column) pair occurs twice.
+
+**`melt`** goes the other way: the `id_vars` columns stay as identifiers and every other column is peeled off into two columns, one holding the old column name and one holding the value. **`unstack`** moves an index level into the columns (handy straight after a multi-key `groupby`), and **`stack`** moves columns back into the index. **`crosstab`** builds a frequency table of two categorical columns, and with `normalize=` turns counts into proportions.
 
 | Function | Direction | Aggregates? | Key arguments | Fails when |
 |---|---|---|---|---|
@@ -106,7 +90,15 @@ Always pass `aggfunc` explicitly: `df.pivot_table(index="category", columns="mon
 
 </RuleCard>
 
-### 🔴 Combining functions
+:::tip[🎯 Interview angle]
+**"What's the difference between `pivot` and `pivot_table`?"** `pivot` only reshapes and fails on duplicate (index, column) pairs; `pivot_table` aggregates duplicates with `aggfunc`, which defaults to the mean, so always pass `aggfunc="sum"` (or whatever you mean) explicitly. `melt` is the inverse; `crosstab` counts combinations of two categoricals.
+:::
+
+## 🔴 3. Combining Tables: `concat`, `merge` and `join`
+
+Real data lives in several tables, and pandas has three ways to put them together. **`pd.concat`** stacks objects along an axis, for example twelve monthly files into one table. It combines **by position** along that axis and aligns the other axis by label, so missing columns become `NaN`. It is the pandas version of SQL `UNION ALL`, and it never checks whether the rows make sense together.
+
+**`merge`** combines tables **by key**: it matches rows whose key columns are equal, like a SQL `JOIN`. That is how you enrich a fact table (orders) with attributes from a dimension table (customers), for example to bring each customer's tier onto every order. **`df.join`** is a shorthand for joining on the index, with a default of a left join. The `how` argument decides which rows survive: the second table below summarises the four options on ShopStream, and the next chapter explains how joins go wrong.
 
 | | `pd.concat` | `pd.merge` / `df.merge` | `df.join` |
 |---|---|---|---|
@@ -132,7 +124,37 @@ For an enrichment join: `orders.merge(customers, on="customer_id", how="left", v
 
 </RuleCard>
 
-## ⚙️ Under the Hood (pandas Internals)
+:::tip[🎯 Interview angle]
+**"When do you use `concat` versus `merge`?"** `concat` stacks tables along an axis by position (like `UNION ALL`), for example monthly files with the same columns; `merge` matches rows by key columns (like a SQL `JOIN`), for example bringing customer attributes onto orders. `join` is a merge on the index.
+:::
+
+## 🔴 4. Joins and How They Go Wrong
+
+A merge's `how` argument decides which keys survive. An **inner** join keeps only keys found in both tables. A **left** join keeps every row of the left table and fills the right table's columns with `NaN` where there is no match, which is what you want when enriching a fact table, because you must never silently lose orders. A **right** join is the mirror image (usually clearer as a left join with the sides swapped), and an **outer** join keeps every key from both sides. On ShopStream, the orphan customer `C9999` shows the difference: an inner join drops its 100 orders, while a left join keeps them with empty city and tier.
+
+Joins fail in two quiet ways. Keys that **don't match** (orphans, different spellings, different dtypes) make rows disappear in an inner join or fill with `NaN` in a left join. Keys that are **duplicated** on the side that should be unique make rows **multiply**: one customer listed twice means each of their orders appears twice, and revenue is overstated. Neither raises an error. So validate every enrichment merge: pass `validate="m:1"` so pandas raises if the right-hand keys aren't unique, pass `indicator=True` to get a `_merge` column showing where each row matched, and assert that the row count is unchanged.
+
+```mermaid
+flowchart TB
+    O["orders: 4,946 rows<br/>customer_id: 200 real ids + C9999"] --> J{"merge on customer_id"}
+    C["customers: 200 rows<br/>customer_id unique"] --> J
+    J -->|"inner"| I["4,846 rows: orphans dropped"]
+    J -->|"left"| LF["4,946 rows: orphans get NaN city and tier"]
+    J -->|"right"| R["4,846 rows: plus any customer with no orders"]
+    J -->|"outer"| OU["4,946 rows: everything"]
+```
+
+<Animation src="pandas/merge-joins" caption="Order rows and customer rows are matched by customer_id. Matching pairs join up; the C9999 orders have no partner, so an inner join drops them while a left join keeps them with empty customer columns. A duplicated customer row makes its orders appear twice." />
+
+:::analogy[validate is the bouncer checking guest lists]
+Joining orders to customers is like seating wedding guests from an RSVP list at tables from a seating chart. If the seating chart accidentally lists one guest at two tables, that guest gets two meals and the bill goes up. `validate="m:1"` is the coordinator checking the seating chart has each name only once **before** dinner is served, instead of discovering it on the invoice.
+:::
+
+:::tip[🎯 Interview angle]
+**"Explain the different types of joins and how you'd catch a bad merge."** Inner keeps keys in both tables, left keeps every left row (NaN where unmatched), right mirrors it, outer keeps everything. Bad merges are silent: unmatched keys drop or blank rows, duplicated keys multiply them. Use `validate="m:1"`, `indicator=True` and an assertion that the row count didn't change. The full spoken answer is near the end of the page.
+:::
+
+## ⚙️ Going Deeper (pandas Internals)
 
 - **`pivot_table`** is a `groupby([index, columns]).agg(aggfunc)` followed by `unstack(columns)`. That's why it can aggregate and why its cost is the cost of the groupby.
 - **`unstack`** computes, for each row of the MultiIndex, its target row and column position, then scatters the values into a new 2-D block. Missing combinations become NaN (which turns integer columns into floats unless you pass `fill_value`).
@@ -522,3 +544,24 @@ A recommendation model received NaN for every customer feature on about 30% of r
 - **`concat(axis=1)` aligns rows by index**: two Series with indexes 0, 1 and 1, 2 give three rows with NaN, not two side-by-side columns.
 - **Joining on float keys** is fragile (rounding); join on integers or strings.
 - **`merge_asof` requires both sides sorted** by the `on` key.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **`pivot_table(index, columns, values, aggfunc)`** aggregates duplicates (default `aggfunc="mean"`!); **`pivot`** raises `ValueError: Index contains duplicate entries, cannot reshape` if any cell has two values.
+- 🔴 **`melt(id_vars, value_vars, var_name, value_name)`** is the inverse: 5 × 6 wide → **30** long rows.
+- 🔴 **`unstack()`** moves the **innermost row-index level** to columns; **`stack()`** moves the innermost column level back into the index. `unstack(fill_value=0)` avoids NaN for missing combinations.
+- 🔴 **`pd.crosstab(a, b)`** counts; `normalize="index"` gives row proportions; `values=` + `aggfunc=` aggregates a third column; `margins=True` adds totals.
+- 🔴 **`concat`** stacks objects along an axis and **aligns the other axis by label** (missing columns → NaN). Use `ignore_index=True` for a fresh 0..n-1 index, `keys=` to label the sources.
+- 🔴 **`merge(how=...)`**: `inner` = matching keys only, `left` = all left rows, `right` = all right rows, `outer` = everything.
+- 🔴 **`validate="m:1"`** (also `"1:1"`, `"1:m"`) raises `MergeError` when the key isn't unique where it should be. A duplicate customer row would turn 4,946 orders into **4,976**.
+- 🔴 **`indicator=True`** adds `_merge` = `both` / `left_only` / `right_only`: on ShopStream, **100** orders are `left_only` (the `C9999` orphans).
+- 🟠 Key **dtypes must match**: `int64` vs `str` raises `ValueError: You are trying to merge on int64 and str columns`.
+- 🟠 Same column names on both sides get suffixes `_x`, `_y` (set `suffixes=`).
+- 🟠 **m:m joins produce the Cartesian product** per key: 3 rows × 4 rows with the same key → **12**.
+- 🟡 **pandas matches NaN keys to each other** (SQL never does): drop or fill missing keys before merging.
+
+:::speak[Explain the different types of joins and how you'd catch a bad merge.]
+"`merge` joins two DataFrames on key columns, like SQL. An **inner** join keeps only keys present in both tables, a **left** join keeps every row of the left table and fills NaN where the right has no match, **right** is the mirror, and **outer** keeps everything. For enrichment, like adding customer tier to orders, I use a **left** join from the fact table so no orders disappear. Two things go wrong silently. First, **unmatched keys**: I pass `indicator=True` and count `left_only` rows; on our data 100 orders point to a placeholder customer. Second, **duplicate keys** on the side that should be unique: one duplicated customer row multiplies all of that customer's orders and inflates revenue. I pass `validate='m:1'`, which raises a `MergeError` instead. Afterwards I assert the row count is unchanged. I also check that key dtypes match and remember that pandas, unlike SQL, matches NaN keys to each other."
+:::

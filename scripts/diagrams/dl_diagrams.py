@@ -1887,6 +1887,444 @@ def _distilbert_cls():
     return d
 
 
+@diagram("docqa-pipeline")
+def _docqa_pipeline():
+    d = Diagram(1340, 560, "Brute-force document QnA (notebook 20): every chunk is read for every question")
+    # row 1: offline preparation
+    d.text(40, 92, "once per document", 15, "start", MUTED, "bold")
+    xs = [110, 330, 550, 790]
+    d.node(xs[0], 160, "PDF", "in", r=40, size=16)
+    d.text(xs[0], 222, "16 pages", 13, color=MUTED)
+    d.layer(xs[1], 160, "page-wise text", w=180, size=16)
+    d.text(xs[1], 196, "PyMuPDF get\\_text()", 13, color=MUTED)
+    d.text(xs[1], 216, "64,105 characters", 13, color=MUTED)
+    d.layer(xs[2], 160, "clean", w=120, size=16)
+    d.text(xs[2], 196, "collapse whitespace", 13, color=MUTED)
+    d.layer(xs[3], 160, "overlapping chunks", w=210, size=16)
+    d.text(xs[3], 196, "180 words, 40 overlap", 13, color=MUTED)
+    d.text(xs[3], 216, "78 chunks + page\\_number", 13, color=MUTED)
+    d.line([(150, 160), (240, 160)], head=9, width=2.6)
+    d.line([(420, 160), (490, 160)], head=9, width=2.6)
+    d.line([(610, 160), (685, 160)], head=9, width=2.6)
+    # chunk stack
+    for k in range(4):
+        d.rect(1010 + 9 * k, 112 + 9 * k, 150, 70, CELL_FILL, CELL_STROKE, rx=8, sw=1.6)
+    d.text(1112, 156, "chunk store", 15, weight="bold")
+    d.text(1112, 178, "text, page, chunk\\_id", 12, color=MUTED)
+    d.line([(895, 160), (1000, 160)], head=9, width=2.6)
+    # row 2: per question
+    d.text(40, 300, "for every question", 15, "start", MUTED, "bold")
+    y = 380
+    d.node(110, y, "question", "in", r=44, size=14)
+    d.line([(154, y), (225, y)], head=9, width=2.6)
+    d.cell(230, 315, 470, 130, "× 78 chunks: one forward pass each")
+    d.layer(340, y + 6, "tokenize pair", w=170, size=15)
+    d.text(340, y + 42, "[CLS] q [SEP] chunk [SEP]", 12, color=MUTED)
+    d.layer(570, y + 6, "DistilBERT-SQuAD", w=200, size=15)
+    d.text(570, y + 42, "best valid span + span score", 12, color=MUTED)
+    d.line([(425, y + 6), (470, y + 6)], head=8, width=2.2)
+    d.line([(1112, 220), (1112, 260), (570, 260), (570, 330)], head=9, width=2.2, dash="7 6", color=MUTED)
+    d.line([(700, y), (760, y)], head=9, width=2.6)
+    d.layer(840, y, "rank by score", w=150, size=15)
+    d.text(840, y + 36, "top-k candidates", 12, color=MUTED)
+    d.line([(915, y), (965, y)], head=9, width=2.6)
+    d.op(1010, y, "≥ 5.0 ?", r=20, size=14, w=86)
+    d.line([(1053, y), (1105, y)], head=9, width=2.6)
+    d.node(1170, y, "answer", "out", r=44, size=14)
+    d.text(1170, y + 66, "+ page, chunk, preview", 13, color=MUTED)
+    d.line([(1010, y + 20), (1010, 480)], head=9, width=2.2, color=GRAD)
+    d.text(1010, 502, "\"No reliable answer found\"", 13, color=GRAD)
+    d.text(670, 540, "cost grows as questions × chunks: about 10 s per question on a CPU for this one 16-page paper", 14, color=MUTED)
+    return d
+
+@diagram("docqa-qa-head")
+def _docqa_qa_head():
+    d = Diagram(1340, 520, "DistilBertForQuestionAnswering: one Linear(768, 2) turns every token vector into a start and an end score")
+    toks = ["[CLS]", "What", "...", "?", "[SEP]", "B", "##ER", "is", "an", "en", "...", "[SEP]"]
+    seg = [None, 0, 0, 0, None, 1, 1, 1, 1, 1, 1, None]
+    x0, dx = 160, 94
+    for k, (t, sg) in enumerate(zip(toks, seg)):
+        cx = x0 + dx * k
+        fill = FROZEN_FILL if sg is None else (OP_FILL if sg == 0 else CELL_FILL)
+        stroke = FROZEN_STROKE if sg is None else (OP_STROKE if sg == 0 else CELL_STROKE)
+        d.rect(cx - 40, 430, 80, 34, fill, stroke, rx=6, sw=1.6)
+        d.text(cx, 447, t, 14)
+        d.text(cx, 486, "–" if sg is None else str(sg), 13, color=MUTED)
+        d.line([(cx, 428), (cx, 392)], head=7, width=1.6)
+    d.text(24, 486, "sequence\\_ids", 13, "start", MUTED)
+    d.layer(x0 + dx * 5.5, 365, "DistilBERT: 6 encoder blocks, H = 768  (65,190,912 parameters)", w=1080, size=15)
+    for k in range(len(toks)):
+        cx = x0 + dx * k
+        d.line([(cx, 346), (cx, 300)], head=7, width=1.6)
+        d.text(cx, 290, "T", 14)
+    d.layer(x0 + dx * 5.5, 245, "qa\\_outputs = Linear(768, 2): rows S and E, 1,538 parameters", w=760, size=15)
+    d.text(x0 + dx * 5.5, 205, "start\\_logits[i] = S·T_i + b_s        end\\_logits[j] = E·T_j + b_e", 15, color=INK)
+    d.rect(x0 + dx * 5 - 44, 120, dx * 6 - 8, 60, CELL_FILL, CELL_STROKE, rx=10, sw=1.6)
+    d.text(x0 + dx * 7.5, 142, "keep only spans with both ends in the context", 14, weight="bold")
+    d.text(x0 + dx * 7.5, 164, "i ≤ j < i + 40, then answer = context[offset(i).start : offset(j).end]", 13, color=MUTED)
+    d.rect(x0 - 44, 120, dx * 5 - 8, 60, FROZEN_FILL, FROZEN_STROKE, rx=10, sw=1.6)
+    d.text(x0 + dx * 2, 142, "question and special tokens", 14, weight="bold")
+    d.text(x0 + dx * 2, 164, "masked to −∞ (the notebook skipped this)", 13, color=GRAD)
+    d.text(670, 90, "the BERT page derives S and E; here they are simply the two output rows of the head", 14, color=MUTED)
+    return d
+
+@diagram("rr-architecture")
+def _rr_architecture():
+    d = Diagram(1340, 600, "Retriever + reader (notebook 21): embed once, search per question, read only the top k")
+    d.text(40, 92, "offline: once per document", 15, "start", MUTED, "bold")
+    y = 160
+    d.node(105, y, "78 chunks", "in", r=46, size=14)
+    d.line([(151, y), (215, y)], head=9, width=2.6)
+    d.layer(330, y, "all-MiniLM-L6-v2", w=200, size=15)
+    d.text(330, y + 36, "6 layers · mean pool · L2 normalize", 12, color=MUTED)
+    d.line([(430, y), (500, y)], head=9, width=2.6)
+    d.layer(600, y, "chunk vectors", w=170, size=15)
+    d.text(600, y + 36, "78 × 384, unit length", 12, color=MUTED)
+    d.line([(685, y), (755, y)], head=9, width=2.6)
+    d.layer(865, y, "faiss.IndexFlatIP", w=190, size=15)
+    d.text(865, y + 36, "row i  =  chunks\\_data[i]", 12, color=MUTED)
+    d.rect(1040, y - 42, 250, 84, NOTE_FILL, NOTE_STROKE, rx=10, sw=1.6)
+    d.text(1165, y - 14, "metadata list (Python)", 14, weight="bold")
+    d.text(1165, y + 8, "chunk\\_id, page, text", 12, color=MUTED)
+    d.text(1165, y + 26, "FAISS stores only vectors", 12, color=GRAD)
+    d.text(40, 282, "online: for every question", 15, "start", MUTED, "bold")
+    y = 370
+    d.node(105, y, "question", "in", r=46, size=14)
+    d.line([(151, y), (215, y)], head=9, width=2.6)
+    d.layer(330, y, "same MiniLM", w=170, size=15)
+    d.text(330, y + 36, "q: 384 numbers, 8 ms", 12, color=MUTED)
+    d.line([(415, y), (500, y)], head=9, width=2.6)
+    d.op(600, y, "q · v_i for all i", r=20, size=14, w=170)
+    d.text(600, y + 40, "top-k cosine, 0.003 ms", 12, color=MUTED)
+    d.line([(865, 202), (865, 300), (640, 300), (640, 345)], head=8, width=2, dash="7 6", color=MUTED)
+    d.line([(686, y), (755, y)], head=9, width=2.6)
+    d.cell(760, 315, 260, 120, "reader × k (not × 78)")
+    d.layer(890, y + 8, "DistilBERT-SQuAD", w=200, size=15)
+    d.text(890, y + 42, "best span per chunk", 12, color=MUTED)
+    d.line([(1165, 202), (1165, 300), (1000, 300), (1000, 318)], head=8, width=2, dash="7 6", color=MUTED)
+    d.line([(1020, y), (1070, y)], head=9, width=2.6)
+    d.op(1140, y, "α·ret + (1−α)·read", r=20, size=13, w=150)
+    d.line([(1140, y + 20), (1140, 455)], head=9, width=2.6)
+    d.node(1140, 500, "answer", "out", r=44, size=14)
+    d.text(940, 530, "+ page, chunk, scores", 13, color=MUTED)
+    d.text(470, 520, "cost per question:  T_{embed} + T_{search} + k · T_{reader}   instead of   N · T_{reader}", 15, color=INK)
+    d.text(470, 548, "measured on CPU: 1.16 s (k = 5) vs 18.7 s (all 78 chunks)", 14, color=MUTED)
+    return d
+
+@diagram("faiss-index-types")
+def _faiss_index_types():
+    d = Diagram(1340, 520, "Three ways to find the nearest vectors: exact flat scan, IVF clusters, HNSW graph")
+    import math as _m
+    cols = [(230, "IndexFlatIP / IndexFlatL2", "exact: score every vector", "O(N·d) per query; no training"),
+            (670, "IndexIVFFlat", "approximate: search nprobe of nlist cells", "train k-means first; recall vs nprobe"),
+            (1110, "IndexHNSWFlat", "approximate: greedy walk on a graph", "no training; more memory; efSearch knob")]
+    for cx, t1, t2, t3 in cols:
+        d.rect(cx - 200, 80, 400, 330, NOTE_FILL, NOTE_STROKE, rx=14, sw=1.4)
+        d.text(cx, 108, t1, 16, weight="bold")
+        d.text(cx, 440, t2, 14, color=INK)
+        d.text(cx, 464, t3, 13, color=MUTED)
+    import random as _r
+    rnd = _r.Random(3)
+    pts = [(rnd.uniform(-150, 150), rnd.uniform(-115, 115)) for _ in range(46)]
+    q = (35, -10)
+    # flat: lines from query to all
+    cx, cy = 230, 265
+    for x, y in pts:
+        d.line([(cx + q[0], cy + q[1]), (cx + x, cy + y)], width=0.8, arrow=False, color="#c9c9c9")
+    for x, y in pts:
+        d.dot(cx + x, cy + y, 4, INK)
+    d.dot(cx + q[0], cy + q[1], 7, GRAD)
+    # IVF: 4 cells with centroids, probe 1
+    cx = 670
+    cents = [(-80, -60), (80, -60), (-80, 60), (80, 60)]
+    for (gx, gy) in cents:
+        on = (gx, gy) == (80, -60)
+        d.rect(cx + (0 if gx > 0 else -160), cy + (-125 if gy < 0 else 0), 160, 125, CELL_FILL if on else "#f3f3f3", CELL_STROKE if on else "#cfcfcf", rx=6, sw=1.4)
+        d.dot(cx + gx, cy + gy, 5, "#4d7a32")
+    for x, y in pts:
+        d.dot(cx + x, cy + y, 4, INK)
+    d.dot(cx + 60, cy - 40, 7, GRAD)
+    # HNSW: graph edges and a greedy path
+    cx = 1110
+    dist = lambda a, b: ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+    nbrs = {i: [j for j in range(len(pts)) if j != i and dist(pts[i], pts[j]) < 80] + [j for j in sorted(range(len(pts)), key=lambda j: dist(pts[i], pts[j]))[1:3]] for i in range(len(pts))}
+    for i in nbrs:
+        for j in nbrs[i]:
+            if j > i:
+                d.line([(cx + pts[i][0], cy + pts[i][1]), (cx + pts[j][0], cy + pts[j][1])], width=0.8, arrow=False, color="#c9c9c9")
+            else:
+                d.line([(cx + pts[i][0], cy + pts[i][1]), (cx + pts[j][0], cy + pts[j][1])], width=0.8, arrow=False, color="#c9c9c9")
+    for x, y in pts:
+        d.dot(cx + x, cy + y, 4, INK)
+    cur = max(range(len(pts)), key=lambda j: dist(pts[j], q))
+    path = [pts[cur]]
+    for _ in range(20):
+        best = min(nbrs[cur] + [cur], key=lambda j: dist(pts[j], q))
+        if best == cur: break
+        cur = best; path.append(pts[cur])
+    d.line([(cx + x, cy + y) for x, y in path], width=2.6, arrow=True, head=8, color=GRAD, radius=0)
+    d.text(cx, cy + 135, "start anywhere, hop to the neighbour closest to the query", 12, color=MUTED)
+    d.dot(cx + q[0], cy + q[1], 7, GRAD)
+    d.text(640, 500, "red = the query; flat is what the notebook builds (exact, same cost as NumPy); IVF and HNSW trade a little recall for speed at scale", 13, color=MUTED)
+    return d
+
+@diagram("rag-end-to-end")
+def _rag_end_to_end():
+    d = Diagram(1340, 700, "Generative RAG end to end: prepare the document once, then answer each question in five steps")
+    d.text(40, 92, "A · prepare once per document", 15, "start", MUTED, "bold")
+    y = 160
+    d.node(95, y, "PDF", "in", r=38, size=15)
+    steps = [(270, "1 read pages", "PyMuPDF: 16 pages"), (490, "2 clean", "NFKC, join hyphens"), (710, "3 chunk", "sentences, 250 words"),
+             (930, "4 embed", "MiniLM: 384 numbers"), (1150, "5 index", "FAISS + BM25")]
+    d.line([(133, y), (190, y)], head=9, width=2.4)
+    for i, (x, t, sub) in enumerate(steps):
+        d.layer(x, y, t, w=160, size=15)
+        d.text(x, y + 36, sub, 12, color=MUTED)
+        if i < len(steps) - 1:
+            d.line([(x + 80, y), (steps[i + 1][0] - 80, y)], head=9, width=2.4)
+    d.text(710, 225, "55 chunks with page numbers; vectors and keyword statistics stored for search", 13, color=MUTED)
+    d.text(40, 292, "B · answer every question", 15, "start", MUTED, "bold")
+    y = 380
+    d.node(95, y, "question", "in", r=44, size=13)
+    d.line([(139, y), (190, y)], head=9, width=2.4)
+    d.layer(270, y, "hybrid search", w=160, size=15)
+    d.text(270, y + 36, "meaning + keywords", 12, color=MUTED)
+    d.line([(1150, 200), (1150, 250), (270, 250), (270, 360)], head=8, width=2, dash="7 6", color=MUTED)
+    d.line([(350, y), (420, y)], head=9, width=2.4)
+    d.op(470, y, "cosine < 0.2?", r=20, size=13, w=110)
+    d.line([(470, y + 20), (470, 470)], head=8, width=2, color=GRAD)
+    d.text(470, 490, "refuse: not in", 12, color=GRAD)
+    d.text(470, 506, "the document", 12, color=GRAD)
+    d.line([(525, y), (590, y)], head=9, width=2.4)
+    d.op(660, y, "question type?", r=20, size=13, w=130)
+    d.line([(660, y - 20), (660, 330), (760, 330)], head=8, width=2.2)
+    d.line([(660, y + 20), (660, 430), (760, 430)], head=8, width=2.2)
+    d.text(700, 318, "exact fact", 12, color=MUTED)
+    d.text(700, 450, "explain / summarize", 12, color=MUTED)
+    d.layer(870, 330, "extractive reader", w=210, size=15)
+    d.text(870, 300, "copies a span (DistilBERT-SQuAD)", 12, color=MUTED)
+    d.cell(765, 405, 330, 135, "generative path")
+    d.layer(930, 450, "prompt from best sentences", w=290, size=14)
+    d.layer(930, 505, "FLAN-T5 writes the answer", w=290, size=14)
+    d.line([(930, 467), (930, 488)], head=7, width=2)
+    d.line([(1085, 505), (1140, 505)], head=8, width=2.2)
+    d.op(1180, 505, "grounded?", r=18, size=12, w=80)
+    d.line([(1180, 523), (1180, 580)], head=8, width=2, color=GRAD)
+    d.text(1180, 598, "refuse if support < 0.5", 12, color=GRAD)
+    d.line([(975, 330), (1205, 330), (1205, 375)], head=8, width=2.2)
+    d.line([(1220, 505), (1260, 505), (1260, 425)], head=8, width=2.2)
+    d.node(1235, 395, "answer", "out", r=34, size=13)
+    d.text(1235, 450, "+ pages", 12, color=MUTED)
+    d.text(670, 660, "every box is one function on this page; the red exits are where the system says 'not in the document' instead of guessing", 14, color=MUTED)
+    return d
+
+@diagram("transformer-families")
+def _transformer_families():
+    d = Diagram(1340, 560, "Three Transformer families: who can see what, and who can write")
+    cols = [(230, "Encoder-only", "BERT, DistilBERT, MiniLM", "reads everything at once", "understands; cannot write"),
+            (670, "Decoder-only", "GPT-style LLMs", "sees only earlier tokens", "writes one token at a time"),
+            (1110, "Encoder-decoder", "T5, FLAN-T5, BART", "encoder reads, decoder writes", "reads input, writes output")]
+    for cx, t, ex, how, can in cols:
+        d.rect(cx - 205, 75, 410, 400, NOTE_FILL, NOTE_STROKE, rx=14, sw=1.4)
+        d.text(cx, 103, t, 18, weight="bold")
+        d.text(cx, 127, ex, 13, color=MUTED)
+        d.text(cx, 440, how, 14, color=INK)
+        d.text(cx, 462, can, 14, color=GRAD if "cannot" in can else "#4d7a32", weight="bold")
+    def grid(x0, y0, n, mask, cell=34):
+        for i in range(n):
+            for j in range(n):
+                on = mask(i, j)
+                d.rect(x0 + j * cell, y0 + i * cell, cell - 3, cell - 3, CELL_FILL if on else "#f1f1f1", CELL_STROKE if on else "#d6d6d6", rx=3, sw=1)
+    toks = ["the", "cat", "sat", "on"]
+    # encoder: full grid
+    x0, y0 = 160, 200
+    grid(x0, y0, 4, lambda i, j: True)
+    for k, t in enumerate(toks):
+        d.text(x0 + k * 34 + 15, y0 - 10, t, 12, color=MUTED)
+        d.text(x0 - 26, y0 + k * 34 + 17, t, 12, color=MUTED)
+    d.text(230, 360, "every token attends to every token", 13, color=MUTED)
+    d.text(230, 382, "output: one vector per input token", 13, color=MUTED)
+    # decoder: causal
+    x0 = 600
+    grid(x0, y0, 4, lambda i, j: j <= i)
+    for k, t in enumerate(toks):
+        d.text(x0 + k * 34 + 15, y0 - 10, t, 12, color=MUTED)
+        d.text(x0 - 26, y0 + k * 34 + 17, t, 12, color=MUTED)
+    d.text(670, 360, "causal mask: no peeking at the future", 13, color=MUTED)
+    d.text(670, 382, "output: the next token", 13, color=MUTED)
+    # enc-dec: two blocks with arrow
+    d.layer(1010, 230, "encoder", w=130, size=15)
+    d.text(1010, 262, "question + context", 12, color=MUTED)
+    d.layer(1210, 230, "decoder", w=130, size=15)
+    d.text(1180, 262, "answer so far", 12, color=MUTED)
+    d.line([(1075, 230), (1145, 230)], head=9, width=2.4)
+    d.text(1110, 196, "cross-attention", 12, color=MUTED)
+    d.line([(1250, 248), (1250, 300)], head=8, width=2.2)
+    d.node(1250, 325, "next", "out", r=22, size=12)
+    d.text(1110, 382, "FLAN-T5-base: 12 + 12 layers, 248M parameters", 13, color=MUTED)
+    d.text(670, 520, "extractive QnA uses an encoder (it points at a span); generative RAG needs a decoder (it writes new tokens)", 14, color=MUTED)
+    return d
+
+@diagram("rag-prompt-anatomy")
+def _rag_prompt_anatomy():
+    d = Diagram(1340, 520, "Anatomy of the RAG prompt sent to FLAN-T5 (512-token limit)")
+    x0, y0, w = 90, 120, 760
+    parts = [("instruction", "use only the context; otherwise say the document does not contain it", 33, OP_FILL, OP_STROKE),
+             ("question", "Question: What is next sentence prediction and why is it used?", 13, LAYER_FILL, LAYER_STROKE),
+             ("context", "Context: best sentences from the top 5 chunks, in reading order", 362, CELL_FILL, CELL_STROKE),
+             ("answer cue", "Answer:", 2, FROZEN_FILL, FROZEN_STROKE)]
+    y = y0
+    for name, desc, toks, f, s in parts:
+        h = max(36, toks * 0.55)
+        d.rect(x0, y, w, h, f, s, rx=8, sw=1.6)
+        d.text(x0 + 16, y + min(h / 2, 24) + 2, name, 15, "start", INK, "bold")
+        d.text(x0 + 160, y + min(h / 2, 24) + 2, desc, 13, "start", MUTED)
+        d.text(x0 + w - 12, y + min(h / 2, 24) + 2, f"{toks} tokens" if name != "context" else "3 + 359 tokens", 13, "end", INK)
+        y += h + 8
+    d.text(x0 + w / 2, y + 22, "total 410 tokens for this question; anything past 512 would be cut off silently", 13, color=MUTED)
+    nx = 930
+    d.rect(nx, 120, 350, 300, NOTE_FILL, NOTE_STROKE, rx=12, sw=1.4)
+    d.text(nx + 175, 150, "kept out of the prompt", 15, weight="bold")
+    for k, t in enumerate(["page numbers", "chunk ids", "retrieval scores", "source headers like [Source 1 | Page 3]"]):
+        d.text(nx + 30, 190 + 34 * k, "• " + t, 14, "start", INK)
+    d.text(nx + 175, 340, "shown to the user next to the answer;", 13, color=MUTED)
+    d.text(nx + 175, 362, "in the prompt, a small model copied them:", 13, color=MUTED)
+    d.text(nx + 175, 384, "answer = \"[Source 1 | Page 3 | Chunk 6 ...]\"", 13, color=GRAD)
+    return d
+
+# =============================================================================
+# Vision tasks and generative models (detection, segmentation, autoencoders, GANs)
+# =============================================================================
+@diagram("box-formats-iou")
+def _box_formats_iou():
+    d = Diagram(1340, 560, "Two ways to write the same box, and how IoU compares two boxes")
+    # left: one box, two encodings (coffee cup from DETR, 600x400 image)
+    ox, oy, sc = 80, 90, 0.62
+    d.rect(ox, oy, 600 * sc, 400 * sc, NOTE_FILL, NOTE_STROKE, rx=4, sw=1.4)
+    d.text(ox + 300 * sc, oy - 14, "image 600 x 400 pixels (origin top-left, y grows down)", 13, color=MUTED)
+    x0, y0, x1, y1 = 172.4, 17.7, 410.8, 287.1
+    d.rect(ox + x0 * sc, oy + y0 * sc, (x1 - x0) * sc, (y1 - y0) * sc, "none", IN_STROKE, rx=2, sw=3)
+    d.dot(ox + x0 * sc, oy + y0 * sc, 6, OUT_STROKE); d.dot(ox + x1 * sc, oy + y1 * sc, 6, OUT_STROKE)
+    d.dot(ox + 291.6 * sc, oy + 152.4 * sc, 6, GRAD)
+    d.text(ox + x0 * sc - 6, oy + y0 * sc + 26, "(x_{min}, y_{min})", 12, "end", OUT_STROKE)
+    d.text(ox + x1 * sc + 8, oy + y1 * sc + 4, "(x_{max}, y_{max})", 12, "start", OUT_STROKE)
+    d.text(ox + 291.6 * sc, oy + 152.4 * sc + 22, "(cx, cy)", 12, color=GRAD)
+    ty = oy + 400 * sc + 40
+    d.text(ox, ty, "cup, corners xyxy:  172.4, 17.7, 410.8, 287.1", 14, "start", INK)
+    d.text(ox, ty + 26, "cup, centre cxcywh:  291.6, 152.4, 238.4, 269.4", 14, "start", INK)
+    d.text(ox, ty + 52, "normalised by 600 x 400:  0.486, 0.381, 0.397, 0.674  (what DETR outputs)", 14, "start", MUTED)
+    # right: IoU
+    rx0, ry0 = 820, 120
+    d.text(1060, 100, "IoU = area of overlap / area of union", 16, weight="bold")
+    s2 = 44
+    d.rect(rx0, ry0 + 20, 4 * s2, 4 * s2, IN_FILL, IN_STROKE, rx=2, sw=2)
+    d.rect(rx0 + 2 * s2, ry0 + 20 + 2 * s2, 4 * s2, 4 * s2, OUT_FILL, OUT_STROKE, rx=2, sw=2)
+    d.rect(rx0 + 2 * s2, ry0 + 20 + 2 * s2, 2 * s2, 2 * s2, CELL_FILL, CELL_STROKE, rx=1, sw=2)
+    d.text(rx0 + 3 * s2, ry0 + 20 + 3 * s2, "4", 16, weight="bold")
+    d.text(rx0 + s2, ry0 + 20 + s2, "A", 16, weight="bold"); d.text(rx0 + 5 * s2, ry0 + 20 + 5 * s2, "B", 16, weight="bold")
+    tx = rx0 + 6 * s2 + 30
+    d.text(tx, ry0 + 50, "A = (0,0,4,4), B = (2,2,6,6)", 14, "start")
+    d.text(tx, ry0 + 80, "overlap = 2 x 2 = 4", 14, "start")
+    d.text(tx, ry0 + 110, "union = 16 + 16 - 4 = 28", 14, "start")
+    d.text(tx, ry0 + 140, "IoU = 4 / 28 = 0.143", 14, "start", weight="bold")
+    d.text(1060, 470, "IoU 1 = identical boxes, 0 = no overlap; a detection usually counts as correct at IoU 0.5 or more", 13, color=MUTED)
+    return d
+
+
+@diagram("detector-families")
+def _detector_families():
+    d = Diagram(1340, 600, "Three families of object detectors")
+    rows = [(140, "Two-stage (Faster R-CNN)", ["CNN backbone", "region proposals", "RoI pooling", "class + box head", "NMS"], "propose, then classify each proposal: accurate, slower"),
+            (300, "One-stage (YOLO, SSD)", ["CNN backbone", "dense grid of anchors", "class + box per anchor", "score threshold", "NMS"], "predict everywhere in one pass: fast, many duplicates"),
+            (460, "Set prediction (DETR)", ["CNN backbone", "Transformer encoder", "decoder: 100 object queries", "100 x (class or no-object, box)", "no NMS needed"], "each query claims one object; matching loss removes duplicates")]
+    for y, title, steps, note in rows:
+        d.rect(40, y - 62, 1260, 128, NOTE_FILL, NOTE_STROKE, rx=12, sw=1.3)
+        d.text(60, y - 38, title, 16, "start", INK, "bold")
+        d.text(1280, y - 38, note, 13, "end", MUTED)
+        xs = [150 + 250 * k for k in range(5)]
+        for k, (x, st) in enumerate(zip(xs, steps)):
+            fill, stroke = (IN_FILL, IN_STROKE) if k == 0 else ((FROZEN_FILL, FROZEN_STROKE) if st in ("NMS", "no NMS needed", "score threshold") else (LAYER_FILL, LAYER_STROKE))
+            d.rect(x - 105, y - 10, 210, 44, fill, stroke, rx=6, sw=1.6)
+            d.text(x, y + 12, st, 13)
+            if k < 4:
+                d.line([(x + 105, y + 12), (x + 145, y + 12)], head=8, width=2)
+    d.text(670, 575, "all three end with a list of (class, score, box); detections below a score threshold are dropped", 13, color=MUTED)
+    return d
+
+
+@diagram("unet-segmentation")
+def _unet():
+    d = Diagram(1340, 600, "Encoder-decoder segmentation (U-Net style): shrink to understand, grow back to label pixels")
+    def block(x, y, w, h, label, sub, fill=LAYER_FILL, stroke=LAYER_STROKE):
+        d.rect(x, y, w, h, fill, stroke, rx=6, sw=1.8)
+        d.text(x + w / 2, y + h / 2 - 8, label, 14, weight="bold")
+        d.text(x + w / 2, y + h / 2 + 14, sub, 12, color=MUTED)
+    block(60, 120, 170, 300, "input", "3 x 64 x 64", IN_FILL, IN_STROKE)
+    block(290, 120, 170, 300, "conv", "16 x 64 x 64")
+    block(520, 200, 170, 150, "pool + conv", "32 x 32 x 32")
+    block(750, 120, 170, 300, "upsample", "16 x 64 x 64", CELL_FILL, CELL_STROKE)
+    block(980, 120, 120, 300, "concat", "32 x 64 x 64", OP_FILL, OP_STROKE)
+    block(1150, 120, 140, 300, "1x1 conv", "5 x 64 x 64", OUT_FILL, OUT_STROKE)
+    d.line([(230, 270), (290, 270)], head=8, width=2.2)
+    d.line([(460, 275), (520, 275)], head=8, width=2.2)
+    d.line([(690, 275), (750, 275)], head=8, width=2.2)
+    d.line([(920, 270), (980, 270)], head=8, width=2.2)
+    d.line([(1100, 270), (1150, 270)], head=8, width=2.2)
+    d.line([(375, 120), (375, 80), (1040, 80), (1040, 120)], color=GRAD, head=9, width=2.4, dash="7,5")
+    d.text(707, 66, "skip connection: copy the sharp, high-resolution features across", 13, color=GRAD)
+    d.text(605, 380, "bottleneck: what is here", 12, color=MUTED)
+    d.text(835, 445, "transposed conv, stride 2:", 12, color=MUTED)
+    d.text(835, 465, "32 x 32 back to 64 x 64", 12, color=MUTED)
+    d.text(1220, 445, "one score per class", 12, color=MUTED)
+    d.text(1220, 465, "per pixel; argmax = mask", 12, color=MUTED)
+    d.text(670, 540, "shapes from a real PyTorch run; real U-Nets repeat the down and up steps 4 times", 13, color=MUTED)
+    return d
+
+
+@diagram("autoencoder")
+def _autoencoder():
+    d = Diagram(1340, 520, "An autoencoder: squeeze the input through a bottleneck, then rebuild it")
+    layers = [(140, 64, "input x", "64 pixels", IN_FILL, IN_STROKE), (360, 32, "encoder", "64 -> 32", LAYER_FILL, LAYER_STROKE),
+              (580, 8, "latent z", "k numbers (2, 8, 16)", CELL_FILL, CELL_STROKE), (800, 32, "decoder", "k -> 32", LAYER_FILL, LAYER_STROKE),
+              (1020, 64, "output x-hat", "64 pixels (sigmoid)", OUT_FILL, OUT_STROKE)]
+    for cx, n, name, sub, f, s in layers:
+        h = 4.2 * n
+        d.rect(cx - 55, 260 - h / 2, 110, h, f, s, rx=6, sw=1.8)
+        d.text(cx, 260 - h / 2 - 30, name, 15, weight="bold")
+        d.text(cx, 260 - h / 2 - 10, sub, 12, color=MUTED)
+    for a, b in [(195, 305), (415, 525), (635, 745), (855, 965)]:
+        d.line([(a, 260), (b, 260)], head=8, width=2.2)
+    d.line([(140, 400), (140, 450), (1020, 450), (1020, 400)], color=GRAD, head=0.1, width=2.2, arrow=False, dash="6,5")
+    d.text(580, 475, "reconstruction loss: MSE between x and x-hat, the only training signal (no labels)", 14, color=GRAD)
+    d.rect(1110, 170, 200, 180, NOTE_FILL, NOTE_STROKE, rx=10, sw=1.3)
+    d.text(1210, 200, "test MSE per pixel", 13, weight="bold")
+    d.text(1210, 230, "k = 2:  0.0358", 13); d.text(1210, 256, "k = 8:  0.0145", 13); d.text(1210, 282, "k = 16: 0.0076", 13)
+    d.text(1210, 314, "mean image: 0.0740", 12, color=MUTED)
+    return d
+
+
+@diagram("gan-loop")
+def _gan_loop():
+    d = Diagram(1340, 560, "A GAN: a generator and a discriminator trained against each other")
+    d.node(110, 250, "z", "in", r=30, size=20); d.text(110, 300, "random noise", 13, color=MUTED)
+    d.layer(330, 250, "Generator G", w=200, h=60, size=16)
+    d.node(560, 250, "fake", "out", r=34, size=14); d.text(560, 302, "G(z)", 13, color=MUTED)
+    d.node(560, 110, "real", "in", r=34, size=14); d.text(560, 62, "x from the data", 13, color=MUTED)
+    d.layer(820, 180, "Discriminator D", w=230, h=60, size=16)
+    d.op(1060, 180, "p", r=24, size=18); d.text(1060, 225, "probability real", 12, color=MUTED)
+    d.line([(140, 250), (230, 250)], head=8, width=2.2); d.line([(430, 250), (526, 250)], head=8, width=2.2)
+    d.line([(594, 110), (680, 110), (680, 165), (705, 165)], head=8, width=2.2)
+    d.line([(594, 250), (680, 250), (680, 195), (705, 195)], head=8, width=2.2)
+    d.line([(935, 180), (1036, 180)], head=8, width=2.2)
+    d.rect(380, 330, 620, 150, NOTE_FILL, NOTE_STROKE, rx=10, sw=1.3)
+    d.text(690, 360, "D step: push D(real) up to 1 and D(fake) down to 0", 14, color=INK)
+    d.text(690, 392, "G step: push D(G(z)) up to 1 (fool D); only G's weights change", 14, color=GRAD)
+    d.text(690, 428, "balance: D(real) and D(fake) both near 0.5, D loss near 2 ln 2 = 1.386", 13, color=MUTED)
+    d.text(690, 456, "healthy run here at step 3000: 0.511, 0.457, D loss 1.343", 13, color=MUTED)
+    d.line([(1060, 204), (1060, 520), (330, 520), (330, 280)], color=GRAD, head=9, width=2, dash="7,5")
+    d.text(700, 545, "the generator never sees real data; it learns only from the discriminator's gradient", 13, color=GRAD)
+    return d
+
 # -----------------------------------------------------------------------------
 def main(names):
     os.makedirs(OUT, exist_ok=True)

@@ -9,6 +9,12 @@ A pandas **Series** is a NumPy-style array plus a **labelled Index**; a **DataFr
 
 <PriorityKey lang="pandas" v="3.0" />
 
+:::info[Where this page sits]
+**Before:** [NumPy: Broadcasting, Linear Algebra & Aggregations](../01-numpy/02-numpy-broadcasting-linalg-aggregations.md): every pandas column is a typed array, so NumPy's rules still apply underneath.
+**This page:** Series and DataFrames, label alignment, the Index, selecting with `.loc`, `.iloc`, `.at` and boolean masks, Copy-on-Write and chained assignment, loading CSV, Parquet and JSON, and the first-look profile of a new dataset.
+**Next:** [Pandas: Cleaning, Types & Missing Data](./04-pandas-cleaning-types-missing-data.md).
+:::
+
 ## 🧭 Start Here: What Pandas Adds on Top of NumPy
 
 NumPy gives you fast arrays of **one dtype**, addressed by **position**. Real data isn't like that: the ShopStream orders table has text IDs, timestamps, prices and ratings side by side, missing values everywhere, and you want to ask for "the price of order `O00003`", not "row 2, column 4". Pandas solves both problems:
@@ -17,6 +23,14 @@ NumPy gives you fast arrays of **one dtype**, addressed by **position**. Real da
 2. **Rows and columns have names.** Every Series and DataFrame carries an **Index**, a fast lookup table from label to position (backed by a hash table, like a Python `dict`). You select by label, join by label, and arithmetic **lines rows up by label**.
 3. **Missing data is first-class.** `NaN` / `None` / `NA` are understood by every method: `mean()` skips them, `info()` counts them, `fillna()` replaces them.
 4. **It reads everything.** CSV, Parquet, JSON, Excel, SQL, all into the same DataFrame.
+
+The chapters build up in this order:
+
+1. **Series, DataFrames and alignment**: the structures, and why arithmetic matches labels, not positions.
+2. **The Index**: the label lookup table behind every row.
+3. **Selecting data**: `.loc` vs `.iloc`, boolean masks, and the one-call rule for assignment under Copy-on-Write.
+4. **Loading data**: the readers, and CSV vs Parquet.
+5. **A first look at a dataset**: the handful of calls that reveal ShopStream's problems in minutes.
 
 | New concept | One-line meaning |
 |---|---|
@@ -33,29 +47,13 @@ NumPy gives you fast arrays of **one dtype**, addressed by **position**. Real da
 A NumPy array is a block of numbered pigeonholes: you can only say "box 2, row 4". A DataFrame is the same block with a **labelled drawer front** on every row and a **header** on every column, and a receptionist (the Index) who knows instantly which drawer holds order `O00003`. When you combine two cabinets, the receptionist pairs drawers by label, not by where they happen to sit.
 :::
 
-## ⚡ Essential Interview Recall
+## 🔴 1. Series, DataFrames and Label Alignment
 
-- 🔴 **Series = values + Index + name; DataFrame = dict of Series sharing a row Index.** `df["col"]` → Series, `df[["col"]]` → DataFrame.
-- 🔴 **Arithmetic aligns on labels**: `a + b` gives the **union** of labels, `NaN` where one side is missing. Use `a.add(b, fill_value=0)` to treat missing as 0, or `.to_numpy()` to go positional.
-- 🔴 **`.loc` = labels, end-inclusive slices; `.iloc` = positions, end-exclusive slices.** `df.loc[0:2]` returns **3** rows, `df.iloc[0:2]` returns **2**.
-- 🔴 `s[0]` on a Series with an **integer index** means **label 0**, not position 0. Always use `.loc` / `.iloc` to be explicit.
-- 🔴 **Filters use `&`, `|`, `~` with parentheses**: `(df.a > 1) & (df.b == "COD")`. `and`/`or` raise `ValueError: The truth value of a Series is ambiguous`, and missing parentheses fail because `&` binds tighter than `>`.
-- 🔴 **pandas 3: Copy-on-Write is always on.** `df[mask]["col"] = v` **never** updates `df` and emits `ChainedAssignmentError`; use `df.loc[mask, "col"] = v`. `SettingWithCopyWarning` is gone.
-- 🔴 **`info()`** = dtypes + non-null counts; **`describe()`** = count, mean, std (**`ddof=1`**), min, quartiles, max; **`memory_usage(deep=True)`** counts the real bytes of strings.
-- 🟠 **Load lean**: `usecols=`, `dtype={"category": "category", "quantity": "int32"}`, `parse_dates=`. On ShopStream this cut memory from **0.673 MB to 0.347 MB**.
-- 🟠 **`chunksize=`** turns `read_csv` into an iterator of DataFrames: process files larger than RAM chunk by chunk and aggregate.
-- 🟠 **Parquet** is columnar, compressed and typed: ShopStream is **362 KB** as CSV vs **151 KB** as Parquet, and Parquet keeps dtypes and can read just the columns you ask for.
-- 🟠 **`query("unit_price > @limit and payment_method == 'COD'")`** = readable filters; `@` references Python variables.
-- 🟡 **pandas 3 text columns are `str`** (`StringDtype(na_value=nan)`), not `object`; missing text is `NaN`.
-- 🟡 `.at` / `.iat` are the fast scalar versions of `.loc` / `.iloc`.
+Pandas has two core structures. A **Series** is a one-dimensional array of values with a **label** for each one (its index) and an optional name. A **DataFrame** is a table: a collection of Series that share one row index, each Series being a column with its own dtype. That last detail is the key design choice. Unlike a NumPy array, which has a single dtype for everything, a DataFrame stores each column as its own typed array, so text IDs, timestamps, prices and ratings can sit side by side while every column still gets NumPy speed. Row-by-row loops such as `iterrows` lose that advantage, because each row has to be assembled into a new mixed-type Series.
 
-:::speak[What is the difference between loc and iloc, and what is the chained assignment problem?]
-"`.loc` selects by **label** and `.iloc` by **integer position**. With `.loc` I pass index labels, boolean masks or column names, and slices include the end label, so `df.loc[0:2]` gives three rows on a default index. With `.iloc` I pass positions, and slices exclude the end like Python lists. The distinction matters most when the index is made of integers that aren't positions, for example after sorting or filtering, where `s[0]` means label 0. The classic trap is **chained assignment**: `df[df.quantity <= 0]["quantity"] = 1`. The first bracket produces a new object, and the assignment modifies that temporary, not `df`. In old pandas it sometimes worked and raised `SettingWithCopyWarning`; since pandas 3.0, **Copy-on-Write** is always on, so it **never** works and pandas raises a `ChainedAssignmentError` warning. The fix is a single `.loc` call: `df.loc[df.quantity <= 0, 'quantity'] = 1`."
-:::
+The second design choice is that pandas does arithmetic **by label, not by position**. When you add two Series, pandas first lines up their indexes and adds values whose labels match. A label present on only one side produces `NaN`, and the result contains the **union** of the labels. This prevents a whole class of silent bugs where two lists sorted differently are combined row by row, but it also surprises people: adding two Series that look the same length can produce `NaN`s if their indexes differ.
 
-## The Mental Model
-
-### 1. Anatomy of a DataFrame
+When you want to treat missing labels as zero, use the method form with `fill_value=` (for example `a.add(b, fill_value=0)`). When you deliberately want positional arithmetic, convert to NumPy with `.to_numpy()` first.
 
 ```mermaid
 flowchart TB
@@ -73,30 +71,11 @@ flowchart TB
 
 Each column is a separate typed array, so column operations (`df["unit_price"] * df["quantity"]`) run at NumPy speed, while row-by-row loops (`iterrows`) have to stitch a new mixed-type Series together for every row and are slow.
 
-### 2. Label alignment
-
 <Animation src="pandas/index-alignment" caption="Two Series with different labels are added. Pandas first lines the labels up, adds where both sides have a value, and writes NaN for Alex and Riley because one side is missing. fill_value=0 fills the gaps before adding." />
 
 :::analogy[Alignment is matching name tags, not seats]
 Two teachers each hand you a list of exam marks. One list is sorted by roll number, the other alphabetically. Adding them seat by seat would give every student someone else's marks; you match by **name tag** instead, and a student missing from one list gets a blank. That's exactly what `a + b` does with Series.
 :::
-
-### 3. Choosing a selector
-
-```mermaid
-flowchart TB
-    Q{"What do you have?"} -->|"labels: order id, column names"| L[".loc[rows, cols]"]
-    Q -->|"positions: first 10 rows, 3rd column"| I[".iloc[rows, cols]"]
-    Q -->|"a condition"| B[".loc[mask, cols] or df[mask]"]
-    Q -->|"a single cell, in a hot loop"| S[".at / .iat"]
-    Q -->|"a readable multi-condition filter"| QY[".query(...)"]
-```
-
-<Animation src="pandas/loc-vs-iloc" caption="On a DataFrame whose index has been shuffled, loc 2 to 4 walks the labels and includes the end, while iloc 2 to 4 counts positions and stops before the end. Same brackets, different rows." />
-
-## The Paradigm / Core Concepts
-
-### 🔴 Series vs DataFrame vs NumPy array
 
 | | NumPy `ndarray` | pandas `Series` | pandas `DataFrame` |
 |---|---|---|---|
@@ -113,14 +92,43 @@ Every binary operation between pandas objects (`+`, `-`, `*`, comparisons, assig
 
 </RuleCard>
 
-### 🔴 The Index
+:::tip[🎯 Interview angle]
+**"Why does adding two Series sometimes give `NaN`?"** Pandas aligns on the index before any arithmetic: matching labels are combined, the result has the union of labels, and a label missing on one side gives `NaN`. Use `a.add(b, fill_value=0)` to fill the gaps, or `.to_numpy()` for positional arithmetic. Each DataFrame column is its own typed array, which is why column operations are fast and `iterrows` is slow.
+:::
+
+## 🔴 2. The Index
+
+Every Series and DataFrame carries an **Index**: an immutable array of labels plus a hash table that maps each label to its position. That hash table is why looking up a row by label, `df.loc["O00003"]`, is O(1) on a unique index, much like a Python `dict` lookup. If the index has duplicates or is unsorted, pandas falls back to slower searches. By default you get a `RangeIndex(0, n)`, which stores only its start, stop and step rather than n integers.
+
+You choose a meaningful row label with `set_index("order_id")`, which turns a column into the index, and undo it with `reset_index()`, which turns the index back into an ordinary column (you'll need that constantly after `groupby`). Before making a business key the index, check `index.is_unique`; ShopStream's `order_id` is not yet unique because the raw data contains duplicate rows.
 
 - **What it is:** an immutable array of labels plus a hash table from label to position, so `df.loc["O00003"]` is **O(1)** on a unique index (O(n) the first time while the hash table is built). A non-unique or unsorted index falls back to slower searches.
 - **Default:** `RangeIndex(0, n)`, which stores only start/stop/step (a few bytes, not n integers).
 - **Setting one:** `orders.set_index("order_id")` makes the business key the row label (check `index.is_unique` first: ShopStream's has **20 duplicate rows**, so it's **not** unique yet).
 - **Getting it back:** `reset_index()` turns the index into a normal column again (needed after `groupby`, see the GroupBy page).
 
-### 🔴 `.loc` vs `.iloc`
+:::tip[🎯 Interview angle]
+**"What is a pandas Index for?"** It's the row labels plus a hash table from label to position, so label lookups are O(1) on a unique index, and it drives alignment in every operation. Use `set_index` to promote a key column and `reset_index` to turn the index back into a column; always check `is_unique` first.
+:::
+
+## 🔴 3. Selecting Data: `.loc`, `.iloc` and Copy-on-Write
+
+Pandas offers two main selectors, and the difference between them is a staple interview question. **`.loc`** selects by **label**: row labels, column names and boolean masks. **`.iloc`** selects by **integer position**, exactly like NumPy. Their slices behave differently too: a `.loc` slice **includes** its end label (`loc["O00002":"O00004"]` returns three rows), while an `.iloc` slice **excludes** its end, like Python. On a freshly loaded DataFrame with a `RangeIndex` the two look identical, which hides the difference until the index is shuffled or filtered.
+
+Filtering rows uses a **boolean mask**: a Series of `True`/`False` values built from a condition, as in `df[df["quantity"] > 5]` or `df.loc[mask, ["category", "unit_price"]]`. Conditions are combined with `&`, `|` and `~`, with parentheses around each comparison, just as in NumPy. For a single cell inside a hot loop, `.at` and `.iat` are the fast scalar paths, and `.query()` gives a readable alternative for complex filters.
+
+Changing values has one rule. Since pandas 3, **Copy-on-Write** is always on: every selection behaves like a new object, and only a single `.loc[...]` or `.iloc[...]` call writes into the DataFrame you call it on. So `df.loc[df["quantity"] <= 0, "quantity"] = 1` works, while a **chained** assignment such as `df[mask]["quantity"] = 1` modifies a temporary object, changes nothing, and triggers a `ChainedAssignmentError` warning.
+
+```mermaid
+flowchart TB
+    Q{"What do you have?"} -->|"labels: order id, column names"| L[".loc[rows, cols]"]
+    Q -->|"positions: first 10 rows, 3rd column"| I[".iloc[rows, cols]"]
+    Q -->|"a condition"| B[".loc[mask, cols] or df[mask]"]
+    Q -->|"a single cell, in a hot loop"| S[".at / .iat"]
+    Q -->|"a readable multi-condition filter"| QY[".query(...)"]
+```
+
+<Animation src="pandas/loc-vs-iloc" caption="On a DataFrame whose index has been shuffled, loc 2 to 4 walks the labels and includes the end, while iloc 2 to 4 counts positions and stops before the end. Same brackets, different rows." />
 
 | | `.loc` | `.iloc` |
 |---|---|---|
@@ -137,7 +145,15 @@ To change values, make **one** `.loc[...]` or `.iloc[...]` call on the object yo
 
 </RuleCard>
 
-### 🔴 Loading data
+:::tip[🎯 Interview angle]
+**"What's the difference between `loc` and `iloc`, and why doesn't `df[mask]["col"] = v` work?"** `loc` selects by label and includes the slice end; `iloc` selects by position and excludes it. Under Copy-on-Write (always on in pandas 3), only one `.loc`/`.iloc` call writes into the original; a chained assignment writes into a temporary and changes nothing. Use `df.loc[mask, "col"] = v`. The full spoken answer is near the end of the page.
+:::
+
+## 🔴 4. Loading Data
+
+Pandas reads almost every common format into the same DataFrame. `pd.read_csv` handles text exports and logs, and its arguments are where most loading problems are solved: `usecols` to read only some columns, `dtype` to fix types up front, `parse_dates` for timestamps, `na_values` to declare extra missing-value markers, and `chunksize` to stream a file too large for memory. `read_parquet`, `read_json` (with `lines=True` for JSON Lines), `read_excel` and `read_sql` cover the rest.
+
+The choice of storage format matters for real pipelines. CSV is plain row-by-row text: the types must be re-inferred on every read, and reading one column still means parsing every line. **Parquet** stores data by column, compressed and with types preserved, so it is smaller (151 KB against 362 KB for ShopStream) and can read just the columns you ask for. That is why analytics and ML pipelines store intermediate data as Parquet and keep CSV for exchange with people and other tools.
 
 | Reader | Good for | Key arguments |
 |---|---|---|
@@ -156,7 +172,15 @@ To change values, make **one** `.loc[...]` or `.iloc[...]` call on the object yo
 A CSV is a novel: to find every price you read every page, word by word, and you guess which words are numbers. Parquet is a filing cabinet with one labelled drawer per column, already sorted by type and vacuum-packed: you open just the "unit_price" drawer and take it out whole.
 :::
 
-### 🔴 First look at a dataset
+:::tip[🎯 Interview angle]
+**"Why would you store data as Parquet rather than CSV?"** Parquet is columnar, compressed and typed: it's smaller (151 KB vs 362 KB for ShopStream), keeps dtypes so nothing is re-inferred, and reads only the columns you request. CSV is row text that must be fully parsed every time. For huge CSVs, read with `usecols`, `dtype` and `chunksize`.
+:::
+
+## 🔴 5. A First Look at a Dataset
+
+Before cleaning or modelling anything, you profile the data, and a handful of calls reveal most problems within minutes. `shape` gives the size; `head`, `tail` and `sample` show real rows (and expose things like category values padded with spaces); `info()` shows each column's dtype and, crucially, its **non-null count**, which is the fastest way to spot missing data.
+
+`describe()` summarises numeric columns with count, mean, standard deviation, quartiles and extremes. Read it critically: a mean far above the median signals a **skewed** column, and an impossible minimum or maximum (a negative quantity, a quantity of 999) signals invalid values. `describe(include="str")`, `nunique()` and `value_counts()` reveal text columns with too many distinct values, `duplicated().sum()` counts exact duplicate rows, and `memory_usage(deep=True)` shows what each column really costs. The table lists what each call found in ShopStream.
 
 | Method | Tells you | ShopStream finding |
 |---|---|---|
@@ -169,7 +193,11 @@ A CSV is a novel: to find every price you read every page, word by word, and you
 | `df.duplicated().sum()` | Exact duplicate rows | **20** |
 | `df.memory_usage(deep=True)` | Bytes per column, strings included | 0.673 MB total |
 
-## ⚙️ Under the Hood (pandas Internals)
+:::tip[🎯 Interview angle]
+**"You've just been handed a new dataset. What do you run first?"** `shape`, `head`/`sample`, `info()` for dtypes and non-null counts, `describe()` for ranges and skew (mean far from median, impossible minimums), `value_counts`/`nunique` for messy categories, `duplicated().sum()` and `memory_usage(deep=True)`. On ShopStream that surfaces missing ratings, a skewed price, invalid quantities, 20 category spellings and 20 duplicate rows.
+:::
+
+## ⚙️ Going Deeper (pandas Internals)
 
 - **Columnar storage**: a DataFrame is a set of column arrays (internally grouped into "blocks" of the same dtype by the `BlockManager`). Selecting a column is cheap; selecting a row has to collect one value from every block.
 - **`str` dtype** (pandas 3 default for text): when PyArrow is installed, text lives in an Arrow string array: one contiguous byte buffer plus an offsets array, instead of a NumPy array of pointers to separate Python `str` objects (`object` dtype). It's more compact and its `.str` methods run in C++. Missing values are `NaN`.
@@ -533,3 +561,25 @@ A join between orders and a partner's CSV matched only 60% of rows.
 - **`len(df)` vs `df.size` vs `df.count()`**: rows, cells, and non-null values per column.
 - **`read_csv` treats `"NA"`, `"null"`, `""` and more as missing by default**: a customer genuinely named `NA` becomes NaN unless you pass `keep_default_na=False`.
 - **`describe()` std is the sample std (`ddof=1`)**, unlike `np.std`.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **Series = values + Index + name; DataFrame = dict of Series sharing a row Index.** `df["col"]` → Series, `df[["col"]]` → DataFrame.
+- 🔴 **Arithmetic aligns on labels**: `a + b` gives the **union** of labels, `NaN` where one side is missing. Use `a.add(b, fill_value=0)` to treat missing as 0, or `.to_numpy()` to go positional.
+- 🔴 **`.loc` = labels, end-inclusive slices; `.iloc` = positions, end-exclusive slices.** `df.loc[0:2]` returns **3** rows, `df.iloc[0:2]` returns **2**.
+- 🔴 `s[0]` on a Series with an **integer index** means **label 0**, not position 0. Always use `.loc` / `.iloc` to be explicit.
+- 🔴 **Filters use `&`, `|`, `~` with parentheses**: `(df.a > 1) & (df.b == "COD")`. `and`/`or` raise `ValueError: The truth value of a Series is ambiguous`, and missing parentheses fail because `&` binds tighter than `>`.
+- 🔴 **pandas 3: Copy-on-Write is always on.** `df[mask]["col"] = v` **never** updates `df` and emits `ChainedAssignmentError`; use `df.loc[mask, "col"] = v`. `SettingWithCopyWarning` is gone.
+- 🔴 **`info()`** = dtypes + non-null counts; **`describe()`** = count, mean, std (**`ddof=1`**), min, quartiles, max; **`memory_usage(deep=True)`** counts the real bytes of strings.
+- 🟠 **Load lean**: `usecols=`, `dtype={"category": "category", "quantity": "int32"}`, `parse_dates=`. On ShopStream this cut memory from **0.673 MB to 0.347 MB**.
+- 🟠 **`chunksize=`** turns `read_csv` into an iterator of DataFrames: process files larger than RAM chunk by chunk and aggregate.
+- 🟠 **Parquet** is columnar, compressed and typed: ShopStream is **362 KB** as CSV vs **151 KB** as Parquet, and Parquet keeps dtypes and can read just the columns you ask for.
+- 🟠 **`query("unit_price > @limit and payment_method == 'COD'")`** = readable filters; `@` references Python variables.
+- 🟡 **pandas 3 text columns are `str`** (`StringDtype(na_value=nan)`), not `object`; missing text is `NaN`.
+- 🟡 `.at` / `.iat` are the fast scalar versions of `.loc` / `.iloc`.
+
+:::speak[What is the difference between loc and iloc, and what is the chained assignment problem?]
+"`.loc` selects by **label** and `.iloc` by **integer position**. With `.loc` I pass index labels, boolean masks or column names, and slices include the end label, so `df.loc[0:2]` gives three rows on a default index. With `.iloc` I pass positions, and slices exclude the end like Python lists. The distinction matters most when the index is made of integers that aren't positions, for example after sorting or filtering, where `s[0]` means label 0. The classic trap is **chained assignment**: `df[df.quantity <= 0]["quantity"] = 1`. The first bracket produces a new object, and the assignment modifies that temporary, not `df`. In old pandas it sometimes worked and raised `SettingWithCopyWarning`; since pandas 3.0, **Copy-on-Write** is always on, so it **never** works and pandas raises a `ChainedAssignmentError` warning. The fix is a single `.loc` call: `df.loc[df.quantity <= 0, 'quantity'] = 1`."
+:::

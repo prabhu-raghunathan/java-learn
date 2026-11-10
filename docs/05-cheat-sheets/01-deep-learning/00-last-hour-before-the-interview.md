@@ -213,6 +213,52 @@ Full sheet: [Hugging Face Pipelines](./12-hugging-face-pipelines.md).
 Preprocess (the checkpoint's tokenizer: WordPiece ids with [CLS]/[SEP], attention mask, padding, truncation) → forward (`AutoModelFor…` in eval mode under `no_grad`; logits `[B, num_labels]`) → postprocess (softmax, argmax, `id2label`). The sentiment default is DistilBERT fine-tuned on SST-2 (66,955,010 parameters): pin model and revision. Open it for batching, devices, logits/hidden states, custom thresholds and fine-tuning. The score is a softmax probability (two classes: sigmoid of the margin), not a guarantee: "It was fine, I guess." → POSITIVE 0.99976.
 </details>
 
+## 📄 Extractive Document QnA: Extra Questions
+
+Full sheet: [Extractive Document QnA](./13-extractive-document-qna.md).
+
+<details>
+<summary><strong>31. How do you answer questions over a long PDF with an extractive QnA model, and where does it break?</strong></summary>
+
+Extract text page by page (keep page numbers), cut overlapping chunks that fit the model (180 words, 40 overlap → 78 chunks for the BERT paper), run `AutoModelForQuestionAnswering` on each: per-token start/end logits from a `Linear(768, 2)`, best context-only span by $s_i + e_j$, sliced with `offset_mapping`. Rank, abstain below a threshold, return page + chunk + preview. It breaks because logits aren't comparable across chunks (right 20.123 vs wrong 20.049) and a SQuAD v1.1 reader never abstains ("Which city was BERT invented in?" → "Transformers", 0.9964). Fix: retrieve relevant chunks first (RAG), SQuAD 2.0 reader, calibrated thresholds.
+</details>
+
+## 🔎 Retriever + Reader with FAISS: Extra Questions
+
+Full sheet: [Retriever + Reader with FAISS](./14-retriever-reader-faiss.md).
+
+<details>
+<summary><strong>32. How does semantic retrieval with embeddings and FAISS work, and how do you know it works?</strong></summary>
+
+Embed every chunk once with a bi-encoder (`all-MiniLM-L6-v2`: mean pooling + L2 normalize → 384-d unit vectors), store them in a FAISS index, and per question embed it, take the top-k by inner product (= cosine for unit vectors; squared L2 = 2 − 2cos gives the same order), map rows back to chunk metadata and read only those k chunks (1.16 s vs 18.7 s per question on CPU for 5 of 78 chunks). Flat indexes are exact scans, no faster than NumPy; HNSW/IVF are the speed-up. Measure recall@k on labelled questions first: on the BERT paper it was 0.67 at k = 5, and every answer the pipeline lost to brute force (6 vs 8 of 12) was a retrieval miss.
+</details>
+
+## 🧾 Generative RAG End to End: Extra Questions
+
+Full sheet: [Generative RAG End to End](./15-generative-rag.md).
+
+<details>
+<summary><strong>33. Walk me through a RAG system over a PDF, and how you make its answers trustworthy.</strong></summary>
+
+Offline: read the PDF page by page (PyMuPDF), clean with targeted rules (don't delete document words such as `[CLS]` in an NLP paper), chunk by whole sentences with page metadata, embed with a sentence-transformer into a FAISS inner-product index, and build BM25 statistics. Per question: refuse if the best cosine is below a threshold (FIFA question 0.1408), retrieve with hybrid search fused by RRF (recall@1 0.75 vs 0.50 for either alone on the BERT paper), route exact facts to an extractive reader and explanations to FLAN-T5 with a token-budgeted prompt of the most relevant sentences (no metadata inside; 1 → 5 of 12 facts right), decode with beam search, and refuse if the answer's words aren't in the context ("22,500M" support 0.0). Evaluate by stage: 2 of 12 failures were retrieval misses, and generator and reader each got 5 of 12 but different ones (7 by at least one).
+</details>
+
+## 🖼️ Detection, Segmentation, Autoencoders and GANs: Extra Questions
+
+Full sheet: [Detection, Segmentation, Autoencoders and GANs](./16-detection-segmentation-autoencoders-gans.md).
+
+<details>
+<summary><strong>34. Classification vs detection vs segmentation, and how is detection evaluated?</strong></summary>
+
+Classification gives one label per image; detection gives class + score + box per object; segmentation gives a class per pixel (semantic), plus a separate mask per object (instance). Boxes are compared with IoU (overlap ÷ union, a match at ≥ 0.5); NMS keeps the best box and deletes overlapping duplicates; mAP is the area under the precision-recall curve averaged over classes (COCO: also over IoU 0.5–0.95). A real DETR run found the coffee cup at 0.9975 and a false "carrot" at 0.8612 on a cat's nose, so thresholds are chosen on validation data.
+</details>
+
+<details>
+<summary><strong>35. Autoencoder vs GAN, and what is mode collapse?</strong></summary>
+
+An autoencoder compresses its input into a small latent code and rebuilds it, trained only on reconstruction loss; it is used for compression, denoising and anomaly detection (on digits: test MSE 0.0145 with 8 numbers; unseen 9s flagged with AUC 0.8836). A GAN trains a generator (noise → fake) against a discriminator (real or fake); balance is D ≈ 0.5 and D loss ≈ 2 ln 2. Mode collapse is a generator producing only a few kinds of output: with a 100× faster discriminator it covered 2 of 8 modes while 93.4% of samples looked real.
+</details>
+
 ## 🔢 Numbers Worth Quoting
 
 | Fact | Number | From |
@@ -241,6 +287,11 @@ Preprocess (the checkpoint's tokenizer: WordPiece ids with [CLS]/[SEP], attentio
 | BERT | base L 12 / H 768 / A 12 / 110M, large 24 / 1024 / 16 / 340M; 15% chosen → 12% [MASK] / 1.5% random / 1.5% same; SQuAD v1.1 F1 93.2, GLUE 80.5 | [BERT](../../03-ai-ml/03-deep-learning/06-attention-and-transformers/05-bert-pretraining-and-fine-tuning.md) |
 | Stacked encoder mini project | 8,544 params per block (D 32, d_ff 64): 9,922 vs 27,010; norms ≈ √D after each LayerNorm; masked mean pooling | [Stacked encoder blocks](../../03-ai-ml/03-deep-learning/06-attention-and-transformers/06-stacked-encoder-blocks-mini-project.md) |
 | Hugging Face sentiment pipeline | DistilBERT SST-2: 66,955,010 params, logits [−4.2341, 4.6189] → 0.99986; [CLS] 101, [SEP] 102; 512-token limit | [Hugging Face pipelines](../../03-ai-ml/03-deep-learning/07-hugging-face-qna-and-rag/01-hugging-face-pipelines.md) |
+| Extractive document QnA | DistilBERT-SQuAD 65,192,450 params, head 1,538; BERT paper → 78 chunks (180/40 words); right 20.123 vs wrong 20.049; pages 1–4 = 4,556 tokens, 8% seen at 384 | [Extractive document QnA](../../03-ai-ml/03-deep-learning/07-hugging-face-qna-and-rag/02-extractive-document-qna.md) |
+| Retriever + reader (FAISS) | MiniLM 384-d unit vectors, 256-token limit (48 of 78 chunks truncated); 1.16 s vs 18.7 s per question (k = 5, CPU); recall@5 0.67; brute force 8 vs top-5 6 of 12; flat FAISS ≈ NumPy, HNSW 0.17 ms at recall 0.96 | [Retriever + reader](../../03-ai-ml/03-deep-learning/07-hugging-face-qna-and-rag/03-retriever-reader-with-faiss.md) |
+| Generative RAG (FLAN-T5) | 54–55 sentence chunks, ~1.7 tokens/word; hybrid recall@1 0.75 vs 0.50; notebook prompt 1 of 12 facts, sentence-selected 5, extractive 5, either 7; refuse below cosine 0.2 or support 0.5 | [Generative RAG](../../03-ai-ml/03-deep-learning/07-hugging-face-qna-and-rag/04-generative-rag-end-to-end.md) |
+| Detection and segmentation | DETR cup 0.9975, false carrot 0.8612; IoU (0,0,4,4) vs (2,2,6,6) = 0.143; NMS keeps 3 of 8 toy boxes; two cats: semantic 78.3% "cat" vs 37.7% + 37.9% | [Detection and segmentation](../../03-ai-ml/03-deep-learning/08-vision-tasks-and-generative-models/01-object-detection-and-segmentation.md) |
+| Autoencoders and GANs | 8-number code MSE 0.0145 (PCA 0.0246, mean 0.0740); anomaly AUC 0.8836; balanced GAN D 0.511 / 0.457; collapsed 2 of 8 modes | [Autoencoders and GANs](../../03-ai-ml/03-deep-learning/08-vision-tasks-and-generative-models/02-autoencoders-and-gans.md) |
 
 ## 🎯 Pick the Output Layer and Loss
 

@@ -1,0 +1,8 @@
+{
+  "label": "LLM Apps & Agents",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Building applications on top of large language models: calling LLM APIs and engineering prompts, structured outputs, tool calling and agents, LangChain, LangGraph and LlamaIndex, ending in an agent served with FastAPI."
+  }
+}

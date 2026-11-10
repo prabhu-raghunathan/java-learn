@@ -11,6 +11,12 @@ A complete EDA runs in five stages: **load and profile** (shape, dtypes, missing
 
 <FormulaKey />
 
+:::info[Where this page sits]
+**Before:** [Seaborn: Statistical Plots](./03-visualization/08-seaborn-statistical-plots.md), the last tool page; every earlier page in this section supplies one stage of this pipeline.
+**This page:** the full ShopStream EDA in one script: profiling, a logged cleaning pipeline with evidence for every decision, features and aggregation, a GridSpec dashboard mixing Matplotlib and Seaborn, and a written summary of findings.
+**Next:** this is the last page of Python for Data Exploration. The AI / ML tab continues with the [Deep Learning overview](../03-deep-learning/00-overview.md).
+:::
+
 ## 🧭 Start Here: Putting the Whole Toolkit Together
 
 Every previous page took one tool and one slice of the problem. Real EDA doesn't come in slices: a parsing bug in step 2 changes a chart in step 4, and an outlier rule decides whether a "trend" exists at all. This page runs the entire workflow in **one script** you can execute top to bottom, and shows how each stage feeds the next:
@@ -22,6 +28,12 @@ Every previous page took one tool and one slice of the problem. Real EDA doesn't
 | 3. Features and aggregation | What summarizes the business? | Vectorized columns, `pd.cut`, `groupby` / `agg` / `transform`, `pivot_table` | [GroupBy](./02-pandas/05-pandas-groupby-apply-transform.md) |
 | 4. Visualize | Where are the patterns? | `GridSpec`, Matplotlib lines and bars, Seaborn lines, boxes, bars | [Matplotlib](./03-visualization/07-matplotlib-figures-axes.md), [Seaborn](./03-visualization/08-seaborn-statistical-plots.md) |
 | 5. Conclude | What should someone do? | Numbers + effect sizes + caveats | This page |
+
+The chapters build up in this order:
+
+1. **The pipeline**: the five stages as separate, testable functions.
+2. **Cleaning decisions and their evidence**: what each problem was, how many rows it touched, and what was done about it.
+3. **The dashboard layout**: composing one figure from Matplotlib and Seaborn panels with GridSpec.
 
 | New concept | One-line meaning |
 |---|---|
@@ -35,37 +47,11 @@ Every previous page took one tool and one slice of the problem. Real EDA doesn't
 An inspector doesn't start by admiring the view. They check the paperwork matches the house (profile), find the damp patches and dodgy wiring (cleaning), measure every room (aggregation), photograph the problems side by side (dashboard) and then write a report that says what to fix first and how sure they are (findings). Skipping straight to the view is how people buy a house with a cracked foundation.
 :::
 
-## ⚡ Essential Interview Recall
+## 🔴 1. The Pipeline
 
-- 🔴 **Profile before cleaning**: one table per column of dtype, missing %, unique count, example; plus explicit **red-flag counts** (duplicates, invalid values, label variants, orphans, skew).
-- 🔴 **Log every cleaning step's row count**: ShopStream goes **5,020 → 5,000 → 4,958 → 4,934**. Anything that silently drops rows is a bug waiting to happen.
-- 🔴 **Outlier rules must respect groups**: a global fence missed ×40 Books and Beauty prices (they're still cheap next to Electronics); a **per-category log-IQR fence** (k = 3) removed **24** of the 25 injected errors.
-- 🔴 **Joins in a pipeline**: `how="left"`, `validate="m:1"`, `indicator=True`, keep an `is_orphan` flag instead of silently dropping 100 orders.
-- 🔴 **Report effect sizes with uncertainty**: "−0.32 stars per delivery day, Spearman −0.65, 95% CIs about ±0.1" beats "delivery matters".
-- 🔴 **Check confounders before naming causes**: COD orders rate 3.08 vs 3.62 for UPI, but COD orders also take 6.09 vs 4.45 days; within the same delivery bucket, cities rate the same.
-- 🟠 **`GridSpec(3, 4, height_ratios=[...])`** + `fig.add_subplot(gs[r, c0:c1])` lays out a dashboard; pass each Axes to Matplotlib methods **or** Seaborn axes-level functions with `ax=`.
-- 🟠 Use `layout="constrained"` for automatic spacing; `matplotlib.use("Agg")` in scripts; save, then `plt.close(fig)`.
-- 🟠 **Cleaning changes conclusions**: Beauty's "+71% in May" on the Matplotlib page was largely two data-entry errors; after per-category cleaning it's +32%.
-- 🟡 Wrap each stage in a **function** (`profile`, `clean`, `add_order_features`, `summaries`, `dashboard`, `findings`) so the same code runs in a notebook, a test and a scheduled job.
+Every earlier page took one tool and one slice of the problem. Real exploratory data analysis doesn't come in slices: a parsing bug during cleaning changes a chart in the visualization stage, and an outlier rule can decide whether a "trend" exists at all. This page therefore runs the whole workflow in one script, organised as a sequence of functions, each with one job: generate or load the raw data, profile it and flag quality problems, clean it, add features, aggregate it into customer tables and summaries, draw the dashboard, and compute the numbers for the written findings.
 
-## 📐 Formula Sheet
-
-| Concept | Formula | In plain words |
-|---|---|---|
-| Revenue per order | $\pred{r} = \data{p} \cdot \data{q} \cdot (1 - \data{d})$ | Price × quantity after discount |
-| Per-group log-IQR fence | $\log \data{p} > \data{Q_3^{(g)}} + \hyper{k}\,\pred{\text{IQR}^{(g)}}$, $\hyper{k} = 3$ | Extreme for **its own** category |
-| Revenue share | $\pred{s_c} = \dfrac{\sum_{i \in c} \data{r_i}}{\sum_i \data{r_i}}$ | `revenue / revenue.sum()` per category |
-| Growth index | $\pred{I_t} = 100\,\data{x_t}/\data{x_{\text{Jan}}}$ | Compare growth across categories of different size |
-| Rating slope | $\pred{\hat y} = \pred{m}\,\data{\text{days}} + \pred{c}$, $\pred{m} = -0.324$ | Stars gained or lost per delivery day |
-| Recency | $\data{t_{\text{snapshot}}} - \max \data{t_{\text{order}}}$ | Days since a customer's last order |
-
-:::speak[Walk me through how you'd run an EDA on a new dataset.]
-"I work in five stages. First, **profile**: shape, dtypes, missing share and cardinality per column, and explicit red-flag counts like duplicates, impossible values, label variants and orphan keys. On our e-commerce data that found 20 spellings of five categories, dates in two formats, 40% missing ratings and quantities of minus one and 999. Second, **clean**, with each fix explicit and logged: parse each known date format, normalize labels into a categorical, drop duplicates and impossible rows, detect price errors with a log-scale IQR fence **per category**, and join customers with a left join, `validate='m:1'` and an indicator column. I keep a row-count log so every lost row is accounted for. Third, **features and aggregates**: revenue, month, delivery buckets, ratios to category medians, and a per-customer table. Fourth, a **dashboard** on one GridSpec: KPIs, growth, revenue mix and the key relationships with confidence intervals. Fifth, **findings with effect sizes and caveats**: delivery time drives rating at about a third of a star per day, and it explains the city and payment-method differences, which is a confounder story, not three separate problems."
-:::
-
-## The Mental Model
-
-### 1. The pipeline
+Structuring EDA as functions rather than a long notebook has practical benefits. Each stage can be re-run and tested on its own, the same cleaning code can later be reused in a training pipeline, and a reviewer can follow the data's path from raw to conclusion. The most important output of the cleaning stage is not the clean table itself but the **cleaning log**: the row count after every step, from 5,020 raw orders to 4,934 clean ones, so every lost row has a reason.
 
 ```mermaid
 flowchart TB
@@ -80,31 +66,15 @@ flowchart TB
 
 <Animation src="capstone/cleaning-funnel" caption="The raw order count shrinks step by step as duplicates, impossible quantities and extreme prices are removed, ending at 4,934 clean orders. Each bar shows how many rows a single rule removed, so every lost row has a reason." />
 
-### 2. The dashboard layout
-
-```mermaid
-flowchart TB
-    subgraph R0["Row 0: height 0.35 (KPI tiles)"]
-        K1["gs[0, 0] revenue"] --- K2["gs[0, 1] median order"] --- K3["gs[0, 2] rating"] --- K4["gs[0, 3] slow deliveries"]
-    end
-    subgraph R1["Row 1: height 1"]
-        T["gs[1, :2] growth index (Matplotlib)"] --- S["gs[1, 2:] revenue share (Matplotlib)"]
-    end
-    subgraph R2["Row 2: height 1"]
-        LN["gs[2, :2] rating vs delivery (Seaborn lineplot)"] --- BX["gs[2, 2] city box (Seaborn)"] --- BR["gs[2, 3] payment bar (Seaborn)"]
-    end
-    R0 --> R1 --> R2
-```
-
-<Animation src="capstone/gridspec-assembly" caption="A blank figure is divided into a 3 by 4 grid. Cells are merged into panels by slicing the grid, gs 1 with columns 0 to 2 becomes one wide panel, and each panel is then filled by a Matplotlib or Seaborn call that receives that Axes." />
-
-:::analogy[GridSpec is a newspaper page layout]
-An editor starts with a page divided into columns and rows, then gives the headline story three columns, a photo two columns and a sidebar one. Each block is a slice of the same grid, so everything lines up. `gs[1, :2]` is "row 1, the first two columns": the lead story.
+:::tip[🎯 Interview angle]
+**"Walk me through how you'd run an EDA on a new dataset."** Load and profile (shape, dtypes, missingness, cardinality, duplicates), clean with explicit and logged decisions, build features and aggregates, visualize the patterns, and conclude with numbers, effect sizes and caveats. Structure it as functions with a cleaning log so it's reproducible and reusable. The full spoken answer is near the end of the page.
 :::
 
-## The Paradigm / Core Concepts
+## 🔴 2. Cleaning Decisions and Their Evidence
 
-### 🔴 Cleaning decisions and their evidence
+Each cleaning decision on this page answers a problem found during profiling, and each is backed by a count. Some rows are simply impossible and are dropped: exact duplicates double-count revenue, and quantities of 0, -1 or 999 can't be recovered. Some values are inconsistent but recoverable: twenty spellings of five categories are normalized, and dates in two formats are parsed format by format. Some rows are real but incomplete, and those are **kept and flagged** rather than dropped: orders from the orphan customer `C9999` keep an `is_orphan` flag, missing delivery days are filled with the city median plus a `delivery_missing` flag, and missing ratings are left missing with a `rated` flag, because the reason they are missing (unhappy customers skipping the survey) is itself informative.
+
+The price errors show why the method matters. The injected errors multiply a price by 40, so they are multiplicative, and prices differ by orders of magnitude between categories. A single global fence on raw prices flags hundreds of legitimate Electronics orders and misses errors in cheap categories. The fence used here takes logs first, so multiplicative errors become additive, and computes the quartiles **within each category**. With the strict multiplier k = 3 (appropriate when deleting data), it removes 24 orders against the 25 errors injected.
 
 | Problem found in profiling | Count | Decision | Why |
 |---|---|---|---|
@@ -139,7 +109,41 @@ $$
 
 </Formula>
 
-## ⚙️ Under the Hood (Pipeline Mechanics)
+:::tip[🎯 Interview angle]
+**"How do you decide whether to drop, fill or flag a problem row?"** Drop only what is impossible and unrecoverable (duplicates, quantity -1); normalize what is inconsistent; keep real-but-incomplete rows with flags (`is_orphan`, `delivery_missing`, `rated`). Log the row count after every step, and detect outliers on the right scale and grouping: here a per-category log-IQR fence with k = 3 removed 24 of 25 injected errors.
+:::
+
+## 🟠 3. The Dashboard Layout
+
+The visualization stage builds one dashboard figure rather than a dozen separate charts, so the story can be read at a glance. **GridSpec** divides the figure into a grid, here 3 rows by 4 columns, and each panel is a **slice** of that grid: `gs[1, :2]` is row 1, the first two columns, a wide panel for the growth chart. Rows can have different heights, so a short top row holds four KPI tiles while the two lower rows hold charts.
+
+Because Seaborn's axes-level functions accept `ax=`, Matplotlib and Seaborn panels mix freely in one figure: the growth index and revenue share are drawn with Matplotlib, while rating vs delivery, the city box plot and the payment bar chart are drawn with Seaborn on Axes created from the grid. Every panel is then finished with ordinary Matplotlib methods, and the whole figure is saved once.
+
+```mermaid
+flowchart TB
+    subgraph R0["Row 0: height 0.35 (KPI tiles)"]
+        K1["gs[0, 0] revenue"] --- K2["gs[0, 1] median order"] --- K3["gs[0, 2] rating"] --- K4["gs[0, 3] slow deliveries"]
+    end
+    subgraph R1["Row 1: height 1"]
+        T["gs[1, :2] growth index (Matplotlib)"] --- S["gs[1, 2:] revenue share (Matplotlib)"]
+    end
+    subgraph R2["Row 2: height 1"]
+        LN["gs[2, :2] rating vs delivery (Seaborn lineplot)"] --- BX["gs[2, 2] city box (Seaborn)"] --- BR["gs[2, 3] payment bar (Seaborn)"]
+    end
+    R0 --> R1 --> R2
+```
+
+<Animation src="capstone/gridspec-assembly" caption="A blank figure is divided into a 3 by 4 grid. Cells are merged into panels by slicing the grid, gs 1 with columns 0 to 2 becomes one wide panel, and each panel is then filled by a Matplotlib or Seaborn call that receives that Axes." />
+
+:::analogy[GridSpec is a newspaper page layout]
+An editor starts with a page divided into columns and rows, then gives the headline story three columns, a photo two columns and a sidebar one. Each block is a slice of the same grid, so everything lines up. `gs[1, :2]` is "row 1, the first two columns": the lead story.
+:::
+
+:::tip[🎯 Interview angle]
+**"How would you combine Matplotlib and Seaborn plots in one dashboard?"** Create the figure and a `GridSpec`, carve panels by slicing it (`fig.add_subplot(gs[1, :2])`), and pass each Axes to axes-level Seaborn functions with `ax=` or draw on it with Matplotlib. Figure-level Seaborn functions can't be placed in a grid because they create their own figure.
+:::
+
+## ⚙️ Going Deeper (Pipeline Mechanics)
 
 - **Functions, not cells**: each stage takes DataFrames and returns DataFrames, with no global state. The same `clean()` can be unit-tested on a 10-row fixture, imported by a training pipeline and run by a scheduler.
 - **Copy-on-Write keeps stages independent**: `o.assign(...)`, filtering and `drop_duplicates()` return new objects that share memory until modified, so stages don't need defensive `.copy()` calls and can't corrupt their inputs.
@@ -642,3 +646,33 @@ A "predict the customer's rating" model reached 0.85 accuracy offline and was us
 - **Time windows matter**: partial first and last weeks look like drops in weekly charts; trim them or label them.
 - **A dashboard is not a finding**: write the conclusion as a sentence with a number and a caveat.
 - **Keep the raw data**: never overwrite the source file with cleaned data; cleaning rules change.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **Profile before cleaning**: one table per column of dtype, missing %, unique count, example; plus explicit **red-flag counts** (duplicates, invalid values, label variants, orphans, skew).
+- 🔴 **Log every cleaning step's row count**: ShopStream goes **5,020 → 5,000 → 4,958 → 4,934**. Anything that silently drops rows is a bug waiting to happen.
+- 🔴 **Outlier rules must respect groups**: a global fence missed ×40 Books and Beauty prices (they're still cheap next to Electronics); a **per-category log-IQR fence** (k = 3) removed **24** of the 25 injected errors.
+- 🔴 **Joins in a pipeline**: `how="left"`, `validate="m:1"`, `indicator=True`, keep an `is_orphan` flag instead of silently dropping 100 orders.
+- 🔴 **Report effect sizes with uncertainty**: "−0.32 stars per delivery day, Spearman −0.65, 95% CIs about ±0.1" beats "delivery matters".
+- 🔴 **Check confounders before naming causes**: COD orders rate 3.08 vs 3.62 for UPI, but COD orders also take 6.09 vs 4.45 days; within the same delivery bucket, cities rate the same.
+- 🟠 **`GridSpec(3, 4, height_ratios=[...])`** + `fig.add_subplot(gs[r, c0:c1])` lays out a dashboard; pass each Axes to Matplotlib methods **or** Seaborn axes-level functions with `ax=`.
+- 🟠 Use `layout="constrained"` for automatic spacing; `matplotlib.use("Agg")` in scripts; save, then `plt.close(fig)`.
+- 🟠 **Cleaning changes conclusions**: Beauty's "+71% in May" on the Matplotlib page was largely two data-entry errors; after per-category cleaning it's +32%.
+- 🟡 Wrap each stage in a **function** (`profile`, `clean`, `add_order_features`, `summaries`, `dashboard`, `findings`) so the same code runs in a notebook, a test and a scheduled job.
+
+:::speak[Walk me through how you'd run an EDA on a new dataset.]
+"I work in five stages. First, **profile**: shape, dtypes, missing share and cardinality per column, and explicit red-flag counts like duplicates, impossible values, label variants and orphan keys. On our e-commerce data that found 20 spellings of five categories, dates in two formats, 40% missing ratings and quantities of minus one and 999. Second, **clean**, with each fix explicit and logged: parse each known date format, normalize labels into a categorical, drop duplicates and impossible rows, detect price errors with a log-scale IQR fence **per category**, and join customers with a left join, `validate='m:1'` and an indicator column. I keep a row-count log so every lost row is accounted for. Third, **features and aggregates**: revenue, month, delivery buckets, ratios to category medians, and a per-customer table. Fourth, a **dashboard** on one GridSpec: KPIs, growth, revenue mix and the key relationships with confidence intervals. Fifth, **findings with effect sizes and caveats**: delivery time drives rating at about a third of a star per day, and it explains the city and payment-method differences, which is a confounder story, not three separate problems."
+:::
+
+## 📐 Formula Sheet
+
+| Concept | Formula | In plain words |
+|---|---|---|
+| Revenue per order | $\pred{r} = \data{p} \cdot \data{q} \cdot (1 - \data{d})$ | Price × quantity after discount |
+| Per-group log-IQR fence | $\log \data{p} > \data{Q_3^{(g)}} + \hyper{k}\,\pred{\text{IQR}^{(g)}}$, $\hyper{k} = 3$ | Extreme for **its own** category |
+| Revenue share | $\pred{s_c} = \dfrac{\sum_{i \in c} \data{r_i}}{\sum_i \data{r_i}}$ | `revenue / revenue.sum()` per category |
+| Growth index | $\pred{I_t} = 100\,\data{x_t}/\data{x_{\text{Jan}}}$ | Compare growth across categories of different size |
+| Rating slope | $\pred{\hat y} = \pred{m}\,\data{\text{days}} + \pred{c}$, $\pred{m} = -0.324$ | Stars gained or lost per delivery day |
+| Recency | $\data{t_{\text{snapshot}}} - \max \data{t_{\text{order}}}$ | Days since a customer's last order |

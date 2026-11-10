@@ -1,0 +1,8 @@
+{
+  "label": "Vision Tasks and Generative Models",
+  "position": 9,
+  "link": {
+    "type": "generated-index",
+    "description": "Beyond whole-image classification: object detection (bounding boxes, IoU, NMS, mAP), semantic, instance and panoptic segmentation, autoencoders (reconstruction, denoising, anomaly detection), VAEs, and GANs with mode collapse, all checked with real models."
+  }
+}

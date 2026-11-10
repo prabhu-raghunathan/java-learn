@@ -9,34 +9,53 @@ Python is a **dynamically typed** (types live on objects, not on names) and **st
 
 <PriorityKey lang="Python" v="3.10" />
 
-## ⚡ Essential Interview Recall
 
-- 🔴 **Python is compiled *and* interpreted**: source → **bytecode** (cached as `.pyc` in `__pycache__`) → executed by the **Python Virtual Machine (PVM)**, an evaluation loop in C. "Interpreted" means *no ahead-of-time machine code*, not *line-by-line source reading*.
-- 🔴 **CPython** is the reference implementation (written in C). Others: **PyPy** (JIT, fast pure-Python loops), **MicroPython** (microcontrollers), **GraalPy** (JVM/GraalVM), **Jython** (JVM, but stuck on **Python 2.7**).
-- 🔴 Python is **slow per operation** (every `a + b` is a type check + function lookup + object allocation) but **dominates AI** because it's the **glue**: NumPy/PyTorch run the maths in compiled C/C++/CUDA and **release the GIL** while they do.
-- 🔴 **GIL** (Global Interpreter Lock): in standard CPython only **one thread runs Python bytecode at a time** → threads don't speed up CPU-bound Python; use **multiprocessing** or native code. A **free-threaded** (no-GIL) build exists since 3.13 and is officially supported in 3.14, but isn't the default. Details on the [Concurrency, Memory & Performance](./09-concurrency-memory-performance.md) page.
-- 🔴 **Everything is an object** (ints, functions, classes, modules). Each has **identity** (`id()`), **type** (`type()`) and **value**.
-- 🔴 **Variables are names (labels), not boxes.** `b = a` makes both names point to **the same object**; nothing is copied.
-- 🔴 **Dynamic + strong typing**: a name can be rebound to any type, but `"5" + 5` raises `TypeError` (no implicit coercion between unrelated types).
-- 🔴 **Immutable**: `int`, `float`, `complex`, `bool`, `str`, `bytes`, `tuple`, `frozenset`, `None`. **Mutable**: `list`, `dict`, `set`, `bytearray`, most user-defined objects.
-- 🔴 **`==` compares values** (calls `__eq__`); **`is` compares identity** (same object). Use `is` only for singletons: `None`, `True`, `False`, sentinels.
-- 🟠 **`int` has arbitrary precision** (`2**100` just works). **`float` is a 64-bit IEEE-754 double** → `0.1 + 0.2 != 0.3`; use `math.isclose` or `Decimal`.
-- 🟠 **`bool` is a subclass of `int`**: `True + True == 2`, and `1`, `1.0`, `True` are the **same dict key**.
-- 🟠 **Small-int cache**: CPython pre-creates ints **-5 to 256**, so `is` "works" for them and fails for 257 created at runtime. Never rely on it.
-- 🟠 **Casting**: `int(3.99) == 3` (truncates toward zero), `int("3.5")` raises `ValueError`, **`bool("False")` is `True`** (any non-empty string is truthy). `round()` uses **banker's rounding**: `round(2.5) == 2`.
-- 🟠 **Falsy values**: `0`, `0.0`, `0j`, `""`, `[]`, `()`, `{}`, `set()`, `range(0)`, `None`, `False`. Everything else is truthy (including `"0"`, `" "`, `[0]` and NaN).
-- 🟠 **`input()` always returns `str`**; production code uses **`argparse`**, environment variables or config files instead.
-- 🟡 Since 3.11 the interpreter is **specializing/adaptive** (PEP 659: hot bytecodes are rewritten to type-specific versions, ~25% faster); 3.13+ ships an **experimental JIT** (off by default).
-- 🟡 **f-strings**: `{x:.4f}`, `{x:.2%}`, `{n:,}`, and **`{x=}`** for debugging <Since v="3.8" lang="Python" />. Since 3.12 you can reuse the same quote type inside `{}`.
-
-:::speak[Is Python compiled or interpreted, and why is it fast enough for AI?]
-"Both. When I run `python train.py`, CPython parses the source into an AST and **compiles it to bytecode**, which it caches as `.pyc` files. The **Python Virtual Machine** then executes that bytecode instruction by instruction in a C loop. There's no ahead-of-time machine code, so every `a + b` involves a type check, a method lookup and often a new object. That's why a pure-Python loop over a million numbers is slow. AI code is fast anyway because Python is only the **orchestration layer**: `torch.matmul` or `np.dot` call into compiled C, C++ or CUDA kernels that process whole arrays at once and **release the GIL** while they run. So the rule I follow is: **keep the hot loop out of Python** by vectorizing with NumPy or PyTorch, and use Python for control flow, data plumbing and APIs. Since 3.11 CPython also specializes hot bytecodes, and 3.13 added an experimental JIT, but vectorization still wins by orders of magnitude."
+:::info[Where this page sits]
+**Before:** nothing: this is the first page of the Python track, written for engineers who already know another language (the comparisons are mostly with Java).
+**This page:** how CPython turns a `.py` file into running code, the object model (identity, type, value; names vs objects), the built-in types and their mutability, casting, truthiness, and the everyday tools for text in and out (`print`, f-strings, `input`, `argparse`).
+**Next:** [Operators & Control Flow](./02-operators-and-control-flow.md).
 :::
 
-## The Mental Model
+## 🧭 Start Here
 
-### 1. From `train.py` to running code
+Every Python interview, from a service-company screening round to an AI-lab loop, starts somewhere on this page: "is Python compiled or interpreted?", "what is the difference between `==` and `is`?", "which types are mutable?", "why is `0.1 + 0.2` not `0.3`?". They sound like trivia, but they all come from one idea. In Python **every value is an object** living on the heap, and a variable is only a **name** attached to an object. Once that picture is in your head, aliasing bugs, the mutable-default trap, why lists can't be dict keys, and why `is` sometimes "works" on numbers all stop being surprises.
 
+The second idea is about speed. CPython compiles your source to **bytecode** and then runs that bytecode in an interpreter loop written in C. That design makes Python flexible and pleasant, and it also makes every single `a + b` expensive. AI code is fast anyway because Python is the *glue*: NumPy and PyTorch run the actual maths in compiled C, C++ and CUDA, and Python only orchestrates. Interviewers for AI Engineer roles love this question because it separates people who use the libraries from people who understand why they are built the way they are.
+
+The page builds the ideas in this order:
+
+1. **How Python runs**: source → bytecode → the Python Virtual Machine, and the implementations (CPython, PyPy, ...).
+2. **Objects and names**: identity, type and value; assignment binds names, it never copies.
+3. **Built-in types**: numbers, text, collections; which are mutable and which are hashable; precision as a memory budget in AI.
+4. **Casting and strong typing**: explicit conversions and the traps (`int(-3.99)`, `bool("False")`).
+5. **Truthiness**: what counts as false in an `if`.
+6. **Text in and out**: `print`, escape sequences, f-strings, `input` versus `argparse`.
+
+| New concept | One-line meaning |
+|---|---|
+| **Bytecode** | The compact instruction list CPython compiles your source into (cached as `.pyc`) |
+| **PVM** | The Python Virtual Machine: CPython's C loop that executes bytecode one instruction at a time |
+| **GIL** | Global Interpreter Lock: only one thread runs Python bytecode at a time in standard CPython |
+| **Object** | A value on the heap with an identity (`id`), a type (`type`) and a value |
+| **Name / binding** | A variable is a label attached to an object; assignment moves labels, never copies objects |
+| **Dynamic typing** | Types belong to objects, so a name can be rebound to any type |
+| **Strong typing** | No silent coercion between unrelated types: `"5" + 5` is a `TypeError` |
+| **Mutable / immutable** | Can the object change in place (list, dict) or only be replaced (int, str, tuple)? |
+| **Hashable** | Has a stable hash, so it can be a dict key or set member (immutable objects with immutable contents) |
+| **Truthy / falsy** | How an object behaves in `if`: empty containers, zero and `None` are falsy |
+| **f-string** | A string literal with `{expressions}` and format specs, the standard way to format output |
+
+:::analogy[A library, not a warehouse of boxes]
+Think of Python's memory as a library. The books on the shelves are the objects; each has a catalogue number (its identity), a genre (its type) and its contents (its value). Variables are index cards that point at books. Two cards can point at the same book, a card can be re-pointed at another book at any time, and when no card points at a book any more, the librarian removes it. Nothing on this page is more than a consequence of that picture.
+:::
+
+## 🔴 1. From Source to Running Code: Compiled *and* Interpreted
+
+"Is Python compiled or interpreted?" has a precise answer: both. When you run `python train.py`, CPython first **tokenizes** the source text, **parses** it into an abstract syntax tree (AST), and **compiles** that tree into **bytecode**: a compact list of instructions such as `LOAD_NAME`, `BINARY_OP` and `STORE_NAME`, grouped into code objects. For imported modules it caches the bytecode as `.pyc` files in `__pycache__` so the next import can skip the compile step. Then the **Python Virtual Machine (PVM)**, an evaluation loop written in C, executes the bytecode one instruction at a time. "Interpreted" therefore means *there is no ahead-of-time compilation to machine code*, not that Python reads your source line by line.
+
+That evaluation loop is why pure Python is slow per operation. A Java `a + b` on two `int`s compiles to a single machine instruction. In CPython, `BINARY_OP` must look up the types of both operands at run time, find the right C function for that pair of types, call it, and usually allocate a brand-new object for the result. Since 3.11 the interpreter is **specializing and adaptive** (it rewrites hot instructions into type-specific versions), and 3.13 added an experimental JIT, but the dynamic overhead per operation remains. The engineering answer is not to fight it: keep the hot loop out of Python. When you call `np.dot` or `torch.matmul`, one bytecode hands a whole typed buffer to compiled C, C++ or CUDA code that runs at full speed and **releases the GIL** while it works.
+
+"Python" is a language specification with several implementations. **CPython**, written in C, is the reference implementation and the only one that matters for AI work, because NumPy, PyTorch and nearly every scientific library are built against its C API. **PyPy** adds a JIT that makes pure-Python loops much faster but runs C extensions slowly; **MicroPython** targets microcontrollers; **GraalPy** runs on the JVM; **Jython** is stuck on Python 2.7. Python itself is older than Java: Guido van Rossum started it in 1989, Python 3 broke compatibility in 2008, and Python 2 reached end of life in 2020.
 ```mermaid
 flowchart TB
     S["train.py (source text)"] --> T["Tokenizer + Parser → AST"]
@@ -50,9 +69,31 @@ flowchart TB
 :::analogy[Bytecode is sheet music, NumPy is a recording]
 Compiling to bytecode is like transcribing a song into sheet music once. The PVM is a musician who reads that sheet and plays it note by note, every single time: flexible, but slow for a long piece. Calling NumPy or PyTorch is like pressing play on a studio recording: one instruction, and the whole piece comes out at full speed.
 :::
+### 🔴 Python implementations
 
-### 2. Names point at objects
+| Implementation | Written in / runs on | Why you'd use it | Catch |
+|---|---|---|---|
+| **CPython** | C | The default; every AI library (NumPy, PyTorch, TensorFlow) targets its C API | GIL; slow pure-Python loops |
+| **PyPy** | RPython, with a **JIT** | 4–10× faster pure-Python loops | C-extension support (NumPy, PyTorch) is partial and slower |
+| **MicroPython** | C, for microcontrollers | IoT, embedded boards | A subset of the language and standard library |
+| **GraalPy** | GraalVM (JVM) | Calling Python from Java and vice versa | Smaller ecosystem compatibility |
+| **Jython** | JVM | Legacy Java integration | **Python 2.7 only**: not an option for new code |
 
+**History in one line:** created by **Guido van Rossum** (started 1989, first release **1991**); Python 3.0 in 2008 broke compatibility (`print()` became a function, `str` became Unicode); **Python 2 reached end of life in January 2020**.
+
+**Where it's used:** web backends (Django, FastAPI), data science, machine learning and deep learning, LLM applications and agents, automation and scripting, DevOps tooling, cybersecurity, game scripting.
+
+:::tip[🎯 Interview angle]
+**"Is Python compiled or interpreted, and if it's slow, why does all of AI use it?"** Both: CPython compiles source to bytecode (cached as `.pyc`) and the PVM interprets that bytecode in a C loop, with no ahead-of-time machine code. Each operation does dynamic type lookups and allocations, so pure-Python loops are slow. AI code is fast because Python only orchestrates: NumPy and PyTorch run vectorized kernels in C, C++ and CUDA, releasing the GIL, so the rule is to keep the hot loop out of Python.
+:::
+
+## 🔴 2. Everything Is an Object, and Variables Are Names
+
+In Python every value is an **object**: integers, strings, lists, functions, classes, even modules. Each object has three things. Its **identity** is fixed for its lifetime (CPython uses the memory address, and `id(x)` returns it). Its **type** decides what operations it supports (`type(x)`). Its **value** is the data it holds, which may or may not be allowed to change. There are no "primitive" values that live outside this system, which is why even the integer `1` takes 28 bytes in CPython while a Java `int` takes 4 (the details are in Going Deeper).
+
+A **variable is a name bound to an object**, not a box that holds a value. Writing `x = 5` creates (or reuses) an `int` object and attaches the name `x` to it in the current namespace, which for module code is literally a dictionary. Writing `b = a` does not copy anything: it attaches a second name to the *same* object. If that object is mutable, a change made through `b` is visible through `a`, because there is only one object. Rebinding is different from mutating: `b = b + [4]` builds a new list and moves only the name `b` to it, while `b.append(4)` changes the shared list in place.
+
+This is also what "dynamically typed" means: the *object* has a type, the *name* does not, so the same name can later be bound to a string. Python is still **strongly typed**, because operations check the types of the objects involved and refuse to guess (`"5" + 5` raises `TypeError`). Two comparisons follow from the model: `==` asks whether two objects have equal **values** (by calling `__eq__`), while `is` asks whether two names point to the **same object** (by comparing identities). Use `is` only for singletons such as `None`.
 ```mermaid
 flowchart LR
     subgraph Names["Namespace (a dict of names)"]
@@ -75,24 +116,17 @@ flowchart LR
 In Java you can picture an `int` variable as a box holding a number. In Python every name is a luggage tag tied to a suitcase (the object). `b = a` ties a second tag to the same suitcase: open it through either tag and you see the same contents. Reassigning a name just moves that one tag to a different suitcase.
 :::
 
-## The Paradigm / Core Concepts
+:::tip[🎯 Interview angle]
+**"What's the difference between `==` and `is`, and what does `b = a` do?"** Every value is an object with an identity, a type and a value; variables are names bound to objects. `b = a` binds a second name to the same object, so mutating it through either name is visible through both, while rebinding `b` to a new object leaves `a` alone. `==` compares values via `__eq__`; `is` compares identity and should be used only for singletons like `None`.
+:::
 
-### 🔴 Python implementations
+## 🔴 3. Built-in Data Types, Mutability and Hashability
 
-| Implementation | Written in / runs on | Why you'd use it | Catch |
-|---|---|---|---|
-| **CPython** | C | The default; every AI library (NumPy, PyTorch, TensorFlow) targets its C API | GIL; slow pure-Python loops |
-| **PyPy** | RPython, with a **JIT** | 4–10× faster pure-Python loops | C-extension support (NumPy, PyTorch) is partial and slower |
-| **MicroPython** | C, for microcontrollers | IoT, embedded boards | A subset of the language and standard library |
-| **GraalPy** | GraalVM (JVM) | Calling Python from Java and vice versa | Smaller ecosystem compatibility |
-| **Jython** | JVM | Legacy Java integration | **Python 2.7 only**: not an option for new code |
+Python's built-in types fall into a few families: numbers (`int`, `float`, `complex`, and `bool`, which is a subclass of `int`), text and binary data (`str`, `bytes`, `bytearray`), sequences (`list`, `tuple`, `range`), sets (`set`, `frozenset`), mappings (`dict`) and the single value `None`. Two of them behave differently from Java. `int` has **arbitrary precision**: `2**100` simply works, because the object grows instead of overflowing. `float` is a 64-bit IEEE-754 double, exactly like Java's `double`, so `0.1 + 0.2` is `0.30000000000000004`, and floats must be compared with a tolerance (`math.isclose`) or replaced by `Decimal` for money.
 
-**History in one line:** created by **Guido van Rossum** (started 1989, first release **1991**); Python 3.0 in 2008 broke compatibility (`print()` became a function, `str` became Unicode); **Python 2 reached end of life in January 2020**.
+The property that matters most in interviews is **mutability**. A mutable object (list, dict, set, bytearray, most user-defined objects) can change in place: same identity, new contents. An immutable object (numbers, `str`, `bytes`, `tuple`, `frozenset`, `None`) can never change; any "modification" creates a new object. Mutability decides whether shared references are safe, and it also decides **hashability**: an object can be a dictionary key or a set member only if its hash can never change, which in practice means it is immutable and everything it contains is immutable too. A tuple of ints is hashable; a tuple containing a list is not.
 
-**Where it's used:** web backends (Django, FastAPI), data science, machine learning and deep learning, LLM applications and agents, automation and scripting, DevOps tooling, cybersecurity, game scripting.
-
-### 🔴 Built-in data types
-
+For AI work there is a second dimension: precision as a memory budget. Python's own `float` is always 64-bit, but deep-learning frameworks store tensors in smaller types (FP32, FP16, bfloat16, int8, int4) because the bytes per parameter multiplied by the parameter count is the model's memory footprint. The box at the end of this chapter has the numbers.
 | Category | Type | Example | Mutable? | Hashable? | Notes |
 |---|---|---|:---:|:---:|---|
 | Numeric | `int` | `42`, `2**100` | ❌ | ✅ | **Arbitrary precision**: never overflows |
@@ -118,30 +152,6 @@ An object is **mutable** if it can change **in place** (same `id`, new contents)
 Everyone can safely share a printed book (an `int`, a `str`, a `tuple`): nobody can change the words, so lending it out is harmless. A whiteboard (a `list` or `dict`) can be wiped and rewritten by anyone standing in front of it, so if two teams share one, each sees the other's scribbles. That's why only "printed" objects are allowed as dictionary keys.
 :::
 
-### 🔴 Type conversion (casting)
-
-| Function | Converts to | Examples | Result / trap |
-|---|---|---|---|
-| `int()` | Whole number | `int("42")`, `int(3.99)`, `int(-3.99)` | `42`, `3`, **`-3`** (truncates **toward zero**) |
-| `int(s, base)` | Whole number from text in a base | `int("ff", 16)`, `int("0b101", 0)` | `255`, `5` (`base=0` reads the prefix) |
-| `float()` | Decimal number | `float("3.14")`, `float(5)`, `float("nan")` | `3.14`, `5.0`, `nan` |
-| `str()` | Text | `str(100)` | `"100"` |
-| `bool()` | `True` / `False` | `bool(1)`, `bool(0)`, `bool("")`, **`bool("False")`** | `True`, `False`, `False`, **`True`** |
-| `list()` / `tuple()` / `set()` | Collections from any iterable | `list((1, 2, 3))`, `tuple("Alex")` | `[1, 2, 3]`, `('A', 'l', 'e', 'x')` |
-| `dict()` | Mapping from key-value pairs | `dict([("a", 1), ("b", 2)])` | `{'a': 1, 'b': 2}` |
-
-- **Implicit conversion** happens only along the numeric tower: `int` → `float` → `complex` (`3 + 2.0 == 5.0`). `/` always returns a `float` (`7 / 7 == 1.0`).
-- **Strong typing**: `"5" + 5` → `TypeError: can only concatenate str (not "int") to str`. Convert explicitly.
-- `int()` accepts surrounding whitespace and underscores (`int(" 42 ")`, `int("1_000")`), but not a decimal point: `int("3.5")` raises `ValueError`. Use `int(float("3.5"))` if you really mean it.
-
-### 🟠 Truthy and falsy
-
-| Falsy (`bool(x) is False`) | Surprisingly truthy |
-|---|---|
-| `0`, `0.0`, `0j`, `False`, `None` | `"0"`, `"False"`, `" "` (a space) |
-| `""`, `[]`, `()`, `{}`, `set()`, `range(0)` | `[0]`, `[[]]`, `(None,)` (non-empty containers) |
-| Any object whose `__bool__` returns `False` or `__len__` returns 0 | `float("nan")` |
-
 :::info[AI Engineering: precision is a memory budget]
 Python's own `float` is always **64-bit**. Deep-learning frameworks store weights in smaller types to fit models in GPU memory:
 
@@ -156,7 +166,59 @@ Python's own `float` is always **64-bit**. Deep-learning frameworks store weight
 A 7-billion-parameter model needs about **28 GB in FP32, 14 GB in BF16 and 3.5 GB in 4-bit**: bytes per parameter × parameter count.
 :::
 
-## ⚙️ Under the Hood (CPython Internals)
+:::tip[🎯 Interview angle]
+**"Which Python types are mutable, and why can't a list be a dict key?"** Mutable: `list`, `dict`, `set`, `bytearray` and most user objects; immutable: numbers, `bool`, `str`, `bytes`, `tuple`, `frozenset`, `None`. Dict keys and set members must be hashable, and a hash must never change while the object is stored, so only immutable objects with immutable contents qualify: a tuple of ints is fine, a list or a tuple containing a list is not. Also mention that `int` never overflows and `float` is a 64-bit double, hence `0.1 + 0.2 != 0.3`.
+:::
+
+## 🔴 4. Type Conversion (Casting) and Strong Typing
+
+Because Python is strongly typed, it converts between unrelated types only when you ask. The constructors do the asking: `int()`, `float()`, `str()`, `bool()`, `list()`, `tuple()`, `set()` and `dict()` build a new object of the target type from the argument. The only **implicit** conversions are along the numeric tower, `int` to `float` to `complex`, so `3 + 2.0` is `5.0`; and the `/` operator always produces a `float`, even for `7 / 7`.
+
+The casting functions have precise rules that interviewers turn into trick questions. `int()` on a float **truncates toward zero**, so `int(3.99)` is 3 and `int(-3.99)` is -3 (not -4). `int()` on a string accepts whitespace and underscores but not a decimal point, so `int("3.5")` raises `ValueError`. `int()` also takes a base (`int("ff", 16)` is 255). `bool()` on a string only checks whether the string is empty, which is why `bool("False")` is `True`, a classic source of configuration bugs (see Production Scenarios).
+| Function | Converts to | Examples | Result / trap |
+|---|---|---|---|
+| `int()` | Whole number | `int("42")`, `int(3.99)`, `int(-3.99)` | `42`, `3`, **`-3`** (truncates **toward zero**) |
+| `int(s, base)` | Whole number from text in a base | `int("ff", 16)`, `int("0b101", 0)` | `255`, `5` (`base=0` reads the prefix) |
+| `float()` | Decimal number | `float("3.14")`, `float(5)`, `float("nan")` | `3.14`, `5.0`, `nan` |
+| `str()` | Text | `str(100)` | `"100"` |
+| `bool()` | `True` / `False` | `bool(1)`, `bool(0)`, `bool("")`, **`bool("False")`** | `True`, `False`, `False`, **`True`** |
+| `list()` / `tuple()` / `set()` | Collections from any iterable | `list((1, 2, 3))`, `tuple("Alex")` | `[1, 2, 3]`, `('A', 'l', 'e', 'x')` |
+| `dict()` | Mapping from key-value pairs | `dict([("a", 1), ("b", 2)])` | `{'a': 1, 'b': 2}` |
+
+- **Implicit conversion** happens only along the numeric tower: `int` → `float` → `complex` (`3 + 2.0 == 5.0`). `/` always returns a `float` (`7 / 7 == 1.0`).
+- **Strong typing**: `"5" + 5` → `TypeError: can only concatenate str (not "int") to str`. Convert explicitly.
+- `int()` accepts surrounding whitespace and underscores (`int(" 42 ")`, `int("1_000")`), but not a decimal point: `int("3.5")` raises `ValueError`. Use `int(float("3.5"))` if you really mean it.
+
+:::tip[🎯 Interview angle]
+**"What does `int(-3.99)` return, and what's `bool("False")`?"** `int()` truncates toward zero, so -3 (while `math.floor` gives -4); and `bool("False")` is `True` because `bool` on a string only checks emptiness. Python only converts implicitly along the numeric tower (`int` → `float` → `complex`); anything else, like `"5" + 5`, is a `TypeError`, so you convert explicitly and parse configuration strings with explicit comparisons.
+:::
+
+## 🟠 5. Truthiness: What Counts as False
+
+Any object can appear in an `if`, a `while` or a boolean expression, and Python decides whether it is "true enough" by its **truthiness**. The rule is short. Zero of any numeric type, `False`, `None`, and every **empty** container or sequence (`""`, `[]`, `()`, `{}`, `set()`, `range(0)`) are **falsy**; everything else is **truthy**. A user-defined class controls this with `__bool__`, or failing that with `__len__`.
+
+Idiomatic Python leans on this: `if items:` rather than `if len(items) > 0:`, `if not name:` rather than `if name == "":`. The traps are the values that *look* false but are truthy: the strings `"0"`, `"False"` and `" "`, a list containing one empty list, and `float("nan")`. And there is one case where truthiness fails loudly: a NumPy array or pandas Series has no single truth value, so `if arr:` (or `if arr == None:`) raises `ValueError`. Test `is None` and use `.any()` or `.all()` instead.
+| Falsy (`bool(x) is False`) | Surprisingly truthy |
+|---|---|
+| `0`, `0.0`, `0j`, `False`, `None` | `"0"`, `"False"`, `" "` (a space) |
+| `""`, `[]`, `()`, `{}`, `set()`, `range(0)` | `[0]`, `[[]]`, `(None,)` (non-empty containers) |
+| Any object whose `__bool__` returns `False` or `__len__` returns 0 | `float("nan")` |
+
+:::tip[🎯 Interview angle]
+**"What's falsy in Python?"** Zero of any numeric type, `False`, `None`, and empty containers or sequences; everything else is truthy, including `"0"`, `"False"`, `[0]` and NaN. Custom classes define truthiness with `__bool__` or `__len__`. And arrays from NumPy or pandas have no single truth value, so use `is None`, `.any()` or `.all()` rather than `if arr:`.
+:::
+
+## 🟠 6. Text In and Out: `print`, f-strings and `input`
+
+Every program needs to show results and read settings, and Python's everyday tools for that are simple but full of details interviewers check. `print()` writes its arguments separated by `sep` (a space by default) and followed by `end` (a newline by default); `flush=True` forces the text out immediately, which matters when output goes to a log file or a pipe and would otherwise be buffered. Strings use backslash **escape sequences** (`\n`, `\t`, `\\`), and a **raw string** (`r"C:\new_data"`) turns them off, which is what you want for Windows paths and regular expressions. A triple-quoted string as the first statement of a function is a **docstring**, stored in `__doc__` and, in agent code, read by LLM tool-calling frameworks as the tool's description.
+
+**f-strings** (`f"Loss: {val_loss:.4f}"`) are the standard way to format output: any expression inside braces, followed by a format specification for decimals, percentages, thousands separators, alignment, padding or scientific notation, and since 3.8 the `{x=}` form that prints the expression together with its value. Input is the other direction. `input()` blocks for a human and always returns a `str`, so it belongs in coding rounds and interactive scripts. Real programs read **command-line arguments** with `argparse`, **secrets** from environment variables, and large configurations from versioned files. The implementation section has a block for each of these.
+
+:::tip[🎯 Interview angle]
+**"How do you pass hyperparameters and secrets to a training script?"** Not with `input()`, which blocks and always returns a string. Hyperparameters and paths go through `argparse` (typed, with defaults and `--help`, reproducible in schedulers), secrets like API keys come from environment variables, and large experiment settings live in versioned config files validated by tools such as pydantic-settings. For output, use f-strings with format specs and `flush=True` (or logging) when stdout goes to a file.
+:::
+
+## ⚙️ Going Deeper (CPython Internals)
 
 - **Every object starts with a header**: a **reference count** and a **pointer to its type**. That's why even a small `int` takes **28 bytes** (`sys.getsizeof(1)`) where Java's `int` takes 4. A `float` is 24 bytes, an empty `list` 56, an empty `dict` 64.
 - **`int` is arbitrary precision**: stored as an array of 30-bit "digits". `sys.getsizeof(2**30)` is 32 and `sys.getsizeof(2**100)` is 40: the object grows instead of overflowing.
@@ -506,3 +568,29 @@ A recommendation service returned the wrong user's results for a few very large 
 - **Floats have special values**: `float("nan") != float("nan")` (NaN is never equal to anything, itself included; test with `math.isnan`), and `float("inf")` compares larger than any int. A NaN loss poisons every later gradient: check `math.isfinite(loss)` before stepping.
 - **`print` is buffered** when output goes to a file or a pipe (Docker logs, `nohup`): lines can appear minutes late or be lost on a crash. Use `flush=True`, run with `python -u`, or set `PYTHONUNBUFFERED=1`, and prefer the `logging` module in services.
 - **`__pycache__` and stale `.pyc`**: Python checks the source's timestamp (or hash) before reusing a `.pyc`, so stale bytecode is rarely a problem, but a deleted `.py` with its `.pyc` left behind can still be imported in some setups. Add `__pycache__/` to `.gitignore`.
+
+## ⚡ Essential Interview Recall
+
+A one-screen revision list. Every point is explained in the chapters above.
+
+- 🔴 **Python is compiled *and* interpreted**: source → **bytecode** (cached as `.pyc` in `__pycache__`) → executed by the **Python Virtual Machine (PVM)**, an evaluation loop in C. "Interpreted" means *no ahead-of-time machine code*, not *line-by-line source reading*.
+- 🔴 **CPython** is the reference implementation (written in C). Others: **PyPy** (JIT, fast pure-Python loops), **MicroPython** (microcontrollers), **GraalPy** (JVM/GraalVM), **Jython** (JVM, but stuck on **Python 2.7**).
+- 🔴 Python is **slow per operation** (every `a + b` is a type check + function lookup + object allocation) but **dominates AI** because it's the **glue**: NumPy/PyTorch run the maths in compiled C/C++/CUDA and **release the GIL** while they do.
+- 🔴 **GIL** (Global Interpreter Lock): in standard CPython only **one thread runs Python bytecode at a time** → threads don't speed up CPU-bound Python; use **multiprocessing** or native code. A **free-threaded** (no-GIL) build exists since 3.13 and is officially supported in 3.14, but isn't the default. Details on the [Concurrency, Memory & Performance](./09-concurrency-memory-performance.md) page.
+- 🔴 **Everything is an object** (ints, functions, classes, modules). Each has **identity** (`id()`), **type** (`type()`) and **value**.
+- 🔴 **Variables are names (labels), not boxes.** `b = a` makes both names point to **the same object**; nothing is copied.
+- 🔴 **Dynamic + strong typing**: a name can be rebound to any type, but `"5" + 5` raises `TypeError` (no implicit coercion between unrelated types).
+- 🔴 **Immutable**: `int`, `float`, `complex`, `bool`, `str`, `bytes`, `tuple`, `frozenset`, `None`. **Mutable**: `list`, `dict`, `set`, `bytearray`, most user-defined objects.
+- 🔴 **`==` compares values** (calls `__eq__`); **`is` compares identity** (same object). Use `is` only for singletons: `None`, `True`, `False`, sentinels.
+- 🟠 **`int` has arbitrary precision** (`2**100` just works). **`float` is a 64-bit IEEE-754 double** → `0.1 + 0.2 != 0.3`; use `math.isclose` or `Decimal`.
+- 🟠 **`bool` is a subclass of `int`**: `True + True == 2`, and `1`, `1.0`, `True` are the **same dict key**.
+- 🟠 **Small-int cache**: CPython pre-creates ints **-5 to 256**, so `is` "works" for them and fails for 257 created at runtime. Never rely on it.
+- 🟠 **Casting**: `int(3.99) == 3` (truncates toward zero), `int("3.5")` raises `ValueError`, **`bool("False")` is `True`** (any non-empty string is truthy). `round()` uses **banker's rounding**: `round(2.5) == 2`.
+- 🟠 **Falsy values**: `0`, `0.0`, `0j`, `""`, `[]`, `()`, `{}`, `set()`, `range(0)`, `None`, `False`. Everything else is truthy (including `"0"`, `" "`, `[0]` and NaN).
+- 🟠 **`input()` always returns `str`**; production code uses **`argparse`**, environment variables or config files instead.
+- 🟡 Since 3.11 the interpreter is **specializing/adaptive** (PEP 659: hot bytecodes are rewritten to type-specific versions, ~25% faster); 3.13+ ships an **experimental JIT** (off by default).
+- 🟡 **f-strings**: `{x:.4f}`, `{x:.2%}`, `{n:,}`, and **`{x=}`** for debugging <Since v="3.8" lang="Python" />. Since 3.12 you can reuse the same quote type inside `{}`.
+
+:::speak[Is Python compiled or interpreted, and why is it fast enough for AI?]
+"Both. When I run `python train.py`, CPython parses the source into an AST and **compiles it to bytecode**, which it caches as `.pyc` files. The **Python Virtual Machine** then executes that bytecode instruction by instruction in a C loop. There's no ahead-of-time machine code, so every `a + b` involves a type check, a method lookup and often a new object. That's why a pure-Python loop over a million numbers is slow. AI code is fast anyway because Python is only the **orchestration layer**: `torch.matmul` or `np.dot` call into compiled C, C++ or CUDA kernels that process whole arrays at once and **release the GIL** while they run. So the rule I follow is: **keep the hot loop out of Python** by vectorizing with NumPy or PyTorch, and use Python for control flow, data plumbing and APIs. Since 3.11 CPython also specializes hot bytecodes, and 3.13 added an experimental JIT, but vectorization still wins by orders of magnitude."
+:::
